@@ -1,0 +1,22 @@
+# Android build artifacts
+.gradle/
+build/
+*/build/
+app/build/
+*.iml
+.idea/
+local.properties
+.kotlin/
+*.log
+build_err.txt
+
+# Node
+node_modules/
+package-lock.json
+
+# OS & Editor
+Thumbs.db
+.DS_Store
+
+# CodeGraph local DB
+.codegraph/

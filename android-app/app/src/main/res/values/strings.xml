@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">CVA-SmartGuardian</string>
+    <string name="accessibility_service_desc">Dịch vụ bảo vệ học sinh trên không gian mạng: Giúp phát hiện và ngăn chặn các trang web lừa đảo, khiêu dâm, cờ bạc theo thỏa ước gia đình.</string>
+    <string name="admin_receiver_desc">Quyền quản trị thiết bị giúp ngăn chặn hành vi gỡ cài đặt trái phép nếu thiếu mã PIN của Phụ huynh.</string>
+    <string name="vpn_service_desc">Tường lửa cục bộ lọc tên miền độc hại thời gian thực.</string>
+</resources>

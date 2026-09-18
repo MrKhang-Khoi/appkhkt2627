@@ -1,0 +1,1208 @@
+﻿<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CVA-SmartGuardian â€” PhÃ²ng ThÃ­ Nghiá»‡m Kiá»ƒm Thá»­ TÆ°Æ¡ng TÃ¡c 2 MÃ n HÃ¬nh</title>
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --surface: #111827;
+      --card: #1f2937;
+      --border: #374151;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --success: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --gold: #fbbf24;
+      --text: #f9fafb;
+      --text-muted: #9ca3af;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* TOP TEST CONTROL BAR */
+    .top-bar {
+      background: rgba(17, 24, 39, 0.95);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(12px);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .brand-badge {
+      background: linear-gradient(135deg, #1e40af, #3b82f6);
+      color: #fff;
+      font-size: 0.72rem;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+    }
+
+    .test-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .btn-auto-test {
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: #fff;
+      border: none;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 0.88rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.4);
+      transition: all 0.2s;
+    }
+    .btn-auto-test:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.6);
+    }
+
+    .btn-reset {
+      background: var(--card);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 0.84rem;
+      cursor: pointer;
+    }
+
+    /* WORKSPACE STAGE: 2 PANELS */
+    .test-stage {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 460px 1fr;
+      gap: 20px;
+      padding: 20px;
+      max-width: 1700px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    @media (max-width: 1100px) {
+      .test-stage {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* LEFT: PHONE SIMULATOR */
+    .phone-column {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .column-title {
+      font-size: 0.92rem;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .phone-frame {
+      width: 380px;
+      height: 780px;
+      background: #0f172a;
+      border: 12px solid #334155;
+      border-radius: 46px;
+      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.8), 0 0 0 2px #475569;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* NOTCH / CAMERA */
+    .phone-notch {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 130px;
+      height: 24px;
+      background: #334155;
+      border-bottom-left-radius: 16px;
+      border-bottom-right-radius: 16px;
+      z-index: 50;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .phone-camera {
+      width: 10px;
+      height: 10px;
+      background: #0f172a;
+      border-radius: 50%;
+    }
+
+    /* STATUS BAR */
+    .phone-status-bar {
+      height: 36px;
+      padding: 6px 20px 0 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.72rem;
+      color: #94a3b8;
+      z-index: 40;
+      font-weight: 600;
+    }
+
+    /* PHONE CONTENT AREA */
+    .phone-screen {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      background: #0f172a;
+      position: relative;
+    }
+
+    /* BOTTOM NAV BAR */
+    .phone-nav-bar {
+      height: 24px;
+      background: #0f172a;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .phone-home-pill {
+      width: 120px;
+      height: 4px;
+      background: #64748b;
+      border-radius: 4px;
+    }
+
+    /* APP VIEWS */
+    .app-view {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .app-card {
+      background: #1e293b;
+      border-radius: 14px;
+      padding: 14px;
+      border: 1px solid #334155;
+    }
+
+    .perm-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .perm-row:last-child {
+      border-bottom: none;
+    }
+
+    .perm-name {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: #f8fafc;
+    }
+    .perm-desc {
+      font-size: 0.7rem;
+      color: #94a3b8;
+      margin-top: 2px;
+    }
+
+    .btn-perm {
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 0.74rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-perm.granted {
+      background: #10b981;
+      cursor: default;
+    }
+
+    /* SIMULATED WEB BROWSER TAB */
+    .browser-box {
+      background: #1e293b;
+      border-radius: 14px;
+      border: 1px solid #334155;
+      padding: 12px;
+      margin-top: 10px;
+    }
+    .browser-url-bar {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .browser-input {
+      flex: 1;
+      background: #0f172a;
+      border: 1px solid #475569;
+      color: #f8fafc;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 0.78rem;
+    }
+    .btn-browser-go {
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 0.76rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .quick-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .quick-chip {
+      background: #334155;
+      color: #e2e8f0;
+      font-size: 0.68rem;
+      padding: 4px 8px;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: 1px solid transparent;
+    }
+    .quick-chip:hover {
+      border-color: var(--primary);
+      color: #fff;
+    }
+    .quick-chip.danger-chip {
+      background: rgba(239, 68, 68, 0.2);
+      color: #fca5a5;
+      border-color: rgba(239, 68, 68, 0.4);
+    }
+    .quick-chip.safe-chip {
+      background: rgba(16, 185, 129, 0.2);
+      color: #86efac;
+      border-color: rgba(16, 185, 129, 0.4);
+    }
+
+    /* ACTION BUTTONS ON PHONE */
+    .quick-actions-bar {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .btn-sim-action {
+      background: #334155;
+      color: #f8fafc;
+      border: 1px solid #475569;
+      padding: 8px;
+      border-radius: 8px;
+      font-size: 0.74rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      transition: all 0.2s;
+    }
+    .btn-sim-action:hover {
+      background: #475569;
+    }
+
+    /* BLOCKED ACTIVITY OVERLAY (MATCHES activity_blocked.xml) */
+    .blocked-screen-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: #0f172a;
+      z-index: 100;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      text-align: center;
+      animation: fadeIn 0.25s ease-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    .blocked-shield-icon {
+      font-size: 4rem;
+      margin-bottom: 12px;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.08); filter: drop-shadow(0 0 16px rgba(239, 68, 68, 0.7)); }
+      100% { transform: scale(1); }
+    }
+
+    .blocked-box {
+      background: #1e293b;
+      border: 1px solid #ef4444;
+      border-radius: 12px;
+      padding: 14px;
+      margin: 16px 0;
+      width: 100%;
+      text-align: left;
+    }
+
+    /* PIN MODAL DIALOG */
+    .pin-modal {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.75);
+      z-index: 200;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .pin-dialog {
+      background: #1e293b;
+      border: 1px solid #475569;
+      border-radius: 16px;
+      padding: 20px;
+      width: 100%;
+      text-align: center;
+    }
+    .pin-input {
+      width: 160px;
+      background: #0f172a;
+      border: 2px solid var(--primary);
+      color: #fff;
+      font-size: 1.4rem;
+      letter-spacing: 6px;
+      text-align: center;
+      padding: 8px;
+      border-radius: 8px;
+      margin: 14px auto;
+      display: block;
+    }
+
+    /* RIGHT: PARENT DASHBOARD IFRAME */
+    .dashboard-column {
+      display: flex;
+      flex-direction: column;
+      height: 840px;
+    }
+    .dashboard-frame-wrap {
+      flex: 1;
+      background: #fff;
+      border-radius: 18px;
+      border: 2px solid var(--border);
+      overflow: hidden;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+      position: relative;
+    }
+    .dashboard-iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+
+    /* TOAST ALERT BANNER */
+    .test-toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #1e293b;
+      color: #fff;
+      border-left: 4px solid var(--primary);
+      padding: 14px 20px;
+      border-radius: 8px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+      z-index: 999;
+      display: none;
+      font-size: 0.88rem;
+    }
+  
+    /* PORTAL ENHANCEMENT */
+    .portal-nav {
+      display: flex;
+      gap: 6px;
+      background: #111827;
+      padding: 4px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+    }
+    .portal-tab-btn {
+      background: transparent;
+      color: var(--text-muted);
+      border: none;
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .portal-tab-btn:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.05);
+    }
+    .portal-tab-btn.active {
+      background: var(--primary);
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(37, 99, 235, 0.4);
+    }
+    .hub-view {
+      display: none;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 30px 20px;
+      width: 100%;
+    }
+    .hub-view.active {
+      display: block;
+    }
+    .btn-git-repo {
+      background: #24292e;
+      color: #fff;
+      border: 1px solid #444d56;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .btn-git-repo:hover {
+      background: #2f363d;
+      border-color: #8b949e;
+    }
+
+  </style>
+</head>
+<body>
+
+  <!-- TOP BAR -->
+  <header class="top-bar">
+    <div class="brand">
+      <span style="font-size: 1.4rem;">ðŸ›¡ï¸</span>
+      <div>
+        <div style="font-weight: 800; font-size: 1rem;">CVA-SmartGuardian â€” Test Lab TÆ°Æ¡ng TÃ¡c 2 MÃ n HÃ¬nh</div>
+        <div style="font-size: 0.74rem; color: var(--text-muted);">Äá»“ng bá»™ thá»i gian thá»±c: Äiá»‡n Thoáº¡i Há»c Sinh (Native) âŸ· Báº£ng Äiá»u Khiá»ƒn Phá»¥ Huynh</div>
+      </div>
+      <span class="brand-badge">CHUáº¨N KHKT 2026</span>
+    </div>
+
+    <div class="test-actions">
+      <button type="button" id="btnRunAutomatedTest" class="btn-auto-test">
+        <span>âš¡</span> Tá»° Äá»˜NG CHáº Y TOÃ€N Bá»˜ Ká»ŠCH Báº¢N TEST (AUTO BOT)
+      </button>
+      <button type="button" id="btnResetTest" class="btn-reset">
+        ðŸ”„ Äáº·t Láº¡i
+      </button>
+    </div>
+    
+    <nav class="portal-nav">
+      <button type="button" class="portal-tab-btn active" id="btnTabLab" onclick="switchPortalTab('lab')">
+        <span>🧪</span> Test Lab 2 Màn Hình
+      </button>
+      <button type="button" class="portal-tab-btn" id="btnTabDownload" onclick="switchPortalTab('download')">
+        <span>📲</span> Tải APK & Cài Đặt (Xiaomi/Android)
+      </button>
+      <button type="button" class="portal-tab-btn" id="btnTabDocs" onclick="switchPortalTab('docs')">
+        <span>📚</span> Hồ Sơ Đề Tài KHKT
+      </button>
+    </nav>
+
+    <a href="https://github.com/MrKhang-Khoi/appkhkt2627" target="_blank" class="btn-git-repo"><span>🐙</span> GitHub Repo</a>
+  </header>
+
+  <!-- STAGE -->
+  <div id="viewLabTab" class="hub-view active" style="padding: 0; max-width: 1700px;"><main class="test-stage">
+
+    <!-- Cá»˜T TRÃI: ÄIá»†N THOáº I Há»ŒC SINH (MÃ” PHá»ŽNG NATIVE ANDROID APP) -->
+    <div class="phone-column">
+      <div class="column-title">
+        <span>ðŸ“±</span> MÃ€N HÃŒNH ÄIá»†N THOáº I Há»ŒC SINH (ANDROID APP NATIVE)
+      </div>
+
+      <div class="phone-frame">
+        <div class="phone-notch">
+          <div class="phone-camera"></div>
+        </div>
+
+        <!-- Status bar -->
+        <div class="phone-status-bar">
+          <span id="phoneClock">12:15</span>
+          <div style="display: flex; gap: 6px; align-items: center;">
+            <span>5G</span>
+            <span>ðŸ“¶</span>
+            <span>ðŸ”‹ 98%</span>
+          </div>
+        </div>
+
+        <!-- MÃ€N HÃŒNH á»¨NG Dá»¤NG -->
+        <div class="phone-screen" id="phoneScreen">
+          <div class="app-view">
+
+            <!-- HEADER APP TRÃŠN PHONE -->
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <div style="font-size: 1rem; font-weight: 800; color: #f8fafc;">CVA-SmartGuardian</div>
+                <div style="font-size: 0.7rem; color: #94a3b8;">LÃ¡ cháº¯n Ä‘á»“ng hÃ nh sá»‘ THCS</div>
+              </div>
+              <div id="phoneShieldBadge" style="font-size: 0.68rem; font-weight: 800; background: #1e293b; color: #f59e0b; padding: 3px 8px; border-radius: 6px; border: 1px solid #334155;">
+                CHÆ¯A Báº¬T
+              </div>
+            </div>
+
+            <!-- THáºº Tá»”NG QUAN THá»œI GIAN -->
+            <div class="app-card">
+              <div style="font-size: 0.68rem; font-weight: 700; color: #94a3b8; margin-bottom: 8px;">
+                Tá»”NG QUAN HÃ”M NAY
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; text-align: center; gap: 6px;">
+                <div>
+                  <div id="phoneStudyVal" style="font-size: 1.1rem; font-weight: 800; color: #10b981;">95p</div>
+                  <div style="font-size: 0.68rem; color: #94a3b8;">Há»c táº­p</div>
+                </div>
+                <div>
+                  <div id="phoneGameVal" style="font-size: 1.1rem; font-weight: 800; color: #ef4444;">42p</div>
+                  <div style="font-size: 0.68rem; color: #94a3b8;">Game/MXH</div>
+                </div>
+                <div>
+                  <div id="phoneScoreVal" style="font-size: 1.1rem; font-weight: 800; color: #fbbf24;">86</div>
+                  <div style="font-size: 0.68rem; color: #94a3b8;">CÃ¢n báº±ng</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- THáºº 4 QUYá»€N Há»† THá»NG Cá»¦A ANDROID -->
+            <div class="app-card">
+              <div style="font-size: 0.68rem; font-weight: 700; color: #fbbf24; margin-bottom: 6px;">
+                Cáº¤P QUYá»€N Há»† THá»NG (PHá»¤ HUYNH Báº¬T)
+              </div>
+
+              <!-- Quyá»n 1 -->
+              <div class="perm-row">
+                <div>
+                  <div class="perm-name">1. Äo thá»i gian (UsageStats)</div>
+                  <div class="perm-desc">Äo giá» há»c & chÆ¡i game</div>
+                </div>
+                <button type="button" class="btn-perm" id="btnPermUsage">Cáº¥p Quyá»n</button>
+              </div>
+
+              <!-- Quyá»n 2 -->
+              <div class="perm-row">
+                <div>
+                  <div class="perm-name">2. Trá»£ nÄƒng cháº·n Web xáº¥u</div>
+                  <div class="perm-desc">Báº¯t link Chrome / Cá»‘c Cá»‘c</div>
+                </div>
+                <button type="button" class="btn-perm" id="btnPermAccess">Cáº¥p Quyá»n</button>
+              </div>
+
+              <!-- Quyá»n 3 -->
+              <div class="perm-row">
+                <div>
+                  <div class="perm-name">3. TÆ°á»ng lá»­a DNS (VPN Safe)</div>
+                  <div class="perm-desc">Lá»c domain 18+ toÃ n mÃ¡y</div>
+                </div>
+                <button type="button" class="btn-perm" id="btnPermVpn">Báº­t LÃ¡ Cháº¯n</button>
+              </div>
+
+              <!-- Quyá»n 4 -->
+              <div class="perm-row">
+                <div>
+                  <div class="perm-name">4. Chá»‘ng gá»¡ app (Device Admin)</div>
+                  <div class="perm-desc">Cáº§n mÃ£ PIN khi gá»¡ app</div>
+                </div>
+                <button type="button" class="btn-perm" id="btnPermAdmin">KÃ­ch Hoáº¡t</button>
+              </div>
+            </div>
+
+            <!-- MÃ” PHá»ŽNG TRÃŒNH DUYá»†T WEB Äá»‚ TEST CHáº¶N LINK -->
+            <div class="browser-box">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="font-size: 0.72rem; font-weight: 800; color: #93c5fd;">
+                  ðŸŒ TRÃŒNH DUYá»†T WEB Cá»¦A CON (CHROME)
+                </div>
+                <span style="font-size: 0.64rem; color: #94a3b8;">GÃµ link Ä‘á»ƒ test cháº·n</span>
+              </div>
+
+              <div class="browser-url-bar">
+                <input type="text" class="browser-input" id="inputBrowserUrl" value="https://pornhub.com" placeholder="Nháº­p Ä‘á»‹a chá»‰ web...">
+                <button type="button" class="btn-browser-go" id="btnBrowserGo">Truy Cáº­p</button>
+              </div>
+
+              <div class="quick-links">
+                <span class="quick-chip danger-chip" onclick="setAndGo('https://pornhub.com')">ðŸ”ž pornhub.com</span>
+                <span class="quick-chip danger-chip" onclick="setAndGo('https://kubet77.com')">ðŸŽ° kubet.com</span>
+                <span class="quick-chip danger-chip" onclick="setAndGo('https://napthegiare.vn')">ðŸŽ£ napthegiare.vn</span>
+                <span class="quick-chip danger-chip" onclick="setAndGo('https://sexvl.net')">ðŸ”ž sexvl.net</span>
+                <span class="quick-chip safe-chip" onclick="setAndGo('https://azota.vn')">ðŸ“š azota.vn</span>
+                <span class="quick-chip safe-chip" onclick="setAndGo('https://olm.vn')">ðŸ“š olm.vn</span>
+              </div>
+            </div>
+
+            <!-- PHÃM Báº¤M THá»¬ NGHIá»†M HÃ€NH VI Há»ŒC SINH -->
+            <div class="quick-actions-bar">
+              <button type="button" class="btn-sim-action" id="btnSimPlayGame">
+                ðŸŽ® Con ChÆ¡i Game (+20p)
+              </button>
+              <button type="button" class="btn-sim-action" id="btnSimStudy">
+                ðŸ“š Con Há»c Azota (+30p)
+              </button>
+              <button type="button" class="btn-sim-action" id="btnSimUninstall" style="grid-column: span 2; border-color: #f87171;">
+                ðŸ—‘ï¸ Con Thá»­ Gá»¡ CÃ i Äáº·t á»¨ng Dá»¥ng
+              </button>
+            </div>
+
+          </div>
+
+          <!-- MÃ€N HÃŒNH CHáº¶N TRANG WEB VI PHáº M (BLOCKED ACTIVITY OVERLAY) -->
+          <div class="blocked-screen-overlay" id="blockedScreen">
+            <div class="blocked-shield-icon">ðŸš¨</div>
+            <div style="font-size: 1.15rem; font-weight: 800; color: #ef4444; margin-bottom: 4px;">
+              TRANG WEB ÄÃƒ Bá»Š CHáº¶N!
+            </div>
+            <div style="font-size: 0.72rem; color: #94a3b8; margin-bottom: 12px;">
+              LÃ¡ cháº¯n an toÃ n CVA-SmartGuardian
+            </div>
+
+            <div class="blocked-box">
+              <div style="font-size: 0.68rem; color: #94a3b8;">Äá»‹a chá»‰ bá»‹ cháº·n:</div>
+              <div id="blockedUrlDisplay" style="font-size: 0.82rem; font-weight: 800; color: #fbbf24; word-break: break-all; margin-bottom: 8px;">
+                https://pornhub.com
+              </div>
+
+              <div style="font-size: 0.68rem; color: #94a3b8;">PhÃ¢n loáº¡i rá»§i ro:</div>
+              <div id="blockedCatDisplay" style="font-size: 0.8rem; font-weight: 800; color: #ef4444; margin-bottom: 8px;">
+                Ná»™i dung khiÃªu dÃ¢m / NgÆ°á»i lá»›n 18+
+              </div>
+
+              <div style="font-size: 0.68rem; color: #94a3b8;">LÃ½ do ngÄƒn cháº·n:</div>
+              <div id="blockedReasonDisplay" style="font-size: 0.74rem; color: #e2e8f0;">
+                Náº±m trong danh sÃ¡ch Ä‘en cáº£nh bÃ¡o Ä‘á»™c háº¡i cá»§a nhÃ  trÆ°á»ng & phá»¥ huynh.
+              </div>
+            </div>
+
+            <button type="button" id="btnBlockedBack" style="width: 100%; padding: 12px; background: #2563eb; color: #fff; border: none; border-radius: 10px; font-weight: 700; font-size: 0.84rem; cursor: pointer; margin-bottom: 8px;">
+              Quay Láº¡i An ToÃ n (MÃ n hÃ¬nh chÃ­nh)
+            </button>
+            <button type="button" id="btnBlockedPin" style="width: 100%; padding: 10px; background: #1e293b; color: #94a3b8; border: 1px solid #475569; border-radius: 10px; font-size: 0.76rem; cursor: pointer;">
+              Má»Ÿ KhÃ³a Báº±ng MÃ£ PIN Phá»¥ Huynh
+            </button>
+          </div>
+
+          <!-- DIALOG NHáº¬P MÃƒ PIN PHá»¤ HUYNH -->
+          <div class="pin-modal" id="pinModal">
+            <div class="pin-dialog">
+              <div style="font-size: 0.95rem; font-weight: 800; color: #fff; margin-bottom: 4px;">
+                ðŸ” XÃ¡c Thá»±c Phá»¥ Huynh
+              </div>
+              <div style="font-size: 0.74rem; color: #94a3b8;">
+                Nháº­p mÃ£ PIN 4 sá»‘ cá»§a cha máº¹ (Máº·c Ä‘á»‹nh: <strong>2025</strong>)
+              </div>
+              <input type="password" class="pin-input" id="inputPin" maxlength="4" placeholder="â€¢â€¢â€¢â€¢">
+              <div style="display: flex; gap: 8px;">
+                <button type="button" id="btnSubmitPin" style="flex: 1; padding: 8px; background: #10b981; color: #fff; border: none; border-radius: 8px; font-weight: 700; cursor: pointer;">
+                  XÃ¡c Nháº­n
+                </button>
+                <button type="button" id="btnCancelPin" style="flex: 1; padding: 8px; background: #334155; color: #cbd5e1; border: none; border-radius: 8px; cursor: pointer;">
+                  Há»§y
+                </button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Phone home pill -->
+        <div class="phone-nav-bar">
+          <div class="phone-home-pill"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cá»˜T PHáº¢I: Báº¢NG ÄIá»€U KHIá»‚N PHá»¤ HUYNH THá»œI GIAN THá»°C (PARENT DASHBOARD) -->
+    <div class="dashboard-column">
+      <div class="column-title" style="justify-content: space-between;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span>ðŸ–¥ï¸</span> Báº¢NG ÄIá»€U KHIá»‚N PHá»¤ HUYNH (PARENT LIVE WEB DASHBOARD)
+        </div>
+        <span style="font-size: 0.72rem; background: #064e3b; color: #6ee7b7; padding: 2px 8px; border-radius: 6px; font-weight: 700;">
+          Äá»’NG Bá»˜ Máº NG THá»œI GIAN THá»°C &lt; 50ms
+        </span>
+      </div>
+
+      <div class="dashboard-frame-wrap">
+        <iframe src="src/parent-dashboard/index.html" class="dashboard-iframe" id="parentIframe"></iframe>
+      </div>
+    </div>
+
+  </main></div>
+
+  
+  <!-- TAB 2: TẢI APK & CÀI ĐẶT -->
+  <div id="viewDownloadTab" class="hub-view">
+    <div style="background: linear-gradient(135deg, rgba(37, 99, 235, 0.15), rgba(16, 185, 129, 0.1)); border: 1px solid #1e3a8a; border-radius: 20px; padding: 32px; display: flex; justify-content: space-between; align-items: center; gap: 24px; flex-wrap: wrap; margin-bottom: 30px;">
+      <div style="max-width: 650px;">
+        <span style="background: #10b981; color: #fff; font-size: 0.72rem; padding: 4px 10px; border-radius: 6px; font-weight: 800; display: inline-block; margin-bottom: 12px;">BẢN CHÍNH THỨC V1.0</span>
+        <h2 style="font-size: 1.8rem; font-weight: 800; color: #fff; margin-bottom: 10px;">CVA-SmartGuardian (Android APK)</h2>
+        <p style="font-size: 0.95rem; color: #cbd5e1; line-height: 1.6; margin-bottom: 20px;">
+          Ứng dụng Native Android bảo vệ học sinh THCS, đồng hành tự chủ số, phân loại học tập / giải trí, chặn nội dung độc hại trên web và phòng ngừa nghiện game.
+        </p>
+        <div style="display: flex; gap: 14px; flex-wrap: wrap;">
+          <a href="apk/CVA-SmartGuardian-v1.0.apk" download style="background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #fff; text-decoration: none; padding: 14px 28px; border-radius: 12px; font-weight: 800; font-size: 1.05rem; display: inline-flex; align-items: center; gap: 10px; box-shadow: 0 10px 25px rgba(37, 99, 235, 0.4);">
+            <span>📥</span> Tải Trực Tiếp APK (6.5 MB)
+          </a>
+          <a href="https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/CVA-SmartGuardian-v1.0.apk" style="background: var(--card); color: #93c5fd; text-decoration: none; padding: 14px 20px; border-radius: 12px; font-weight: 700; border: 1px solid #3b82f6; display: inline-flex; align-items: center; gap: 8px;">
+            🔗 Link Tải Dự Phòng GitHub
+          </a>
+        </div>
+        <div style="font-size: 0.78rem; color: #94a3b8; margin-top: 14px;">
+          ✓ Tương thích: Android 8.0 đến Android 15 (Xiaomi HyperOS, Samsung OneUI, Pixel, Oppo, Vivo)
+        </div>
+      </div>
+      <div style="background: #fff; padding: 16px; border-radius: 16px; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.4);">
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/CVA-SmartGuardian-v1.0.apk" alt="QR Code" style="width: 180px; height: 180px; display: block; margin: 0 auto 10px auto;">
+        <div style="font-size: 0.8rem; font-weight: 800; color: #0f172a;">QUÉT MÃ ĐỂ TẢI NGAY</div>
+        <div style="font-size: 0.68rem; color: #64748b;">(Mở Zalo hoặc Camera quét)</div>
+      </div>
+    </div>
+
+    <h3 style="font-size: 1.3rem; font-weight: 800; color: #fff; margin-bottom: 16px;">📋 Hướng Dẫn Cài Đặt Trên Điện Thoại (Đặc Biệt Xiaomi 15T / Android 14+)</h3>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+      <div style="background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px;">
+        <div style="font-size: 1.8rem; margin-bottom: 8px;">1️⃣</div>
+        <div style="font-size: 1rem; font-weight: 800; color: #fff; margin-bottom: 8px;">Tải File APK</div>
+        <p style="font-size: 0.85rem; color: #94a3b8; line-height: 1.5;">
+          Quét mã QR hoặc nhấn nút <strong>"Tải Trực Tiếp APK"</strong> phía trên để tải tệp <code>CVA-SmartGuardian-v1.0.apk</code> về máy.
+        </p>
+      </div>
+
+      <div style="background: #172554; border: 1px solid #3b82f6; border-radius: 16px; padding: 24px;">
+        <div style="font-size: 1.8rem; margin-bottom: 8px;">2️⃣</div>
+        <div style="font-size: 1rem; font-weight: 800; color: #93c5fd; margin-bottom: 8px;">Vượt Qua Cảnh Báo Play Protect</div>
+        <p style="font-size: 0.85rem; color: #cbd5e1; line-height: 1.5;">
+          Khi máy Xiaomi 15T hoặc Samsung hiện cảnh báo đỏ:
+        </p>
+        <ul style="font-size: 0.82rem; color: #cbd5e1; margin-left: 18px; line-height: 1.6; margin-top: 6px;">
+          <li><strong>Cách 1:</strong> Bấm vào chữ <strong>"Chi tiết khác"</strong> (More details) ➔ Chọn <strong>"Vẫn cài đặt (không an toàn)"</strong>.</li>
+          <li><strong>Cách 2:</strong> Vào <em>CH Play ➔ Ảnh đại diện ➔ Play Protect ➔ Bánh răng ⚙️ ➔ Gạt TẮT "Quét ứng dụng bằng Play Protect"</em>. Sau đó cài lại là xong 100%.</li>
+        </ul>
+      </div>
+
+      <div style="background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px;">
+        <div style="font-size: 1.8rem; margin-bottom: 8px;">3️⃣</div>
+        <div style="font-size: 1rem; font-weight: 800; color: #fff; margin-bottom: 8px;">Kích Hoạt 3 Quyền Bảo Vệ</div>
+        <p style="font-size: 0.85rem; color: #94a3b8; line-height: 1.5;">
+          Mở ứng dụng CVA Smart Guardian trên điện thoại, bấm <strong>"KÍCH HOẠT"</strong> lần lượt:
+        </p>
+        <ul style="font-size: 0.82rem; color: #94a3b8; margin-left: 18px; line-height: 1.6; margin-top: 6px;">
+          <li><strong>Trợ năng (Accessibility)</strong>: Để chặn web đen</li>
+          <li><strong>Thống kê sử dụng (Usage Stats)</strong>: Để đếm giờ</li>
+          <li><strong>Quản trị viên (Device Admin)</strong>: Chống gỡ app</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 3: HỒ SƠ ĐỀ TÀI KHKT -->
+  <div id="viewDocsTab" class="hub-view">
+    <div style="margin-bottom: 24px;">
+      <h2 style="font-size: 1.6rem; font-weight: 800; color: #fff; margin-bottom: 6px;">📚 Toàn Bộ Hồ Sơ Nghiên Cứu KHKT 2026-2027</h2>
+      <p style="font-size: 0.88rem; color: var(--text-muted);">
+        Chuẩn Thông tư 06/2024/TT-BGDĐT • Bản quyền Trường THPT Chuyên Chu Văn An
+      </p>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px;">
+      
+      <div style="background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px; display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+          <div style="font-size: 1.6rem; margin-bottom: 8px;">📑</div>
+          <div style="font-size: 1.05rem; font-weight: 800; color: #fff;">01. Đề Cương Nghiên Cứu KHKT</div>
+          <p style="font-size: 0.82rem; color: #94a3b8; margin: 8px 0 14px 0; line-height: 1.5;">
+            15 trang hoàn chỉnh: Lý do chọn đề tài, mục tiêu, khách thể, phương pháp thực nghiệm, giả thuyết khoa học và ý nghĩa thực tiễn.
+          </p>
+        </div>
+        <a href="https://github.com/MrKhang-Khoi/appkhkt2627/blob/main/docs/01_DE_CUONG_NGHIEN_CUU_KHKT.md" target="_blank" style="text-align: center; color: #60a5fa; border: 1px solid #2563eb; padding: 8px 12px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 0.84rem;">
+          Xem Tài Liệu ➔
+        </a>
+      </div>
+
+      <div style="background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px; display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+          <div style="font-size: 1.6rem; margin-bottom: 8px;">🏗️</div>
+          <div style="font-size: 1.05rem; font-weight: 800; color: #fff;">02. Kiến Trúc Kỹ Thuật Chuyên Sâu</div>
+          <p style="font-size: 0.82rem; color: #94a3b8; margin: 8px 0 14px 0; line-height: 1.5;">
+            Đặc tả 4 tầng: Native Android Agent, On-device Local NLP, Realtime Network Sync Protocol và Parent PWA Dashboard.
+          </p>
+        </div>
+        <a href="https://github.com/MrKhang-Khoi/appkhkt2627/blob/main/docs/02_KIEN_TRUC_KY_THUAT_CHUYEN_SAU.md" target="_blank" style="text-align: center; color: #60a5fa; border: 1px solid #2563eb; padding: 8px 12px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 0.84rem;">
+          Xem Tài Liệu ➔
+        </a>
+      </div>
+
+      <div style="background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px; display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+          <div style="font-size: 1.6rem; margin-bottom: 8px;">📓</div>
+          <div style="font-size: 1.05rem; font-weight: 800; color: #fff;">03. Sổ Tay Nghiên Cứu (Logbook)</div>
+          <p style="font-size: 0.82rem; color: #94a3b8; margin: 8px 0 14px 0; line-height: 1.5;">
+            Nhật ký khoa học từng tuần, ghi nhận các bước phát triển, phát hiện bug, xử lý kỹ thuật và kết quả đo đạc thực tế.
+          </p>
+        </div>
+        <a href="https://github.com/MrKhang-Khoi/appkhkt2627/blob/main/docs/03_SO_TAY_NGHIEN_CUU_LOGBOOK.md" target="_blank" style="text-align: center; color: #60a5fa; border: 1px solid #2563eb; padding: 8px 12px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 0.84rem;">
+          Xem Tài Liệu ➔
+        </a>
+      </div>
+
+      <div style="background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px; display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+          <div style="font-size: 1.6rem; margin-bottom: 8px;">📊</div>
+          <div style="font-size: 1.05rem; font-weight: 800; color: #fff;">04. Phiếu Khảo Sát Thực Nghiệm</div>
+          <p style="font-size: 0.82rem; color: #94a3b8; margin: 8px 0 14px 0; line-height: 1.5;">
+            Bộ công cụ đánh giá định lượng trước và sau can thiệp trên 120 học sinh THCS và phụ huynh học sinh.
+          </p>
+        </div>
+        <a href="https://github.com/MrKhang-Khoi/appkhkt2627/blob/main/docs/04_PHIEU_KHAO_SAT_THUC_NGHIEM.md" target="_blank" style="text-align: center; color: #60a5fa; border: 1px solid #2563eb; padding: 8px 12px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 0.84rem;">
+          Xem Tài Liệu ➔
+        </a>
+      </div>
+
+      <div style="background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px; display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+          <div style="font-size: 1.6rem; margin-bottom: 8px;">🍎</div>
+          <div style="font-size: 1.05rem; font-weight: 800; color: #fff;">05. Kế Hoạch Chuyển Đổi iOS Xcode</div>
+          <p style="font-size: 0.82rem; color: #94a3b8; margin: 8px 0 14px 0; line-height: 1.5;">
+            Lộ trình chuyển đổi sang iOS với Apple Screen Time API, Family Controls Framework và ManagedSettings.
+          </p>
+        </div>
+        <a href="https://github.com/MrKhang-Khoi/appkhkt2627/blob/main/docs/05_KE_HOACH_CHUYEN_DOI_XCODE_IOS.md" target="_blank" style="text-align: center; color: #60a5fa; border: 1px solid #2563eb; padding: 8px 12px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 0.84rem;">
+          Xem Tài Liệu ➔
+        </a>
+      </div>
+
+      <div style="background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px; display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+          <div style="font-size: 1.6rem; margin-bottom: 8px;">📱</div>
+          <div style="font-size: 1.05rem; font-weight: 800; color: #fff;">Mã Nguồn Android Studio</div>
+          <p style="font-size: 0.82rem; color: #94a3b8; margin: 8px 0 14px 0; line-height: 1.5;">
+            Toàn bộ source code Kotlin Native, Gradle, AndroidManifest và tài nguyên giao diện Material3.
+          </p>
+        </div>
+        <a href="https://github.com/MrKhang-Khoi/appkhkt2627/tree/main/android-app" target="_blank" style="text-align: center; color: #34d399; border: 1px solid #059669; padding: 8px 12px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 0.84rem;">
+          Xem Thư Mục Android App ➔
+        </a>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="test-toast" id="testToast"></div>
+
+  <!-- SCRIPT KIá»‚M THá»¬ TÆ¯Æ NG TÃC -->
+  <script src="src/core/data-models.js"></script>
+  <script src="src/core/app-classifier.js"></script>
+  <script src="src/core/web-blocker.js"></script>
+
+  <script>
+    // 1. Quáº£n lÃ½ tráº¡ng thÃ¡i
+    let perms = {
+      usage: false,
+      access: false,
+      vpn: false,
+      admin: false
+    };
+
+    let phoneStats = {
+      studyMinutes: 95,
+      gameMinutes: 42,
+      score: 86
+    };
+
+    const PARENT_PIN = "2025";
+
+    // Äá»“ng há»“ gÃ³c status bar
+    setInterval(() => {
+      const now = new Date();
+      document.getElementById('phoneClock').innerText = 
+        String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    }, 1000);
+
+    function showToast(msg, isSuccess = true) {
+      const t = document.getElementById('testToast');
+      t.innerHTML = msg;
+      t.style.borderLeftColor = isSuccess ? 'var(--success)' : 'var(--danger)';
+      t.style.display = 'block';
+      setTimeout(() => { t.style.display = 'none'; }, 3500);
+    }
+
+    // 2. Xá»­ lÃ½ cáº¥p quyá»n
+    function updateShieldBadge() {
+      const badge = document.getElementById('phoneShieldBadge');
+      if (perms.usage && perms.access && perms.vpn && perms.admin) {
+        badge.innerText = "âœ“ Báº¢O Vá»† Tá»I ÄA";
+        badge.style.background = "#064e3b";
+        badge.style.color = "#6ee7b7";
+        badge.style.borderColor = "#059669";
+      } else if (perms.usage || perms.access) {
+        badge.innerText = "ÄANG Báº¢O Vá»†";
+        badge.style.background = "#1e3a8a";
+        badge.style.color = "#93c5fd";
+        badge.style.borderColor = "#2563eb";
+      } else {
+        badge.innerText = "CHÆ¯A Báº¬T";
+        badge.style.background = "#1e293b";
+        badge.style.color = "#f59e0b";
+        badge.style.borderColor = "#334155";
+      }
+    }
+
+    document.getElementById('btnPermUsage').addEventListener('click', function() {
+      perms.usage = true;
+      this.classList.add('granted');
+      this.innerText = 'âœ“ ÄÃ£ Báº­t';
+      updateShieldBadge();
+      showToast('âœ… ÄÃ£ cáº¥p quyá»n <strong>UsageStatsManager</strong>! Báº¯t Ä‘áº§u Ä‘o thá»i gian há»c táº­p & chÆ¡i game.');
+    });
+
+    document.getElementById('btnPermAccess').addEventListener('click', function() {
+      perms.access = true;
+      this.classList.add('granted');
+      this.innerText = 'âœ“ ÄÃ£ Báº­t';
+      updateShieldBadge();
+      showToast('âœ… ÄÃ£ kÃ­ch hoáº¡t <strong>AccessibilityService</strong>! GiÃ¡m sÃ¡t vÃ  cháº·n link web Ä‘á»™c háº¡i trÃªn Chrome.');
+    });
+
+    document.getElementById('btnPermVpn').addEventListener('click', function() {
+      perms.vpn = true;
+      this.classList.add('granted');
+      this.innerText = 'âœ“ Äang Cháº·n';
+      updateShieldBadge();
+      showToast('âœ… ÄÃ£ kÃ­ch hoáº¡t <strong>VpnService Safe Shield</strong>! TÆ°á»ng lá»­a DNS Cloudflare Family 1.1.1.3 Ä‘ang báº£o vá»‡ toÃ n mÃ¡y.');
+    });
+
+    document.getElementById('btnPermAdmin').addEventListener('click', function() {
+      perms.admin = true;
+      this.classList.add('granted');
+      this.innerText = 'âœ“ ÄÃ£ Báº£o Vá»‡';
+      updateShieldBadge();
+      showToast('âœ… ÄÃ£ báº­t quyá»n <strong>DeviceAdminReceiver</strong>! Chá»‘ng gá»¡ cÃ i Ä‘áº·t náº¿u thiáº¿u mÃ£ PIN cha máº¹.');
+    });
+
+    // 3. Xá»­ lÃ½ TrÃ¬nh duyá»‡t Web & Cháº·n Link
+    function setAndGo(url) {
+      document.getElementById('inputBrowserUrl').value = url;
+      testBrowseUrl(url);
+    }
+
+    const blocker = new WebBlockerEngine();
+
+    function testBrowseUrl(url) {
+      const result = blocker.checkUrl(url);
+
+      if (result && result.isBlocked) {
+        // Hiá»‡n mÃ n hÃ¬nh cháº·n BlockedActivity trÃªn Ä‘iá»‡n thoáº¡i
+        document.getElementById('blockedUrlDisplay').innerText = url;
+        document.getElementById('blockedCatDisplay').innerText = result.categoryName || result.category;
+        document.getElementById('blockedReasonDisplay').innerText = result.reason;
+        document.getElementById('blockedScreen').style.display = 'flex';
+
+        // Äá»“ng thá»i thÃ´ng bÃ¡o sang Báº£ng Äiá»u Khiá»ƒn Phá»¥ Huynh
+        const iframe = document.getElementById('parentIframe');
+        if (iframe && iframe.contentWindow) {
+          iframe.contentWindow.postMessage({
+            type: 'SMART_GUARDIAN_INCIDENT',
+            url: url,
+            category: result.categoryName || result.category,
+            reason: result.reason,
+            time: new Date().toLocaleTimeString('vi-VN')
+          }, '*');
+        }
+
+        showToast(`ðŸš¨ <strong>CHáº¶N THÃ€NH CÃ”NG!</strong> PhÃ¡t hiá»‡n vi pháº¡m: <em>${result.categoryName || result.category}</em>`, false);
+      } else {
+        showToast(`âœ… Trang web an toÃ n: <strong>${url}</strong>. Cho phÃ©p truy cáº­p bÃ¬nh thÆ°á»ng.`);
+      }
+    }
+
+    document.getElementById('btnBrowserGo').addEventListener('click', () => {
+      const url = document.getElementById('inputBrowserUrl').value.trim();
+      if (url) testBrowseUrl(url);
+    });
+
+    document.getElementById('btnBlockedBack').addEventListener('click', () => {
+      document.getElementById('blockedScreen').style.display = 'none';
+    });
+
+    document.getElementById('btnBlockedPin').addEventListener('click', () => {
+      document.getElementById('pinModal').style.display = 'flex';
+      document.getElementById('inputPin').value = '';
+      document.getElementById('inputPin').focus();
+    });
+
+    document.getElementById('btnCancelPin').addEventListener('click', () => {
+      document.getElementById('pinModal').style.display = 'none';
+    });
+
+    document.getElementById('btnSubmitPin').addEventListener('click', () => {
+      const entered = document.getElementById('inputPin').value.trim();
+      if (entered === PARENT_PIN) {
+        document.getElementById('pinModal').style.display = 'none';
+        document.getElementById('blockedScreen').style.display = 'none';
+        showToast('ðŸŽ‰ <strong>MÃ£ PIN chÃ­nh xÃ¡c!</strong> Cho phÃ©p má»Ÿ khÃ³a táº¡m thá»i cho há»c sinh.');
+      } else {
+        alert('âŒ MÃ£ PIN khÃ´ng Ä‘Ãºng! Tiáº¿p tá»¥c duy trÃ¬ lÃ¡ cháº¯n cháº·n.');
+      }
+    });
+
+    // 4. Xá»­ lÃ½ mÃ´ phá»ng hÃ nh vi há»c sinh
+    document.getElementById('btnSimPlayGame').addEventListener('click', () => {
+      phoneStats.gameMinutes += 20;
+      phoneStats.score = Math.max(20, phoneStats.score - 15);
+      document.getElementById('phoneGameVal').innerText = phoneStats.gameMinutes + 'p';
+      document.getElementById('phoneScoreVal').innerText = phoneStats.score;
+
+      // Äá»“ng bá»™ sang Parent Dashboard
+      const iframe = document.getElementById('parentIframe');
+      if (iframe && iframe.contentWindow) {
+        const btn = iframe.contentDocument.getElementById('btnSimulateActivity');
+        if (btn) btn.click();
+      }
+      showToast('ðŸŽ® Há»c sinh vá»«a chÆ¡i game 20 phÃºt! ÄÃ£ Ä‘á»“ng bá»™ sang mÃ¡y phá»¥ huynh.');
+    });
+
+    document.getElementById('btnSimStudy').addEventListener('click', () => {
+      phoneStats.studyMinutes += 30;
+      phoneStats.score = Math.min(100, phoneStats.score + 10);
+      document.getElementById('phoneStudyVal').innerText = phoneStats.studyMinutes + 'p';
+      document.getElementById('phoneScoreVal').innerText = phoneStats.score;
+      showToast('ðŸ“š Há»c sinh vá»«a hoÃ n thÃ nh bÃ i táº­p trÃªn Azota! +10 Ä‘iá»ƒm tá»± chá»§.');
+    });
+
+    document.getElementById('btnSimUninstall').addEventListener('click', () => {
+      if (perms.admin) {
+        alert('âš ï¸ Cáº¢NH BÃO QUáº¢N TRá»Š VIÃŠN Há»† THá»NG:\n\ná»¨ng dá»¥ng Ä‘ang Ä‘Æ°á»£c báº£o vá»‡ bá»Ÿi DeviceAdminReceiver.\nHá»c sinh khÃ´ng thá»ƒ gá»¡ cÃ i Ä‘áº·t náº¿u khÃ´ng cÃ³ mÃ£ PIN cá»§a Phá»¥ huynh!');
+      } else {
+        alert('â„¹ï¸ Quyá»n Chá»‘ng gá»¡ cÃ i Ä‘áº·t (Device Admin) chÆ°a Ä‘Æ°á»£c báº­t. Vui lÃ²ng nháº¥n nÃºt "KÃ­ch Hoáº¡t" á»Ÿ má»¥c 4.');
+      }
+    });
+
+    document.getElementById('btnResetTest').addEventListener('click', () => {
+      window.location.reload();
+    });
+
+    // 5. AUTO TEST BOT (Tá»° Äá»˜NG CHáº Y TOÃ€N Bá»˜ Ká»ŠCH Báº¢N)
+    document.getElementById('btnRunAutomatedTest').addEventListener('click', async function() {
+      this.disabled = true;
+      this.innerText = 'â³ Äang Tá»± Äá»™ng Test ToÃ n Diá»‡n...';
+
+      const delay = ms => new Promise(r => setTimeout(r, ms));
+
+      showToast('ðŸ¤– <strong>BÆ¯á»šC 1:</strong> Äang tá»± Ä‘á»™ng cáº¥p 4 quyá»n há»‡ thá»‘ng Android...');
+      await delay(800);
+      document.getElementById('btnPermUsage').click();
+      await delay(600);
+      document.getElementById('btnPermAccess').click();
+      await delay(600);
+      document.getElementById('btnPermVpn').click();
+      await delay(600);
+      document.getElementById('btnPermAdmin').click();
+      await delay(1000);
+
+      showToast('ðŸ¤– <strong>BÆ¯á»šC 2:</strong> Giáº£ láº­p há»c sinh truy cáº­p web cá» báº¡c <em>kubet77.com</em>...');
+      await delay(1000);
+      setAndGo('https://kubet77.com');
+      await delay(2000);
+
+      showToast('ðŸ¤– <strong>BÆ¯á»šC 3:</strong> Nháº¥n "Quay Láº¡i An ToÃ n" Ä‘á»ƒ thoÃ¡t trang web Ä‘á»™c háº¡i...');
+      await delay(1200);
+      document.getElementById('btnBlockedBack').click();
+      await delay(1000);
+
+      showToast('ðŸ¤– <strong>BÆ¯á»šC 4:</strong> Giáº£ láº­p há»c sinh truy cáº­p web ngÆ°á»i lá»›n <em>pornhub.com</em>...');
+      await delay(1000);
+      setAndGo('https://pornhub.com');
+      await delay(2000);
+
+      showToast('ðŸ¤– <strong>BÆ¯á»šC 5:</strong> Phá»¥ huynh nháº­p mÃ£ PIN 2025 Ä‘á»ƒ kiá»ƒm tra tÃ­nh nÄƒng má»Ÿ khÃ³a kháº©n cáº¥p...');
+      await delay(1000);
+      document.getElementById('btnBlockedPin').click();
+      await delay(800);
+      document.getElementById('inputPin').value = '2025';
+      await delay(600);
+      document.getElementById('btnSubmitPin').click();
+      await delay(1200);
+
+      showToast('ðŸ¤– <strong>BÆ¯á»šC 6:</strong> Giáº£ láº­p há»c sinh chÆ¡i game vÆ°á»£t háº¡n má»©c cho phÃ©p...');
+      await delay(1000);
+      document.getElementById('btnSimPlayGame').click();
+      await delay(1500);
+
+      showToast('ðŸ¤– <strong>BÆ¯á»šC 7:</strong> Thá»­ thÃ¡ch há»c sinh cá»‘ tÃ¬nh gá»¡ cÃ i Ä‘áº·t á»©ng dá»¥ng...');
+      await delay(1000);
+      document.getElementById('btnSimUninstall').click();
+      await delay(1200);
+
+      this.disabled = false;
+      this.innerHTML = '<span>âš¡</span> CHáº Y Láº I Ká»ŠCH Báº¢N AUTO TEST';
+      showToast('ðŸŽ‰ <strong>HOÃ€N Táº¤T 100% Ká»ŠCH Báº¢N TEST:</strong> Táº¥t cáº£ cÃ¡c tÃ­nh nÄƒng Native, TÆ°á»ng lá»­a, Cáº£nh bÃ¡o vÃ  Chá»‘ng gá»¡ app Ä‘á»u hoáº¡t Ä‘á»™ng hoÃ n háº£o!');
+    });
+  </script>
+</body>
+</html>

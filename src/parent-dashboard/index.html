@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CVA-SmartGuardian — Bảng Điều Khiển Phụ Huynh</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+  <div class="dashboard-container">
+    <!-- HEADER -->
+    <header class="dashboard-header">
+      <div>
+        <h1 class="brand-title">
+          🛡️ CVA-SmartGuardian 
+          <span class="badge">KHKT THCS Chu Văn An</span>
+        </h1>
+        <p style="font-size: 0.82rem; color: var(--text-muted); margin-top: 4px;">
+          Hệ sinh thái Giám sát Thông minh & Đồng hành Tự chủ Số (Dành cho Phụ huynh)
+        </p>
+      </div>
+
+      <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+        <div class="student-chip">
+          <div class="student-avatar">Nam</div>
+          <div>
+            <div style="font-weight: 700; font-size: 0.88rem;">Nguyễn Hoàng Nam (8A2)</div>
+            <div style="font-size: 0.72rem; color: #10b981; display: flex; align-items: center; gap: 5px;">
+              <span class="online-dot"></span> Đang kết nối Agent
+            </div>
+          </div>
+        </div>
+
+        <button type="button" id="btnSimulateActivity" class="btn-action btn-secondary" style="font-size: 0.8rem; padding: 6px 12px;">
+          ⚡ Giả lập Con mở Game
+        </button>
+      </div>
+    </header>
+
+    <!-- METRICS GRID -->
+    <section class="metrics-grid">
+      <!-- Card 1: Tổng thời gian -->
+      <div class="metric-card ratio">
+        <div class="metric-label">
+          <span>TỔNG THỜI GIAN MÀN HÌNH</span>
+          <span>⏱️</span>
+        </div>
+        <div class="metric-val" id="valTotalScreenTime">3h 25p</div>
+        <div class="metric-sub">Hôm nay (Từ 06:00 đến nay)</div>
+      </div>
+
+      <!-- Card 2: Chơi Game -->
+      <div class="metric-card game">
+        <div class="metric-label">
+          <span>THỜI GIAN CHƠI GAME</span>
+          <span id="badgeGameLimit">Hạn mức: 45p</span>
+        </div>
+        <div class="metric-val" id="valGameTime" style="color: var(--game-color);">42p</div>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar-fill" id="barGameProgress" style="width: 93%; background: var(--game-color);"></div>
+        </div>
+        <div class="metric-sub" id="subGameStatus">Đã dùng 93% hạn mức trong ngày</div>
+      </div>
+
+      <!-- Card 3: Học tập -->
+      <div class="metric-card study">
+        <div class="metric-label">
+          <span>THỜI GIAN HỌC TẬP</span>
+          <span>📚 Azota / K12</span>
+        </div>
+        <div class="metric-val" id="valStudyTime" style="color: var(--study-color);">1h 35p</div>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar-fill" id="barStudyProgress" style="width: 100%; background: var(--study-color);"></div>
+        </div>
+        <div class="metric-sub" style="color: var(--study-color); font-weight: 700;">+ Tích lũy 15 điểm rèn luyện</div>
+      </div>
+
+      <!-- Card 4: Chỉ số Cân bằng R_GS -->
+      <div class="metric-card ratio">
+        <div class="metric-label">
+          <span>CHỈ SỐ CÂN BẰNG (R_GS)</span>
+          <span>⚖️ Toán học</span>
+        </div>
+        <div class="metric-val" id="valRatio">0.44</div>
+        <div class="metric-sub" id="subRatioStatus" style="color: #10b981; font-weight: 700;">
+          ✓ Mức Xanh: Học nhiều hơn Chơi
+        </div>
+      </div>
+    </section>
+
+    <!-- MAIN CONTENT LAYOUT (2 COLUMNS) -->
+    <div class="content-layout">
+      <!-- CỘT TRÁI: DÒNG THỜI GIAN & PHÂN BỔ HOẠT ĐỘNG -->
+      <div>
+        <!-- Phân bổ hoạt động -->
+        <div class="panel-card">
+          <div class="panel-head">
+            <h3 class="panel-title">📊 Tỷ Lệ Phân Bổ Thời Gian Sử Dụng</h3>
+            <span style="font-size: 0.78rem; color: var(--text-muted);">Đo lường tự động</span>
+          </div>
+
+          <div class="distribution-bar" id="distBar">
+            <div class="dist-slice study" id="distSliceStudy" style="width: 46%;" title="Học tập 46%"></div>
+            <div class="dist-slice game" id="distSliceGame" style="width: 21%;" title="Game 21%"></div>
+            <div class="dist-slice social" id="distSliceSocial" style="width: 23%;" title="Mạng xã hội 23%"></div>
+            <div class="dist-slice utility" id="distSliceUtility" style="width: 10%;" title="Tiện ích 10%"></div>
+          </div>
+
+          <div class="legend-grid">
+            <div class="legend-item">
+              <span class="legend-dot" style="background: var(--study-color);"></span>
+              <span>Học tập (Azota, K12Online): <strong id="legendStudyMinutes">95p (46%)</strong></span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-dot" style="background: var(--game-color);"></span>
+              <span>Trò chơi (Liên Quân, Roblox): <strong id="legendGameMinutes">42p (21%)</strong></span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-dot" style="background: var(--social-color);"></span>
+              <span>Mạng xã hội (TikTok, YouTube): <strong id="legendSocialMinutes">48p (23%)</strong></span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-dot" style="background: var(--utility-color);"></span>
+              <span>Hệ thống & Tra cứu: <strong id="legendUtilityMinutes">20p (10%)</strong></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dòng thời gian sử dụng chi tiết -->
+        <div class="panel-card">
+          <div class="panel-head">
+            <h3 class="panel-title">🕒 Nhật Ký Hoạt Động Của Con Hôm Nay</h3>
+            <span style="font-size: 0.78rem; color: var(--text-muted);" id="timelineCount">5 phiên</span>
+          </div>
+
+          <div class="timeline-list" id="timelineList">
+            <!-- Render động qua JavaScript -->
+          </div>
+        </div>
+      </div>
+
+      <!-- CỘT PHẢI: CẢNH BÁO AN TOÀN & THỎA ƯỚC SỐ GIA ĐÌNH -->
+      <div>
+        <!-- Thỏa ước số gia đình (Digital Contract) -->
+        <div class="panel-card">
+          <div class="panel-head">
+            <h3 class="panel-title">🤝 Thỏa Ước Số Gia Đình (Digital Contract)</h3>
+            <span style="font-size: 0.75rem; background: #dcfce7; color: #15803d; padding: 2px 8px; border-radius: 12px; font-weight: 700;">Đang Hiệu Lực</span>
+          </div>
+
+          <div class="contract-streak-banner">
+            <div>
+              <div style="font-size: 0.84rem; font-weight: 700; color: #1e40af;">🏆 CHUỖI TỰ CHỦ SỐ (STREAK)</div>
+              <div style="font-size: 0.76rem; color: #475569; margin-top: 2px;">Con đã giữ đúng cam kết không vượt giờ liên tục:</div>
+            </div>
+            <div class="streak-score" id="valStreakDays">5 Ngày 🔥</div>
+          </div>
+
+          <div style="background: #f8fafc; padding: 14px; border-radius: var(--radius-sm); border: 1px solid var(--card-border); margin-bottom: 14px;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.84rem; font-weight: 700; margin-bottom: 6px;">
+              <span>Hạn mức Game ngày thường:</span>
+              <span id="labelSliderGame" style="color: var(--primary);">45 phút</span>
+            </div>
+            <input type="range" id="sliderGameLimit" min="15" max="120" step="15" value="45" style="width: 100%; accent-color: var(--primary);">
+            <div style="display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--text-muted); margin-top: 4px;">
+              <span>15 phút</span>
+              <span>45 phút (Chuẩn)</span>
+              <span>120 phút</span>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 8px;">
+            <button type="button" id="btnSaveContract" class="btn-action btn-primary" style="flex: 1; justify-content: center;">
+              ✓ Cập Nhật Thỏa Ước Mới
+            </button>
+            <button type="button" id="btnRewardStudent" class="btn-action btn-secondary" style="font-size: 0.82rem;">
+              🎁 Thưởng Điểm
+            </button>
+          </div>
+        </div>
+
+        <!-- Bảng Cảnh Báo An Toàn Mạng (Risk Feed) -->
+        <div class="panel-card">
+          <div class="panel-head">
+            <h3 class="panel-title">🛡️ Cảnh Báo An Toàn Không Gian Mạng</h3>
+            <span style="font-size: 0.75rem; color: var(--text-muted);">Local NLP On-Device</span>
+          </div>
+
+          <div class="alert-feed" id="alertFeed">
+            <!-- Render động qua JavaScript -->
+          </div>
+
+          <div style="margin-top: 14px; padding: 10px 14px; background: #f8fafc; border-radius: var(--radius-sm); font-size: 0.76rem; color: var(--text-muted); display: flex; gap: 8px; align-items: center;">
+            <span>🔒</span>
+            <span>Bộ lọc từ khóa chạy 100% cục bộ trên điện thoại con, bảo vệ tuyệt đối bí mật riêng tư gia đình theo Nghị định 13/2023/NĐ-CP.</span>
+          </div>
+        </div>
+
+        <!-- BẢNG TƯỜNG LỬA CHẶN WEBSITE ĐỘC HẠI (SAFE WEB SHIELD) -->
+        <div class="panel-card" style="border-top: 4px solid var(--primary);">
+          <div class="panel-head">
+            <h3 class="panel-title">🛡️ Tường Lửa Chặn Web Độc Hại (Safe Web Shield)</h3>
+            <span style="font-size: 0.72rem; background: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 10px; font-weight: 700;">Đang Bật</span>
+          </div>
+
+          <!-- 4 CHỐT CHẶN BẢO VỆ TỰ ĐỘNG -->
+          <div style="margin-bottom: 16px;">
+            <div style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted); margin-bottom: 8px;">
+              DANH MỤC TỰ ĐỘNG NGĂN CHẶN THỜI GIAN THỰC:
+            </div>
+
+            <div class="shield-toggle-row">
+              <div class="shield-toggle-info">
+                <span class="shield-toggle-icon">🔞</span>
+                <div>
+                  <div class="shield-toggle-title">Chặn Web Khiêu dâm / Tình dục / Người lớn</div>
+                  <div class="shield-toggle-sub">Tự động chặn các trang web 18+, đồi trụy theo Luật Trẻ em 2016</div>
+                </div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="toggleBlockAdult" checked>
+                <span class="slider-toggle"></span>
+              </label>
+            </div>
+
+            <div class="shield-toggle-row">
+              <div class="shield-toggle-info">
+                <span class="shield-toggle-icon">🎣</span>
+                <div>
+                  <div class="shield-toggle-title">Chặn Web Lừa đảo / Nạp thẻ ảo / Phishing</div>
+                  <div class="shield-toggle-sub">Chống lừa đảo tặng quà, nạp quân huy lậu, đánh cắp mật khẩu</div>
+                </div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="toggleBlockScam" checked>
+                <span class="slider-toggle"></span>
+              </label>
+            </div>
+
+            <div class="shield-toggle-row">
+              <div class="shield-toggle-info">
+                <span class="shield-toggle-icon">🎰</span>
+                <div>
+                  <div class="shield-toggle-title">Chặn Cờ bạc trực tuyến / Tài xỉu / Cá độ</div>
+                  <div class="shield-toggle-sub">Ngăn chặn các website cờ bạc, tài xỉu, cá độ bóng đá học đường</div>
+                </div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="toggleBlockGambling" checked>
+                <span class="slider-toggle"></span>
+              </label>
+            </div>
+
+            <div class="shield-toggle-row">
+              <div class="shield-toggle-info">
+                <span class="shield-toggle-icon">⚔️</span>
+                <div>
+                  <div class="shield-toggle-title">Chặn Mua bán Vũ khí / Kích động Bạo lực</div>
+                  <div class="shield-toggle-sub">Phát hiện và ngăn chặn nội dung hung khí, kích động đánh nhau</div>
+                </div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="toggleBlockViolence" checked>
+                <span class="slider-toggle"></span>
+              </label>
+            </div>
+          </div>
+
+          <!-- DANH SÁCH CHẶN RIÊNG CỦA PHỤ HUYNH -->
+          <div style="background: #f8fafc; padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--card-border); margin-bottom: 14px;">
+            <div style="font-size: 0.82rem; font-weight: 700; margin-bottom: 6px;">
+              ➕ Thêm Website Cấm Riêng Của Gia Đình:
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <input type="text" id="inputCustomDomain" placeholder="Ví dụ: facebook.com, shopacc.vn" style="flex: 1; padding: 8px 12px; border: 1px solid var(--card-border); border-radius: 6px; font-size: 0.82rem;">
+              <button type="button" id="btnAddCustomDomain" class="btn-action btn-primary" style="padding: 8px 14px; font-size: 0.8rem;">
+                + Thêm Chặn
+              </button>
+            </div>
+            <div class="custom-domains-wrap" id="customDomainList">
+              <!-- Render danh sách domain riêng -->
+            </div>
+          </div>
+
+          <!-- CÔNG CỤ THỬ NGHIỆM TƯỜNG LỬA CHẶN WEB (SANDBOX TESTER CHO BAN GIÁM KHẢO) -->
+          <div class="url-tester-box">
+            <div style="font-size: 0.82rem; font-weight: 800; color: #1e40af; margin-bottom: 4px;">
+              🧪 Hộp Thử Nghiệm Tường Lửa (Kiểm tra xem link có bị chặn không):
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <input type="text" id="inputTestUrl" value="https://napthegamelau.com/hack" style="flex: 1; padding: 8px 10px; border: 1px solid #bfdbfe; border-radius: 6px; font-size: 0.82rem; background: #fff;">
+              <button type="button" id="btnTestUrl" class="btn-action btn-secondary" style="font-size: 0.8rem; padding: 8px 12px; border-color: #93c5fd;">
+                ⚡ Kiểm Tra
+              </button>
+            </div>
+            <div id="testerResultBox" class="tester-result"></div>
+          </div>
+
+          <!-- LỊCH SỬ CÁC LẦN CON BỊ CHẶN TRUY CẬP (BLOCKED HISTORY) -->
+          <div style="margin-top: 16px;">
+            <div style="font-size: 0.82rem; font-weight: 700; color: var(--text-main); margin-bottom: 8px; display: flex; justify-content: space-between;">
+              <span>🚨 Nhật Ký Đã Ngăn Chặn Truy Cập:</span>
+              <span id="blockedCountBadge" style="color: var(--danger); font-weight: 800;">2 lần</span>
+            </div>
+            <div id="blockedAttemptsFeed" style="display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto;">
+              <!-- Render động qua JavaScript -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCRIPT INCLUDES -->
+  <script src="../core/data-models.js"></script>
+  <script src="../core/app-classifier.js"></script>
+  <script src="../core/local-nlp-analyzer.js"></script>
+  <script src="../core/web-blocker.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>

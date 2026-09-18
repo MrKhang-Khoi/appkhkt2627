@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="24dp"
+    android:background="@color/background">
+
+    <!-- BIỂU TƯỢNG KHIÊN CẢNH BÁO -->
+    <ImageView
+        android:layout_width="88dp"
+        android:layout_height="88dp"
+        android:src="@android:drawable/ic_dialog_alert"
+        android:contentDescription="Lá chắn an toàn"
+        android:tint="@color/danger"
+        android:layout_marginBottom="16dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="NỘI DUNG ĐÃ BỊ CHẶN"
+        android:textColor="@color/danger"
+        android:textSize="22sp"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:layout_marginBottom="8dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Lá chắn an toàn học sinh CVA-SmartGuardian"
+        android:textColor="@color/text_muted"
+        android:textSize="14sp"
+        android:gravity="center"
+        android:layout_marginBottom="24dp" />
+
+    <!-- HỘP THÔNG TIN CHI TIẾT NỘI DUNG BỊ CHẶN -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@color/surface"
+        android:padding="16dp"
+        android:layout_marginBottom="24dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Địa chỉ trang web / ứng dụng:"
+            android:textColor="@color/text_muted"
+            android:textSize="12sp"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:id="@+id/tvBlockedUrl"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="https://domain-vi-pham.com"
+            android:textColor="@color/accent_gold"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:ellipsize="middle"
+            android:singleLine="true"
+            android:layout_marginBottom="12dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Phân loại rủi ro:"
+            android:textColor="@color/text_muted"
+            android:textSize="12sp"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:id="@+id/tvCategory"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Nội dung khiêu dâm / Cờ bạc trực tuyến"
+            android:textColor="@color/danger"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="12dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Lý do ngăn chặn:"
+            android:textColor="@color/text_muted"
+            android:textSize="12sp"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:id="@+id/tvReason"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Nằm trong danh mục cảnh báo độc hại theo thỏa ước an toàn số gia đình."
+            android:textColor="@color/text_main"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <!-- NÚT QUAY LẠI AN TOÀN -->
+    <Button
+        android:id="@+id/btnBackSafe"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:text="Quay Lại An Toàn (Màn hình chính)"
+        android:textColor="@color/on_primary"
+        android:backgroundTint="@color/primary"
+        android:textSize="15sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="12dp" />
+
+    <!-- NÚT MỞ KHÓA BẰNG MÃ PIN PHỤ HUYNH -->
+    <Button
+        android:id="@+id/btnUnlockPin"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:text="Mở Khóa Bằng Mã PIN Phụ Huynh"
+        android:textColor="@color/text_muted"
+        android:backgroundTint="@color/surface"
+        android:textSize="14sp" />
+
+</LinearLayout>
