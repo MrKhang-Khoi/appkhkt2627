@@ -1,17 +1,18 @@
 {
-    "isForceUpdate":  false,
-    "apkUrl":  "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.0.apk",
-    "minSupportedVersion":  1,
-    "releaseDate":  "2026-09-18",
-    "sha256":  "911f79309a42fe75a96f2c7ce0f80843be0dea6453967687fa3d89e9fedc133a",
-    "versionName":  "1.0.2",
-    "versionCode":  3,
-    "changelog":  [
-                      "Giao diện mở lần đầu tinh gọn chuẩn quốc tế: chỉ có ô nhập mã ghép đôi và hiệu ứng loading",
-                      "Tốc độ ghép đôi siêu tốc (\u003c 200ms) phản hồi tức thì trên điện thoại và web",
-                      "Thu gọn hướng dẫn Xiaomi HyperOS / Android 14 thành icon trợ giúp thông minh",
-                      "Tự động kiểm tra bản cập nhật mới ngay khi người dùng mở ứng dụng",
-                      "Sửa triệt để vòng lặp cập nhật và đo đếm chuẩn xác YouTube / TikTok"
-                  ],
-    "fileSize":  "5.26 MB"
+    "isForceUpdate": false,
+    "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.0.apk",
+    "minSupportedVersion": 1,
+    "releaseDate": "2026-09-18",
+    "sha256": "4671a0d6271c984b060f8904767728ee1f33f5d5909a0027d7f41f3f8b9a2f91",
+    "versionName": "1.0.3",
+    "versionCode": 4,
+    "latestVersionName": "1.0.3",
+    "latestVersionCode": 4,
+    "changelog": [
+        "Giao diện Onboarding và Dashboard đồng nhất M3 siêu đẹp",
+        "Lắng nghe sự kiện ngắt kết nối có hiệu ứng Loading và tự động reset",
+        "Tối giản câu từ chuẩn quốc tế 'Xin chào ............', 'ĐÃ GHÉP ĐÔI'",
+        "Tự động phát hiện và tải bản cập nhật tức thời qua Firebase Cloud"
+    ],
+    "fileSize": "5.27 MB"
 }

@@ -1,4 +1,4 @@
-﻿package vn.edu.cva.smartguardian.update
+package vn.edu.cva.smartguardian.update
 
 import android.app.Activity
 import android.content.Context
@@ -32,82 +32,101 @@ data class UpdateInfo(
 object AppUpdateManager {
 
     private const val TAG = "AppUpdateManager"
-    const val VERSION_CHECK_URL = "https://mrkhang-khoi.github.io/appkhkt2627/version.json"
+    const val FIREBASE_VERSION_URL = "https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/app_release.json"
+    const val GITHUB_VERSION_URL = "https://mrkhang-khoi.github.io/appkhkt2627/version.json"
 
     private val httpClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
         .build()
 
     /**
-     * Kiểm tra bản cập nhật từ GitHub Pages qua HTTPS
+     * Kiểm tra bản cập nhật từ Firebase RTDB (tức thời) hoặc GitHub Pages qua HTTPS
      */
     suspend fun checkForUpdate(context: Context): UpdateInfo? = withContext(Dispatchers.IO) {
+        // 1. Thử đọc từ Firebase RTDB trước (phản hồi trong <100ms, không bị dính cache)
+        var json = fetchVersionJson(FIREBASE_VERSION_URL)
+        if (json == null) {
+            // 2. Fallback sang GitHub Pages
+            json = fetchVersionJson(GITHUB_VERSION_URL)
+        }
+        if (json == null) return@withContext null
+
         try {
-            val request = Request.Builder()
-                .url(VERSION_CHECK_URL)
-                .header("Cache-Control", "no-cache")
-                .build()
+            val remoteVersionCode = if (json.has("latestVersionCode")) {
+                json.optInt("latestVersionCode", 0)
+            } else {
+                json.optInt("versionCode", 0)
+            }
+            val remoteVersionName = if (json.has("latestVersionName")) {
+                json.optString("latestVersionName", "1.0.0")
+            } else {
+                json.optString("versionName", "1.0.0")
+            }
+            val apkUrl = json.optString("apkUrl", "")
+            val fileSize = json.optString("fileSize", "")
+            val sha256 = json.optString("sha256", "")
+            val isForceUpdate = json.optBoolean("isForceUpdate", false)
 
-            httpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    Log.w(TAG, "Kiểm tra phiên bản thất bại, mã HTTP: ${response.code}")
-                    return@withContext null
+            val changelogList = mutableListOf<String>()
+            val changelogArray = json.optJSONArray("changelog")
+            if (changelogArray != null) {
+                for (i in 0 until changelogArray.length()) {
+                    changelogList.add(changelogArray.getString(i))
                 }
+            }
 
-                val bodyStr = response.body?.string() ?: return@withContext null
-                val json = JSONObject(bodyStr)
+            val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.packageManager.getPackageInfo(
+                    context.packageName,
+                    android.content.pm.PackageManager.PackageInfoFlags.of(0)
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageInfo(context.packageName, 0)
+            }
 
-                val remoteVersionCode = json.optInt("versionCode", 0)
-                val remoteVersionName = json.optString("versionName", "1.0.0")
-                val apkUrl = json.optString("apkUrl", "")
-                val fileSize = json.optString("fileSize", "")
-                val sha256 = json.optString("sha256", "")
-                val isForceUpdate = json.optBoolean("isForceUpdate", false)
+            val currentVersionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                packageInfo.longVersionCode.toInt()
+            } else {
+                @Suppress("DEPRECATION")
+                packageInfo.versionCode
+            }
 
-                val changelogList = mutableListOf<String>()
-                val changelogArray = json.optJSONArray("changelog")
-                if (changelogArray != null) {
-                    for (i in 0 until changelogArray.length()) {
-                        changelogList.add(changelogArray.getString(i))
-                    }
-                }
+            Log.d(TAG, "Phiên bản hiện tại: $currentVersionCode, Phiên bản từ xa: $remoteVersionCode")
 
-                val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    context.packageManager.getPackageInfo(
-                        context.packageName,
-                        android.content.pm.PackageManager.PackageInfoFlags.of(0)
-                    )
-                } else {
-                    @Suppress("DEPRECATION")
-                    context.packageManager.getPackageInfo(context.packageName, 0)
-                }
-
-                val currentVersionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    packageInfo.longVersionCode.toInt()
-                } else {
-                    @Suppress("DEPRECATION")
-                    packageInfo.versionCode
-                }
-
-                Log.d(TAG, "Phiên bản hiện tại: $currentVersionCode, Phiên bản từ xa: $remoteVersionCode")
-
-                if (remoteVersionCode > currentVersionCode && apkUrl.isNotEmpty()) {
-                    UpdateInfo(
-                        versionCode = remoteVersionCode,
-                        versionName = remoteVersionName,
-                        apkUrl = apkUrl,
-                        fileSize = fileSize,
-                        sha256 = sha256,
-                        changelog = changelogList,
-                        isForceUpdate = isForceUpdate
-                    )
-                } else {
-                    null
-                }
+            if (remoteVersionCode > currentVersionCode && apkUrl.isNotEmpty()) {
+                UpdateInfo(
+                    versionCode = remoteVersionCode,
+                    versionName = remoteVersionName,
+                    apkUrl = apkUrl,
+                    fileSize = fileSize,
+                    sha256 = sha256,
+                    changelog = changelogList,
+                    isForceUpdate = isForceUpdate
+                )
+            } else {
+                null
             }
         } catch (e: Exception) {
             Log.e(TAG, "Lỗi kiểm tra bản cập nhật", e)
+            null
+        }
+    }
+
+    private fun fetchVersionJson(url: String): JSONObject? {
+        return try {
+            val request = Request.Builder()
+                .url(url)
+                .header("Cache-Control", "no-cache")
+                .build()
+            httpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return null
+                val bodyStr = response.body?.string() ?: return null
+                JSONObject(bodyStr)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Lỗi fetch version từ $url: ${e.message}")
             null
         }
     }
