@@ -22,7 +22,7 @@
             <ImageView
                 android:layout_width="42dp"
                 android:layout_height="42dp"
-                android:src="@android:drawable/ic_lock_idle_lock"
+                android:src="@drawable/ic_lock"
                 android:tint="@color/primary"
                 android:contentDescription="Logo"
                 android:layout_marginEnd="12dp" />
