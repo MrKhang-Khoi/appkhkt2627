@@ -1042,9 +1042,9 @@
     if (btnCopyFamilyCode) {
       btnCopyFamilyCode.addEventListener('click', () => {
         navigator.clipboard.writeText(currentFamilyCode);
-        btnCopyFamilyCode.innerHTML = '<span>✅</span> Đã Sao Chép!';
+        btnCopyFamilyCode.textContent = '✅ Đã Sao Chép!';
         setTimeout(() => {
-          btnCopyFamilyCode.innerHTML = '<span>📋</span> Sao Chép Mã';
+          btnCopyFamilyCode.textContent = '📋 Sao Chép Mã';
         }, 2000);
       });
     }
@@ -1107,7 +1107,9 @@
           const res = await fetch(`${FIREBASE_BASE}/pairings/${code}.json`, { cache: 'no-cache' });
           const val = await res.json();
           if (val !== null) isValid = true;
-        } catch (_e) {}
+        } catch (err) {
+          console.warn('Firebase pairing validation warning:', err);
+        }
 
         if (!isValid) {
           stepIcon1.textContent = '❌';
@@ -1172,6 +1174,7 @@
 
         // Lưu mã vào local storage học sinh
         localStorage.setItem('cva_student_paired_code', code);
+        startStudentWebHeartbeat(code);
 
         setTimeout(() => {
           studentPairingModal.classList.remove('active');
@@ -1198,11 +1201,50 @@
       });
     }
 
+    // HÀM GỬI NHỊP TIM THỜI GIAN THỰC TỪ TRÌNH DUYỆT HỌC SINH (NẾU DÙNG BẢN WEB)
+    let studentWebHeartbeatInterval = null;
+    function startStudentWebHeartbeat(code) {
+      if (!code) return;
+      if (studentWebHeartbeatInterval) clearInterval(studentWebHeartbeatInterval);
+
+      const sendPing = async () => {
+        try {
+          const now = Date.now();
+          const patchData = JSON.stringify({
+            lastSync: now,
+            lastHeartbeat: now,
+            online: true
+          });
+          await Promise.all([
+            fetch(`${FIREBASE_BASE}/devices/${code}.json`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: patchData
+            }),
+            fetch(`${FIREBASE_BASE}/pairings/${code}.json`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: patchData
+            })
+          ]);
+        } catch (err) {
+          console.warn('Student web heartbeat ping warning:', err);
+        }
+      };
+
+      sendPing();
+      studentWebHeartbeatInterval = setInterval(sendPing, 10000);
+    }
+
     // HÀM TÍNH TOÁN TRẠNG THÁI KẾT NỐI THẬT QUA NHỊP TIM (HEARTBEAT ENGINE)
     function calculateDeviceOnlineStatus(deviceData, pairingData) {
       const now = Date.now();
-      const lastContact = (deviceData && (deviceData.lastSync || deviceData.lastHeartbeat)) ||
-                          (pairingData && (pairingData.lastSync || pairingData.lastHeartbeat)) || 0;
+      const lastContact = Math.max(
+        Number(deviceData?.lastHeartbeat) || 0,
+        Number(deviceData?.lastSync) || 0,
+        Number(pairingData?.lastHeartbeat) || 0,
+        Number(pairingData?.lastSync) || 0
+      );
 
       if (!lastContact) {
         return { isOnline: false, diffSeconds: 999999, text: 'Chưa có tín hiệu mạng', color: '#ef4444' };
@@ -1210,7 +1252,7 @@
 
       const diffSeconds = Math.max(0, Math.floor((now - lastContact) / 1000));
       // Ngưỡng Heartbeat: 45 giây. 
-      // Thiết bị học sinh gửi heartbeat mỗi 15 giây.
+      // Thiết bị học sinh (Android hoặc Web) gửi heartbeat mỗi 10 giây.
       // Nếu tắt mạng (ngắt Wi-Fi / 4G), sau 45s không có ping mới -> Chắc chắn NGOẠI TUYẾN!
       if (diffSeconds <= 45) {
         return { isOnline: true, diffSeconds, text: 'Đang hoạt động thời gian thực', color: '#10b981' };
@@ -1243,11 +1285,12 @@
       if (dashChildName) dashChildName.textContent = deviceData.deviceModel || 'Điện thoại học sinh';
 
       if (dashChildStatus) {
-        if (status.isOnline) {
-          dashChildStatus.innerHTML = `<span style="color: #10b981; font-weight: 700;">● ${status.text}</span>`;
-        } else {
-          dashChildStatus.innerHTML = `<span style="color: #ef4444; font-weight: 700;">● ${status.text}</span>`;
-        }
+        dashChildStatus.replaceChildren();
+        const statusSpan = document.createElement('span');
+        statusSpan.style.color = status.color;
+        statusSpan.style.fontWeight = '700';
+        statusSpan.textContent = `● ${status.text}`;
+        dashChildStatus.appendChild(statusSpan);
       }
 
       if (dashOfflineNotice) {
@@ -1260,7 +1303,15 @@
       if (deviceData.usage) {
         const u = deviceData.usage;
         const score = typeof u.balanceScore === 'number' ? u.balanceScore : 88;
-        if (dashBalanceScore) dashBalanceScore.innerHTML = `${score}<span style="font-size: 0.9rem; color: #94a3b8;">/100</span>`;
+        if (dashBalanceScore) {
+          dashBalanceScore.replaceChildren();
+          dashBalanceScore.appendChild(document.createTextNode(String(score)));
+          const subSpan = document.createElement('span');
+          subSpan.style.fontSize = '0.9rem';
+          subSpan.style.color = '#94a3b8';
+          subSpan.textContent = '/100';
+          dashBalanceScore.appendChild(subSpan);
+        }
         
         if (dashBalanceBadge) {
           if (score >= 80) {
@@ -1292,7 +1343,15 @@
         if (dashSocialTime) dashSocialTime.textContent = `${socialM}m (${Math.round(socialM * 100 / totalM)}%)`;
       } else {
         // Tuyệt đối không hiển thị số liệu giả nếu chưa có dữ liệu đo đạc
-        if (dashBalanceScore) dashBalanceScore.innerHTML = `--<span style="font-size: 0.9rem; color: #94a3b8;">/100</span>`;
+        if (dashBalanceScore) {
+          dashBalanceScore.replaceChildren();
+          dashBalanceScore.appendChild(document.createTextNode('--'));
+          const subSpan = document.createElement('span');
+          subSpan.style.fontSize = '0.9rem';
+          subSpan.style.color = '#94a3b8';
+          subSpan.textContent = '/100';
+          dashBalanceScore.appendChild(subSpan);
+        }
         if (dashBalanceBadge) {
           dashBalanceBadge.textContent = '⚪ Chờ đồng bộ';
           dashBalanceBadge.style.color = '#94a3b8';
@@ -1328,7 +1387,9 @@
             const status = calculateDeviceOnlineStatus(data, null);
             updateChildDashboardLive(data, status);
           }
-        } catch (_e) {}
+        } catch (err) {
+          console.warn('Child dashboard load error:', err);
+        }
       });
     }
 
@@ -1363,7 +1424,9 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ focusLock: isFocusModeActive, updatedAt: Date.now() })
           });
-        } catch (_e) {}
+        } catch (err) {
+          console.warn('Focus mode dispatch error:', err);
+        }
       });
     }
 
@@ -1376,7 +1439,9 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ text: "Bố mẹ chúc con học tập tốt và giữ gìn sức khỏe nhé!", timestamp: Date.now() })
           });
-        } catch (_e) {}
+        } catch (err) {
+          console.warn('Reminder dispatch error:', err);
+        }
       });
     }
 
@@ -1410,7 +1475,12 @@
           const childDeviceDot = document.getElementById('childDeviceDot');
           if (childDeviceDot) childDeviceDot.style.background = status.color;
           if (childDeviceState) {
-            childDeviceState.innerHTML = `<span style="color: ${status.color}; font-weight: bold;">●</span> ${status.text}`;
+            childDeviceState.replaceChildren();
+            const dotSpan = document.createElement('span');
+            dotSpan.style.color = status.color;
+            dotSpan.style.fontWeight = 'bold';
+            dotSpan.textContent = '● ';
+            childDeviceState.append(dotSpan, document.createTextNode(status.text));
           }
 
           // Cập nhật modal con nếu đang mở
@@ -1496,6 +1566,7 @@
           ]);
 
           localStorage.removeItem('cva_student_paired_code');
+          if (studentWebHeartbeatInterval) clearInterval(studentWebHeartbeatInterval);
 
           setTimeout(() => {
             loadingOverlay.classList.remove('active');
@@ -1539,6 +1610,7 @@
     // Kiểm tra trạng thái ghép đôi của học sinh đã lưu chưa
     const savedStudentPair = localStorage.getItem('cva_student_paired_code');
     if (savedStudentPair) {
+      startStudentWebHeartbeat(savedStudentPair);
       if (studentInputCard) studentInputCard.style.display = 'none';
       if (studentPairedCard) studentPairedCard.style.display = 'block';
       if (studentConnectedCodeDisplay) studentConnectedCodeDisplay.textContent = savedStudentPair;

@@ -32,6 +32,7 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -98,6 +99,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var layoutUnpairOverlay: FrameLayout
 
     private var unpairJob: Job? = null
+    private var heartbeatJob: Job? = null
     private var isVpnRunning = false
     private val firebaseClient = OkHttpClient.Builder()
         .connectTimeout(8, TimeUnit.SECONDS)
@@ -129,10 +131,12 @@ class MainActivity : AppCompatActivity() {
 
         if (isPaired && pairedCode.isNotEmpty()) {
             showStudentPairedState(pairedCode)
-            if (hasUsageStatsPermission()) {
-                UsageTrackerService.start(this)
-            }
+            UsageTrackerService.start(this)
             startUnpairListener(pairedCode)
+            startHeartbeatLoop(pairedCode)
+            lifecycleScope.launch(Dispatchers.IO) {
+                sendHeartbeatPing(pairedCode)
+            }
         } else {
             showStudentUnpairedState()
         }
@@ -146,10 +150,14 @@ class MainActivity : AppCompatActivity() {
         performUpdateCheck(userInitiated = false)
 
         val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
-        if (prefs.getBoolean("is_paired", false)) {
-            if (hasUsageStatsPermission()) {
-                UsageTrackerService.start(this)
-                lifecycleScope.launch(Dispatchers.IO) {
+        val isPaired = prefs.getBoolean("is_paired", false)
+        val pairedCode = prefs.getString("paired_code", "") ?: ""
+        if (isPaired && pairedCode.isNotEmpty()) {
+            UsageTrackerService.start(this)
+            startHeartbeatLoop(pairedCode)
+            lifecycleScope.launch(Dispatchers.IO) {
+                sendHeartbeatPing(pairedCode)
+                if (hasUsageStatsPermission()) {
                     UsageTrackerService.collectAndSave(this@MainActivity)
                 }
             }
@@ -174,6 +182,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         unpairJob?.cancel()
+        heartbeatJob?.cancel()
     }
 
     private fun initViews() {
@@ -576,9 +585,9 @@ class MainActivity : AppCompatActivity() {
                     .putString("paired_code", inputCode)
                     .apply()
 
-                if (hasUsageStatsPermission()) {
-                    UsageTrackerService.start(this@MainActivity)
-                }
+                UsageTrackerService.start(this@MainActivity)
+                startHeartbeatLoop(inputCode)
+                sendHeartbeatPing(inputCode)
 
                 withContext(Dispatchers.Main) {
                     pbPairingLoading.visibility = View.GONE
@@ -711,8 +720,49 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun startHeartbeatLoop(pairedCode: String) {
+        if (pairedCode.isEmpty()) return
+        heartbeatJob?.cancel()
+        heartbeatJob = lifecycleScope.launch(Dispatchers.IO) {
+            while (isActive) {
+                sendHeartbeatPing(pairedCode)
+                delay(10_000)
+            }
+        }
+    }
+
+    private suspend fun sendHeartbeatPing(pairedCode: String) {
+        if (pairedCode.isEmpty()) return
+        try {
+            val now = System.currentTimeMillis()
+            val jsonMediaType = "application/json; charset=utf-8".toMediaType()
+            val pingJson = JSONObject().apply {
+                put("lastSync", now)
+                put("lastHeartbeat", now)
+                put("online", true)
+            }
+            val body = pingJson.toString().toRequestBody(jsonMediaType)
+
+            val reqDevice = Request.Builder()
+                .url("$FIREBASE_RTDB_URL/devices/$pairedCode.json")
+                .patch(body)
+                .build()
+            firebaseClient.newCall(reqDevice).execute().close()
+
+            val reqPairing = Request.Builder()
+                .url("$FIREBASE_RTDB_URL/pairings/$pairedCode.json")
+                .patch(body)
+                .build()
+            firebaseClient.newCall(reqPairing).execute().close()
+            Log.d(TAG, "Heartbeat ping sent for $pairedCode at $now")
+        } catch (e: Exception) {
+            Log.w(TAG, "Heartbeat ping failed: ${e.message}")
+        }
+    }
+
     private fun triggerStudentUnpairAnimation() {
         unpairJob?.cancel()
+        heartbeatJob?.cancel()
         layoutUnpairOverlay.visibility = View.VISIBLE
 
         lifecycleScope.launch(Dispatchers.Main) {

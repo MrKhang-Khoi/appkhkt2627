@@ -54,6 +54,38 @@ class UsageTrackerService : Service() {
                 context.startService(intent)
             }
         }
+
+        fun sendHeartbeatPing(context: Context) {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val pairedCode = prefs.getString("paired_code", "") ?: ""
+            if (pairedCode.isEmpty()) return
+
+            syncScope.launch {
+                try {
+                    val now = System.currentTimeMillis()
+                    val mediaType = "application/json; charset=utf-8".toMediaType()
+                    val pingJson = JSONObject().apply {
+                        put("lastSync", now)
+                        put("lastHeartbeat", now)
+                        put("online", true)
+                    }
+                    val body = pingJson.toString().toRequestBody(mediaType)
+
+                    val reqDevice = okhttp3.Request.Builder()
+                        .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$pairedCode.json")
+                        .patch(body)
+                        .build()
+                    sharedHttpClient.newCall(reqDevice).execute().close()
+
+                    val reqPairing = okhttp3.Request.Builder()
+                        .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/pairings/$pairedCode.json")
+                        .patch(body)
+                        .build()
+                    sharedHttpClient.newCall(reqPairing).execute().close()
+                } catch (_: Exception) {}
+            }
+        }
+
         fun collectAndSave(context: Context) {
             val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager ?: return
 
@@ -154,13 +186,17 @@ class UsageTrackerService : Service() {
                             put("usage", usageJson)
                         }
 
-                        val req = okhttp3.Request.Builder()
+                        val reqDevice = okhttp3.Request.Builder()
                             .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$pairedCode.json")
                             .patch(devicePatch.toString().toRequestBody(mediaType))
                             .build()
-                        sharedHttpClient.newCall(req).execute().use { _ ->
-                            // Auto-close response stream & return connection to OkHttp pool
-                        }
+                        sharedHttpClient.newCall(reqDevice).execute().close()
+
+                        val reqPairing = okhttp3.Request.Builder()
+                            .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/pairings/$pairedCode.json")
+                            .patch(devicePatch.toString().toRequestBody(mediaType))
+                            .build()
+                        sharedHttpClient.newCall(reqPairing).execute().close()
                     } catch (_: Exception) {}
                 }
             }
@@ -239,8 +275,15 @@ class UsageTrackerService : Service() {
     private fun startTrackingLoop() {
         serviceScope.launch {
             while (isActive) {
-                collectAndSave(this@UsageTrackerService)
-                delay(15_000) // Nhịp tim kiểm tra 15 giây
+                // 1. Luôn gửi nhịp tim sống còn (Heartbeat) dù có quyền Usage hay không
+                sendHeartbeatPing(this@UsageTrackerService)
+
+                // 2. Thu thập thống kê chi tiết nếu được cấp quyền
+                try {
+                    collectAndSave(this@UsageTrackerService)
+                } catch (_: Exception) {}
+
+                delay(10_000) // Nhịp tim kiểm tra 10 giây
             }
         }
     }
