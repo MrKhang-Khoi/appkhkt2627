@@ -15,6 +15,7 @@ import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -36,6 +37,14 @@ class UsageTrackerService : Service() {
         const val NOTIFICATION_ID = 1001
         const val ACTION_USAGE_UPDATED = "vn.edu.cva.smartguardian.ACTION_USAGE_UPDATED"
         const val PREFS_NAME = "cva_guardian_stats"
+
+        private val sharedHttpClient by lazy {
+            okhttp3.OkHttpClient.Builder()
+                .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                .build()
+        }
+        private val syncScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
         fun start(context: Context) {
             val intent = Intent(context, UsageTrackerService::class.java)
@@ -121,14 +130,11 @@ class UsageTrackerService : Service() {
                 .putLong("last_updated_at", System.currentTimeMillis())
                 .apply()
 
-            // Đồng bộ trực tiếp thống kê lên Firebase để Parent Hub theo dõi thời gian thực
+            // Đồng bộ trực tiếp thống kê lên Firebase để Parent Hub theo dõi thời gian thực (Alibaba OCR Resource & Concurrency Optimization)
             val pairedCode = prefs.getString("paired_code", "") ?: ""
             if (pairedCode.isNotEmpty()) {
-                CoroutineScope(Dispatchers.IO).launch {
+                syncScope.launch {
                     try {
-                        val client = okhttp3.OkHttpClient.Builder()
-                            .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
-                            .build()
                         val mediaType = "application/json; charset=utf-8".toMediaType()
                         val usageJson = JSONObject().apply {
                             put("studyTimeMinutes", (studyTimeMs / 60000).toInt())
@@ -143,7 +149,9 @@ class UsageTrackerService : Service() {
                             .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$pairedCode/usage.json")
                             .put(usageJson.toString().toRequestBody(mediaType))
                             .build()
-                        client.newCall(req).execute().close()
+                        sharedHttpClient.newCall(req).execute().use { _ ->
+                            // Auto-close response stream & return connection to OkHttp pool
+                        }
                     } catch (_: Exception) {}
                 }
             }
