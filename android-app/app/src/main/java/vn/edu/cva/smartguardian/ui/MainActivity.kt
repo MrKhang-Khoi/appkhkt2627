@@ -373,31 +373,90 @@ class MainActivity : AppCompatActivity() {
 
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                val req = Request.Builder()
-                    .url("$FIREBASE_RTDB_URL/devices/$currentCode.json")
+                // 1. Thử đọc danh sách đa thiết bị từ /families/$currentCode/devices.json
+                val famReq = Request.Builder()
+                    .url("$FIREBASE_RTDB_URL/families/$currentCode/devices.json")
                     .build()
-                firebaseClient.newCall(req).execute().use { response ->
+                var handled = false
+                firebaseClient.newCall(famReq).execute().use { response ->
                     if (response.isSuccessful) {
                         val bodyStr = response.body?.string()
                         if (!bodyStr.isNullOrEmpty() && bodyStr != "null") {
                             val json = JSONObject(bodyStr)
-                            val model = json.optString("deviceModel", "Xiaomi HyperOS")
-                            val isPaired = json.optBoolean("isPaired", false)
-                            val lastSync = json.optLong("lastSync", 0L)
+                            val keys = json.keys()
+                            var totalDevices = 0
+                            var onlineDevices = 0
+                            val deviceNames = mutableListOf<String>()
                             val now = System.currentTimeMillis()
-                            val diffSec = if (lastSync > 0) (now - lastSync) / 1000 else 999999L
-                            val isOnline = diffSec <= 45
 
-                            withContext(Dispatchers.Main) {
-                                if (isPaired) {
+                            while (keys.hasNext()) {
+                                val devKey = keys.next()
+                                val devObj = json.optJSONObject(devKey) ?: continue
+                                if (devObj.optBoolean("isPaired", true) || devObj.optString("status") == "paired") {
+                                    totalDevices++
+                                    val model = devObj.optString("deviceModel", "Thiết bị con")
+                                    val lastSync = devObj.optLong("lastSync", 0L)
+                                    val lastHeartbeat = devObj.optLong("lastHeartbeat", 0L)
+                                    val lastContact = maxOf(lastSync, lastHeartbeat)
+                                    val isOnline = lastContact > 0 && (now - lastContact) <= 45000L
+
                                     if (isOnline) {
-                                        tvParentChildSubtitle.text = "🟢 Trực tuyến • $model"
+                                        onlineDevices++
+                                        deviceNames.add("🟢 $model")
                                     } else {
-                                        val minAgo = diffSec / 60
-                                        val timeText = if (minAgo < 1) "vừa ngắt mạng" else "mất mạng ${minAgo}m trước"
-                                        tvParentChildSubtitle.text = "🔴 Ngoại tuyến ($timeText) • $model"
+                                        deviceNames.add("🔴 $model")
                                     }
-                                } else {
+                                }
+                            }
+
+                            if (totalDevices > 0) {
+                                handled = true
+                                withContext(Dispatchers.Main) {
+                                    if (onlineDevices == totalDevices) {
+                                        tvParentChildSubtitle.text = "🟢 $onlineDevices/$totalDevices thiết bị trực tuyến (${deviceNames.joinToString(", ")})"
+                                    } else if (onlineDevices > 0) {
+                                        tvParentChildSubtitle.text = "🟡 $onlineDevices/$totalDevices trực tuyến (${deviceNames.joinToString(", ")})"
+                                    } else {
+                                        tvParentChildSubtitle.text = "🔴 $totalDevices thiết bị ngoại tuyến (${deviceNames.joinToString(", ")})"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 2. Dự phòng: Đọc legacy /devices/$currentCode.json nếu chưa có danh sách
+                if (!handled) {
+                    val req = Request.Builder()
+                        .url("$FIREBASE_RTDB_URL/devices/$currentCode.json")
+                        .build()
+                    firebaseClient.newCall(req).execute().use { response ->
+                        if (response.isSuccessful) {
+                            val bodyStr = response.body?.string()
+                            if (!bodyStr.isNullOrEmpty() && bodyStr != "null") {
+                                val json = JSONObject(bodyStr)
+                                val model = json.optString("deviceModel", "Xiaomi HyperOS")
+                                val isPaired = json.optBoolean("isPaired", false)
+                                val lastSync = json.optLong("lastSync", 0L)
+                                val now = System.currentTimeMillis()
+                                val diffSec = if (lastSync > 0) (now - lastSync) / 1000 else 999999L
+                                val isOnline = diffSec <= 45
+
+                                withContext(Dispatchers.Main) {
+                                    if (isPaired) {
+                                        if (isOnline) {
+                                            tvParentChildSubtitle.text = "🟢 Trực tuyến • $model"
+                                        } else {
+                                            val minAgo = diffSec / 60
+                                            val timeText = if (minAgo < 1) "vừa ngắt mạng" else "mất mạng ${minAgo}m trước"
+                                            tvParentChildSubtitle.text = "🔴 Ngoại tuyến ($timeText) • $model"
+                                        }
+                                    } else {
+                                        tvParentChildSubtitle.text = "Chờ học sinh kết nối..."
+                                    }
+                                }
+                            } else {
+                                withContext(Dispatchers.Main) {
                                     tvParentChildSubtitle.text = "Chờ học sinh kết nối..."
                                 }
                             }
@@ -423,15 +482,25 @@ class MainActivity : AppCompatActivity() {
             try {
                 val jsonMediaType = "application/json; charset=utf-8".toMediaType()
                 val payload = JSONObject().apply {
+                    put("familyCode", newCode)
                     put("pairingCode", newCode)
                     put("createdAt", System.currentTimeMillis())
                     put("status", "pending")
                 }
-                val req = Request.Builder()
+                val body = payload.toString().toRequestBody(jsonMediaType)
+
+                val reqPairing = Request.Builder()
                     .url("$FIREBASE_RTDB_URL/pairings/$newCode.json")
-                    .put(payload.toString().toRequestBody(jsonMediaType))
+                    .put(body)
                     .build()
-                firebaseClient.newCall(req).execute().close()
+                firebaseClient.newCall(reqPairing).execute().close()
+
+                val reqFamily = Request.Builder()
+                    .url("$FIREBASE_RTDB_URL/families/$newCode.json")
+                    .patch(body)
+                    .build()
+                firebaseClient.newCall(reqFamily).execute().close()
+
                 withContext(Dispatchers.Main) {
                     Toast.makeText(this@MainActivity, "Đã tạo mã mới: $newCode", Toast.LENGTH_SHORT).show()
                 }
@@ -447,21 +516,54 @@ class MainActivity : AppCompatActivity() {
 
         lifecycleScope.launch(Dispatchers.IO) {
             try {
+                val jsonMediaType = "application/json; charset=utf-8".toMediaType()
+                val unpairPayload = JSONObject().apply {
+                    put("status", "REVOKED")
+                    put("isPaired", false)
+                    put("online", false)
+                    put("revokedAt", System.currentTimeMillis())
+                    put("revokedBy", "PARENT")
+                }
+                val body = unpairPayload.toString().toRequestBody(jsonMediaType)
+
+                // 1. Thu hồi các thiết bị trong gia đình
+                val famReq = Request.Builder()
+                    .url("$FIREBASE_RTDB_URL/families/$code/devices.json")
+                    .build()
+                firebaseClient.newCall(famReq).execute().use { response ->
+                    if (response.isSuccessful) {
+                        val bodyStr = response.body?.string()
+                        if (!bodyStr.isNullOrEmpty() && bodyStr != "null") {
+                            val json = JSONObject(bodyStr)
+                            val keys = json.keys()
+                            while (keys.hasNext()) {
+                                val devId = keys.next()
+                                val patchFamDev = Request.Builder()
+                                    .url("$FIREBASE_RTDB_URL/families/$code/devices/$devId.json")
+                                    .patch(body)
+                                    .build()
+                                firebaseClient.newCall(patchFamDev).execute().close()
+
+                                val patchDev = Request.Builder()
+                                    .url("$FIREBASE_RTDB_URL/devices/$devId.json")
+                                    .patch(body)
+                                    .build()
+                                firebaseClient.newCall(patchDev).execute().close()
+                            }
+                        }
+                    }
+                }
+
+                // 2. Kế thừa thu hồi các node đơn lẻ
                 val delPairingReq = Request.Builder()
                     .url("$FIREBASE_RTDB_URL/pairings/$code.json")
-                    .delete()
+                    .patch(body)
                     .build()
                 firebaseClient.newCall(delPairingReq).execute().close()
 
-                val jsonMediaType = "application/json; charset=utf-8".toMediaType()
-                val updatePayload = JSONObject().apply {
-                    put("isPaired", false)
-                    put("online", false)
-                    put("lastSync", System.currentTimeMillis())
-                }
                 val patchReq = Request.Builder()
                     .url("$FIREBASE_RTDB_URL/devices/$code.json")
-                    .patch(updatePayload.toString().toRequestBody(jsonMediaType))
+                    .patch(body)
                     .build()
                 firebaseClient.newCall(patchReq).execute().close()
             } catch (e: Exception) {
@@ -539,39 +641,54 @@ class MainActivity : AppCompatActivity() {
                 val now = System.currentTimeMillis()
                 val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
-                // Ghi vào /pairings/$inputCode.json để Web Parent Hub nhận diện ngay lập tức
-                val pairingData = JSONObject().apply {
-                    put("pairingCode", inputCode)
-                    put("status", "paired")
+                val devicePayload = JSONObject().apply {
                     put("deviceId", androidId)
+                    put("familyCode", inputCode)
+                    put("pairingCode", inputCode)
                     put("deviceModel", "$manufacturer $model")
                     put("androidVersion", androidVer)
+                    put("status", "paired")
+                    put("isPaired", true)
+                    put("online", true)
                     put("pairedAt", now)
                     put("lastSync", now)
-                    put("online", true)
+                    put("lastHeartbeat", now)
                 }
+                val body = devicePayload.toString().toRequestBody(jsonMediaType)
+
+                // 1. Thêm vào danh sách thiết bị gia đình: /families/$inputCode/devices/$androidId.json
+                val putFamDevReq = Request.Builder()
+                    .url("$FIREBASE_RTDB_URL/families/$inputCode/devices/$androidId.json")
+                    .patch(body)
+                    .build()
+                firebaseClient.newCall(putFamDevReq).execute().close()
+
+                // 2. Ghi chi tiết phẳng thiết bị: /devices/$androidId.json
+                val putDeviceReq = Request.Builder()
+                    .url("$FIREBASE_RTDB_URL/devices/$androidId.json")
+                    .patch(body)
+                    .build()
+                firebaseClient.newCall(putDeviceReq).execute().close()
+
+                // 3. Ánh xạ ngược thiết bị -> gia đình: /device_to_family/$androidId.json
+                val putMapReq = Request.Builder()
+                    .url("$FIREBASE_RTDB_URL/device_to_family/$androidId.json")
+                    .put("\"$inputCode\"".toRequestBody(jsonMediaType))
+                    .build()
+                firebaseClient.newCall(putMapReq).execute().close()
+
+                // 4. Kế thừa tương thích ngược: /pairings/$inputCode.json và /devices/$inputCode.json
                 val putPairingReq = Request.Builder()
                     .url("$FIREBASE_RTDB_URL/pairings/$inputCode.json")
-                    .patch(pairingData.toString().toRequestBody(jsonMediaType))
+                    .patch(body)
                     .build()
                 firebaseClient.newCall(putPairingReq).execute().close()
 
-                // Ghi vào /devices/$inputCode.json cho thống kê telemetry
-                val deviceData = JSONObject().apply {
-                    put("pairingCode", inputCode)
-                    put("deviceId", androidId)
-                    put("deviceModel", "$manufacturer $model")
-                    put("androidVersion", androidVer)
-                    put("isPaired", true)
-                    put("status", "paired")
-                    put("lastSync", now)
-                    put("online", true)
-                }
-                val putDeviceReq = Request.Builder()
+                val putLegacyReq = Request.Builder()
                     .url("$FIREBASE_RTDB_URL/devices/$inputCode.json")
-                    .put(deviceData.toString().toRequestBody(jsonMediaType))
+                    .patch(body)
                     .build()
-                firebaseClient.newCall(putDeviceReq).execute().close()
+                firebaseClient.newCall(putLegacyReq).execute().close()
 
                 // BƯỚC 3: XÁC THỰC THÀNH CÔNG VÀ HOÀN TẤT
                 withContext(Dispatchers.Main) {
@@ -583,6 +700,7 @@ class MainActivity : AppCompatActivity() {
                 prefs.edit()
                     .putBoolean("is_paired", true)
                     .putString("paired_code", inputCode)
+                    .putString("device_id", androidId)
                     .apply()
 
                 UsageTrackerService.start(this@MainActivity)
@@ -693,29 +811,59 @@ class MainActivity : AppCompatActivity() {
     private fun startUnpairListener(pairedCode: String) {
         if (pairedCode.isEmpty()) return
         unpairJob?.cancel()
+        val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: "UNKNOWN"
         unpairJob = lifecycleScope.launch(Dispatchers.IO) {
             while (true) {
                 delay(3000)
                 try {
-                    val req = Request.Builder()
-                        .url("$FIREBASE_RTDB_URL/devices/$pairedCode.json")
+                    var unpairTriggered = false
+                    // 1. Kiểm tra trạng thái thiết bị tại /families/$pairedCode/devices/$androidId.json
+                    val reqFamDev = Request.Builder()
+                        .url("$FIREBASE_RTDB_URL/families/$pairedCode/devices/$androidId.json")
                         .build()
-                    firebaseClient.newCall(req).execute().use { response ->
+                    firebaseClient.newCall(reqFamDev).execute().use { response ->
                         if (response.isSuccessful) {
                             val body = response.body?.string()
                             if (!body.isNullOrEmpty() && body != "null") {
                                 val json = JSONObject(body)
                                 val isStillPaired = json.optBoolean("isPaired", true)
-                                if (!isStillPaired) {
-                                    withContext(Dispatchers.Main) {
-                                        triggerStudentUnpairAnimation()
-                                    }
-                                    return@launch
+                                val status = json.optString("status", "paired")
+                                if (!isStillPaired || status == "REVOKED") {
+                                    unpairTriggered = true
                                 }
                             }
                         }
                     }
-                } catch (_: Exception) {}
+
+                    // 2. Kiểm tra legacy node /devices/$pairedCode.json
+                    if (!unpairTriggered) {
+                        val req = Request.Builder()
+                            .url("$FIREBASE_RTDB_URL/devices/$pairedCode.json")
+                            .build()
+                        firebaseClient.newCall(req).execute().use { response ->
+                            if (response.isSuccessful) {
+                                val body = response.body?.string()
+                                if (!body.isNullOrEmpty() && body != "null") {
+                                    val json = JSONObject(body)
+                                    val isStillPaired = json.optBoolean("isPaired", true)
+                                    val status = json.optString("status", "paired")
+                                    if (!isStillPaired || status == "REVOKED") {
+                                        unpairTriggered = true
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (unpairTriggered) {
+                        withContext(Dispatchers.Main) {
+                            triggerStudentUnpairAnimation()
+                        }
+                        return@launch
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Unpair listener error: ${e.message}")
+                }
             }
         }
     }
@@ -735,6 +883,7 @@ class MainActivity : AppCompatActivity() {
         if (pairedCode.isEmpty()) return
         try {
             val now = System.currentTimeMillis()
+            val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: "UNKNOWN"
             val jsonMediaType = "application/json; charset=utf-8".toMediaType()
             val pingJson = JSONObject().apply {
                 put("lastSync", now)
@@ -743,6 +892,21 @@ class MainActivity : AppCompatActivity() {
             }
             val body = pingJson.toString().toRequestBody(jsonMediaType)
 
+            // 1. Ghi độc lập vào /families/$pairedCode/devices/$androidId.json
+            val reqFamDev = Request.Builder()
+                .url("$FIREBASE_RTDB_URL/families/$pairedCode/devices/$androidId.json")
+                .patch(body)
+                .build()
+            firebaseClient.newCall(reqFamDev).execute().close()
+
+            // 2. Ghi vào /devices/$androidId.json
+            val reqDev = Request.Builder()
+                .url("$FIREBASE_RTDB_URL/devices/$androidId.json")
+                .patch(body)
+                .build()
+            firebaseClient.newCall(reqDev).execute().close()
+
+            // 3. Tương thích ngược: /devices/$pairedCode và /pairings/$pairedCode
             val reqDevice = Request.Builder()
                 .url("$FIREBASE_RTDB_URL/devices/$pairedCode.json")
                 .patch(body)
@@ -754,7 +918,7 @@ class MainActivity : AppCompatActivity() {
                 .patch(body)
                 .build()
             firebaseClient.newCall(reqPairing).execute().close()
-            Log.d(TAG, "Heartbeat ping sent for $pairedCode at $now")
+            Log.d(TAG, "Multi-device heartbeat ping sent for $androidId in $pairedCode at $now")
         } catch (e: Exception) {
             Log.w(TAG, "Heartbeat ping failed: ${e.message}")
         }

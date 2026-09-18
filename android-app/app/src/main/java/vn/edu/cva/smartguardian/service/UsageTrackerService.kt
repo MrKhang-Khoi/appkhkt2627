@@ -22,6 +22,8 @@ import kotlinx.coroutines.launch
 import vn.edu.cva.smartguardian.data.AppCategory
 import vn.edu.cva.smartguardian.data.AppClassifier
 import vn.edu.cva.smartguardian.ui.MainActivity
+import android.provider.Settings
+import android.util.Log
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
@@ -59,6 +61,9 @@ class UsageTrackerService : Service() {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val pairedCode = prefs.getString("paired_code", "") ?: ""
             if (pairedCode.isEmpty()) return
+            val androidId = prefs.getString("device_id", "")?.takeIf { it.isNotEmpty() }
+                ?: Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+                ?: "UNKNOWN"
 
             syncScope.launch {
                 try {
@@ -71,18 +76,35 @@ class UsageTrackerService : Service() {
                     }
                     val body = pingJson.toString().toRequestBody(mediaType)
 
+                    // 1. Ghi độc lập vào danh sách thiết bị gia đình: /families/$pairedCode/devices/$androidId
+                    val reqFamDev = okhttp3.Request.Builder()
+                        .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId.json")
+                        .patch(body)
+                        .build()
+                    sharedHttpClient.newCall(reqFamDev).execute().close()
+
+                    // 2. Ghi chi tiết thiết bị phẳng: /devices/$androidId
                     val reqDevice = okhttp3.Request.Builder()
-                        .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$pairedCode.json")
+                        .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$androidId.json")
                         .patch(body)
                         .build()
                     sharedHttpClient.newCall(reqDevice).execute().close()
+
+                    // 3. Tương thích ngược: /devices/$pairedCode và /pairings/$pairedCode
+                    val reqLegacyDev = okhttp3.Request.Builder()
+                        .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$pairedCode.json")
+                        .patch(body)
+                        .build()
+                    sharedHttpClient.newCall(reqLegacyDev).execute().close()
 
                     val reqPairing = okhttp3.Request.Builder()
                         .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/pairings/$pairedCode.json")
                         .patch(body)
                         .build()
                     sharedHttpClient.newCall(reqPairing).execute().close()
-                } catch (_: Exception) {}
+                } catch (e: Exception) {
+                    Log.w("UsageTrackerService", "sendHeartbeatPing failed: ${e.message}")
+                }
             }
         }
 
@@ -163,6 +185,10 @@ class UsageTrackerService : Service() {
             // Đồng bộ trực tiếp nhịp tim & thống kê lên Firebase để Parent Hub theo dõi thời gian thực
             val pairedCode = prefs.getString("paired_code", "") ?: ""
             if (pairedCode.isNotEmpty()) {
+                val androidId = prefs.getString("device_id", "")?.takeIf { it.isNotEmpty() }
+                    ?: Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+                    ?: "UNKNOWN"
+
                 syncScope.launch {
                     try {
                         val now = System.currentTimeMillis()
@@ -185,19 +211,37 @@ class UsageTrackerService : Service() {
                             put("lastHeartbeat", now)
                             put("usage", usageJson)
                         }
+                        val patchBody = devicePatch.toString().toRequestBody(mediaType)
 
+                        // 1. Ghi vào danh sách thiết bị gia đình: /families/$pairedCode/devices/$androidId
+                        val reqFamDev = okhttp3.Request.Builder()
+                            .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId.json")
+                            .patch(patchBody)
+                            .build()
+                        sharedHttpClient.newCall(reqFamDev).execute().close()
+
+                        // 2. Ghi vào chi tiết thiết bị phẳng: /devices/$androidId
                         val reqDevice = okhttp3.Request.Builder()
-                            .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$pairedCode.json")
-                            .patch(devicePatch.toString().toRequestBody(mediaType))
+                            .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$androidId.json")
+                            .patch(patchBody)
                             .build()
                         sharedHttpClient.newCall(reqDevice).execute().close()
 
+                        // 3. Tương thích ngược: /devices/$pairedCode và /pairings/$pairedCode
+                        val reqLegacyDev = okhttp3.Request.Builder()
+                            .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$pairedCode.json")
+                            .patch(patchBody)
+                            .build()
+                        sharedHttpClient.newCall(reqLegacyDev).execute().close()
+
                         val reqPairing = okhttp3.Request.Builder()
                             .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/pairings/$pairedCode.json")
-                            .patch(devicePatch.toString().toRequestBody(mediaType))
+                            .patch(patchBody)
                             .build()
                         sharedHttpClient.newCall(reqPairing).execute().close()
-                    } catch (_: Exception) {}
+                    } catch (e: Exception) {
+                        Log.w("UsageTrackerService", "collectAndSave sync failed: ${e.message}")
+                    }
                 }
             }
 

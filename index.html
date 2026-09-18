@@ -616,8 +616,8 @@
           </div>
         </div>
 
-        <!-- THẺ THIẾT BỊ CON CHUẨN SCREEN 2 -->
-        <div style="margin-top: 18px; display: flex; flex-direction: column; gap: 8px;">
+        <!-- THẺ DANH SÁCH THIẾT BỊ CON CHUẨN SCREEN 2 (HỖ TRỢ ĐA THIẾT BỊ) -->
+        <div style="margin-top: 18px; display: flex; flex-direction: column; gap: 8px;" id="devicesContainer">
           <!-- TRẠNG THÁI CHƯA CÓ THIẾT BỊ -->
           <div class="empty-device-card" id="emptyDeviceCard">
             <div class="empty-device-icon">📱</div>
@@ -625,8 +625,11 @@
             <div class="empty-device-sub">Hãy đọc mã ghép đôi trên cho con nhập trên điện thoại để bắt đầu</div>
           </div>
 
-          <!-- TRẠNG THÁI ĐÃ KẾT NỐI THẬT (SCREEN 2) -->
-          <div class="status-row" id="activeDeviceRow" style="display: none;">
+          <!-- DANH SÁCH CÁC THIẾT BỊ ĐÃ KẾT NỐI ĐỘNG -->
+          <div id="dynamicDevicesList" style="display: flex; flex-direction: column; gap: 8px;"></div>
+
+          <!-- DỰ PHÒNG TEMPLATE THẺ THIẾT BỊ (SCREEN 2) -->
+          <div class="status-row" id="activeDeviceRow" style="display: none; cursor: pointer;">
             <div style="display: flex; align-items: center; gap: 12px;">
               <div style="width: 38px; height: 38px; border-radius: 50%; background: #1e293b; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; position: relative;">
                 👤
@@ -1065,6 +1068,16 @@
     const btnStudentWebConnect = document.getElementById('btnStudentWebConnect');
     const studentWebCodeInput = document.getElementById('studentWebCodeInput');
 
+    // Hàm lấy hoặc tạo định danh duy nhất cho thiết bị Web Client
+    function getWebDeviceId() {
+      let id = localStorage.getItem('cva_web_device_id');
+      if (!id) {
+        id = 'web_' + Math.random().toString(36).substring(2, 10) + '_' + Date.now().toString(36);
+        localStorage.setItem('cva_web_device_id', id);
+      }
+      return id;
+    }
+
     async function executeStudentPairingFlow() {
       const code = (studentWebCodeInput ? studentWebCodeInput.value : '').trim().toUpperCase();
       if (!code) {
@@ -1122,12 +1135,13 @@
         stepIcon1.textContent = '✅';
         stepDesc1.textContent = `Mã ${code} hợp lệ và sẵn sàng kết nối.`;
 
-        // === BƯỚC 2: GỬI THÔNG TIN THIẾT BỊ VÀ MÃ XÁC NHẬN ===
+        // === BƯỚC 2: GỬI THÔNG TIN THIẾT BỊ VÀ MÃ XÁC NHẬN (MULTI-DEVICE FAN-OUT) ===
         step2.style.opacity = '1';
         stepIcon2.textContent = '📤';
         stepDesc2.textContent = 'Đang gửi thông tin thiết bị & mã xác nhận lên Cloud...';
         await new Promise(r => setTimeout(r, 800));
 
+        const deviceId = getWebDeviceId();
         let deviceModel = 'Web Browser Client';
         const ua = navigator.userAgent;
         if (/Android/i.test(ua)) deviceModel = 'Android Web App';
@@ -1136,18 +1150,40 @@
 
         const now = Date.now();
         const payload = {
+          deviceId: deviceId,
+          familyCode: code,
           pairingCode: code,
           deviceModel: deviceModel,
-          androidVersion: 'Web Client 1.0.7',
+          androidVersion: 'Web Client 1.1.0',
           status: 'paired',
           isPaired: true,
           online: true,
           lastSync: now,
+          lastHeartbeat: now,
           pairedAt: now
         };
 
-        // Ghi đồng bộ cả 2 endpoint: pairings & devices
+        // Ghi đồng bộ Đa Thiết Bị chuẩn Google Firebase Realtime Database
         await Promise.all([
+          // 1. Thêm thiết bị vào gia đình
+          fetch(`${FIREBASE_BASE}/families/${code}/devices/${deviceId}.json`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          }),
+          // 2. Chi tiết phẳng thiết bị
+          fetch(`${FIREBASE_BASE}/devices/${deviceId}.json`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          }),
+          // 3. Ánh xạ ngược thiết bị -> gia đình
+          fetch(`${FIREBASE_BASE}/device_to_family/${deviceId}.json`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(code)
+          }),
+          // 4. Kế thừa tương thích ngược
           fetch(`${FIREBASE_BASE}/pairings/${code}.json`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -1206,16 +1242,27 @@
     function startStudentWebHeartbeat(code) {
       if (!code) return;
       if (studentWebHeartbeatInterval) clearInterval(studentWebHeartbeatInterval);
+      const deviceId = getWebDeviceId();
 
       const sendPing = async () => {
         try {
           const now = Date.now();
           const patchData = JSON.stringify({
+            online: true,
             lastSync: now,
-            lastHeartbeat: now,
-            online: true
+            lastHeartbeat: now
           });
           await Promise.all([
+            fetch(`${FIREBASE_BASE}/families/${code}/devices/${deviceId}.json`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: patchData
+            }),
+            fetch(`${FIREBASE_BASE}/devices/${deviceId}.json`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: patchData
+            }),
             fetch(`${FIREBASE_BASE}/devices/${code}.json`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
@@ -1374,21 +1421,37 @@
     const btnSendReminder = document.getElementById('btnSendReminder');
 
     let isFocusModeActive = false;
+    let currentSelectedDeviceId = null;
+
+    async function openChildDashboard(deviceId) {
+      currentSelectedDeviceId = deviceId;
+      if (!childDashboardModal) return;
+      childDashboardModal.classList.add('active');
+
+      try {
+        const [devRes, famDevRes] = await Promise.all([
+          fetch(`${FIREBASE_BASE}/devices/${deviceId}.json`, { cache: 'no-cache' }).catch(() => null),
+          fetch(`${FIREBASE_BASE}/families/${currentFamilyCode}/devices/${deviceId}.json`, { cache: 'no-cache' }).catch(() => null)
+        ]);
+        const devData = (devRes && devRes.ok) ? await devRes.json() : null;
+        const famDevData = (famDevRes && famDevRes.ok) ? await famDevRes.json() : null;
+        const targetData = devData || famDevData;
+
+        if (targetData) {
+          const status = calculateDeviceOnlineStatus(targetData, null);
+          updateChildDashboardLive(targetData, status);
+        }
+      } catch (err) {
+        console.warn('Child dashboard load error:', err);
+      }
+    }
 
     if (activeDeviceRow) {
       activeDeviceRow.addEventListener('click', async () => {
-        if (!childDashboardModal) return;
-        childDashboardModal.classList.add('active');
-
-        try {
-          const res = await fetch(`${FIREBASE_BASE}/devices/${currentFamilyCode}.json`, { cache: 'no-cache' });
-          const data = await res.json();
-          if (data) {
-            const status = calculateDeviceOnlineStatus(data, null);
-            updateChildDashboardLive(data, status);
-          }
-        } catch (err) {
-          console.warn('Child dashboard load error:', err);
+        if (currentSelectedDeviceId) {
+          openChildDashboard(currentSelectedDeviceId);
+        } else {
+          openChildDashboard(currentFamilyCode);
         }
       });
     }
@@ -1419,11 +1482,20 @@
           alert('🔓 Đã mở khóa thiết bị học sinh về trạng thái bình thường.');
         }
         try {
-          await fetch(`${FIREBASE_BASE}/devices/${currentFamilyCode}/commands.json`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ focusLock: isFocusModeActive, updatedAt: Date.now() })
-          });
+          const targetDevId = currentSelectedDeviceId || currentFamilyCode;
+          const cmdPayload = JSON.stringify({ focusLock: isFocusModeActive, updatedAt: Date.now() });
+          await Promise.all([
+            fetch(`${FIREBASE_BASE}/devices/${targetDevId}/commands.json`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: cmdPayload
+            }),
+            fetch(`${FIREBASE_BASE}/families/${currentFamilyCode}/devices/${targetDevId}/commands.json`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: cmdPayload
+            })
+          ]);
         } catch (err) {
           console.warn('Focus mode dispatch error:', err);
         }
@@ -1434,58 +1506,155 @@
       btnSendReminder.addEventListener('click', async () => {
         alert('🔔 Đã gửi tin nhắn nhắc nhở tới máy con: "Bố mẹ chúc con học tập tốt và giữ gìn sức khỏe nhé!"');
         try {
-          await fetch(`${FIREBASE_BASE}/devices/${currentFamilyCode}/reminder.json`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: "Bố mẹ chúc con học tập tốt và giữ gìn sức khỏe nhé!", timestamp: Date.now() })
-          });
+          const targetDevId = currentSelectedDeviceId || currentFamilyCode;
+          const reminderPayload = JSON.stringify({ text: "Bố mẹ chúc con học tập tốt và giữ gìn sức khỏe nhé!", timestamp: Date.now() });
+          await Promise.all([
+            fetch(`${FIREBASE_BASE}/devices/${targetDevId}/reminder.json`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: reminderPayload
+            }),
+            fetch(`${FIREBASE_BASE}/families/${currentFamilyCode}/devices/${targetDevId}/reminder.json`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: reminderPayload
+            })
+          ]);
         } catch (err) {
           console.warn('Reminder dispatch error:', err);
         }
       });
     }
 
-    // 6. KIỂM TRA TRẠNG THÁI THIẾT BỊ CON THỜI GIAN THỰC TỪ CẢ 2 ENDPOINT FIREBASE
+    // 6. KIỂM TRA TRẠNG THÁI ĐA THIẾT BỊ CON THỜI GIAN THỰC (MULTI-DEVICE REGISTRY)
     async function checkDevicePairingStatus() {
       try {
-        const [pairingRes, deviceRes] = await Promise.all([
+        const [familyDevicesRes, pairingRes, deviceRes] = await Promise.all([
+          fetch(`${FIREBASE_BASE}/families/${currentFamilyCode}/devices.json`, { cache: 'no-cache' }).catch(() => null),
           fetch(`${FIREBASE_BASE}/pairings/${currentFamilyCode}.json`, { cache: 'no-cache' }).catch(() => null),
           fetch(`${FIREBASE_BASE}/devices/${currentFamilyCode}.json`, { cache: 'no-cache' }).catch(() => null)
         ]);
 
+        const familyDevices = (familyDevicesRes && familyDevicesRes.ok) ? await familyDevicesRes.json() : null;
         const pairingData = (pairingRes && pairingRes.ok) ? await pairingRes.json() : null;
         const deviceData = (deviceRes && deviceRes.ok) ? await deviceRes.json() : null;
 
-        const isPaired = (pairingData && (pairingData.status === 'paired' || pairingData.isPaired === true)) ||
-                         (deviceData && (deviceData.status === 'paired' || deviceData.isPaired === true));
+        let devicesList = [];
+        if (familyDevices && typeof familyDevices === 'object') {
+          devicesList = Object.entries(familyDevices)
+            .filter(([id, d]) => d && (d.isPaired === true || d.status === 'paired'))
+            .map(([id, d]) => ({ ...d, deviceId: id }));
+        }
 
-        if (isPaired) {
-          const model = (deviceData && deviceData.deviceModel) || (pairingData && pairingData.deviceModel) || 'Điện thoại học sinh';
-          const os = (deviceData && deviceData.androidVersion) || (pairingData && pairingData.androidVersion) || 'Android';
+        // Tương thích ngược: Nếu nhánh /families/... chưa có, lấy từ legacy /devices/ hoặc /pairings/
+        if (devicesList.length === 0) {
+          const legacyPaired = (pairingData && (pairingData.status === 'paired' || pairingData.isPaired === true)) ||
+                               (deviceData && (deviceData.status === 'paired' || deviceData.isPaired === true));
+          if (legacyPaired) {
+            devicesList.push({
+              deviceId: (deviceData && deviceData.deviceId) || currentFamilyCode,
+              deviceModel: (deviceData && deviceData.deviceModel) || (pairingData && pairingData.deviceModel) || 'Điện thoại học sinh',
+              androidVersion: (deviceData && deviceData.androidVersion) || (pairingData && pairingData.androidVersion) || 'Android',
+              lastHeartbeat: (deviceData && deviceData.lastHeartbeat) || (pairingData && pairingData.lastHeartbeat) || 0,
+              lastSync: (deviceData && deviceData.lastSync) || (pairingData && pairingData.lastSync) || 0,
+              usage: deviceData?.usage || null,
+              isPaired: true
+            });
+          }
+        }
 
+        const dynamicList = document.getElementById('dynamicDevicesList');
+
+        if (devicesList.length > 0) {
           if (emptyDeviceCard) emptyDeviceCard.style.display = 'none';
-          if (activeDeviceRow) activeDeviceRow.style.display = 'flex';
-          if (btnTriggerUnpair) btnTriggerUnpair.style.display = 'flex';
+          if (btnTriggerUnpair) btnTriggerUnpair.style.display = 'inline-flex';
+          if (activeDeviceRow) activeDeviceRow.style.display = 'none';
 
-          if (childDeviceName) childDeviceName.textContent = model;
-          if (childDeviceOs) childDeviceOs.textContent = os;
+          if (dynamicList) {
+            dynamicList.replaceChildren();
+            for (const dev of devicesList) {
+              const devStatus = calculateDeviceOnlineStatus(dev, null);
+              const row = document.createElement('div');
+              row.className = 'status-row';
+              row.style.cursor = 'pointer';
+              row.style.display = 'flex';
+              row.style.alignItems = 'center';
+              row.style.justifyContent = 'space-between';
+              row.style.padding = '12px 14px';
+              row.style.background = 'rgba(30, 41, 59, 0.7)';
+              row.style.borderRadius = '14px';
+              row.style.border = '1px solid rgba(255, 255, 255, 0.08)';
+              row.style.transition = 'all 0.2s ease';
 
-          // TÍNH TOÁN HEARTBEAT THỰC SỰ
-          const status = calculateDeviceOnlineStatus(deviceData, pairingData);
-          const childDeviceDot = document.getElementById('childDeviceDot');
-          if (childDeviceDot) childDeviceDot.style.background = status.color;
-          if (childDeviceState) {
-            childDeviceState.replaceChildren();
-            const dotSpan = document.createElement('span');
-            dotSpan.style.color = status.color;
-            dotSpan.style.fontWeight = 'bold';
-            dotSpan.textContent = '● ';
-            childDeviceState.append(dotSpan, document.createTextNode(status.text));
+              const leftGrp = document.createElement('div');
+              leftGrp.style.display = 'flex';
+              leftGrp.style.alignItems = 'center';
+              leftGrp.style.gap = '12px';
+
+              const iconBox = document.createElement('div');
+              iconBox.style.width = '38px';
+              iconBox.style.height = '38px';
+              iconBox.style.borderRadius = '50%';
+              iconBox.style.background = '#1e293b';
+              iconBox.style.display = 'flex';
+              iconBox.style.alignItems = 'center';
+              iconBox.style.justifyContent = 'center';
+              iconBox.style.fontSize = '1.1rem';
+              iconBox.style.position = 'relative';
+              iconBox.textContent = '👤';
+
+              const dot = document.createElement('span');
+              dot.style.position = 'absolute';
+              dot.style.bottom = '0';
+              dot.style.right = '0';
+              dot.style.width = '8px';
+              dot.style.height = '8px';
+              dot.style.borderRadius = '50%';
+              dot.style.background = devStatus.color;
+              dot.style.boxShadow = `0 0 6px ${devStatus.color}`;
+              iconBox.appendChild(dot);
+
+              const infoBox = document.createElement('div');
+              const nameDiv = document.createElement('div');
+              nameDiv.style.fontSize = '0.92rem';
+              nameDiv.style.fontWeight = '700';
+              nameDiv.style.color = '#fff';
+              nameDiv.textContent = dev.deviceModel || 'Thiết bị học sinh';
+
+              const stateDiv = document.createElement('div');
+              stateDiv.style.fontSize = '0.75rem';
+              stateDiv.style.color = '#94a3b8';
+              const dotSpan = document.createElement('span');
+              dotSpan.style.color = devStatus.color;
+              dotSpan.style.fontWeight = 'bold';
+              dotSpan.textContent = '● ';
+              stateDiv.append(dotSpan, document.createTextNode(devStatus.text));
+
+              infoBox.append(nameDiv, stateDiv);
+              leftGrp.append(iconBox, infoBox);
+
+              const arrowSpan = document.createElement('span');
+              arrowSpan.style.fontSize = '1.1rem';
+              arrowSpan.style.color = '#64748b';
+              arrowSpan.textContent = '›';
+
+              row.append(leftGrp, arrowSpan);
+
+              row.addEventListener('click', () => {
+                openChildDashboard(dev.deviceId);
+              });
+
+              dynamicList.appendChild(row);
+            }
           }
 
           // Cập nhật modal con nếu đang mở
-          if (childDashboardModal && childDashboardModal.classList.contains('active')) {
-            updateChildDashboardLive(deviceData || pairingData, status);
+          if (childDashboardModal && childDashboardModal.classList.contains('active') && currentSelectedDeviceId) {
+            const currentDev = devicesList.find(d => d.deviceId === currentSelectedDeviceId);
+            if (currentDev) {
+              const status = calculateDeviceOnlineStatus(currentDev, null);
+              updateChildDashboardLive(currentDev, status);
+            }
           }
 
           // Đồng bộ giao diện học sinh nếu đang mở cùng tab
@@ -1498,6 +1667,7 @@
         } else {
           // Chưa có thiết bị kết nối
           if (emptyDeviceCard) emptyDeviceCard.style.display = 'block';
+          if (dynamicList) dynamicList.replaceChildren();
           if (activeDeviceRow) activeDeviceRow.style.display = 'none';
           if (btnTriggerUnpair) btnTriggerUnpair.style.display = 'none';
 
@@ -1513,7 +1683,7 @@
       }
     }
 
-    // 7. PHỤ HUYNH NGẮT KẾT NỐI (XÁC THỰC MÃ PIN BẢO MẬT)
+    // 7. PHỤ HUYNH NGẮT KẾT NỐI (XÁC THỰC MÃ PIN BẢO MẬT ĐA MÁY)
     if (btnTriggerUnpair) {
       btnTriggerUnpair.addEventListener('click', () => {
         unpairConfirmModal.classList.add('active');
@@ -1552,7 +1722,7 @@
             revokedAt: Date.now(),
             revokedBy: 'PARENT'
           };
-          await Promise.all([
+          const patchPromises = [
             fetch(`${FIREBASE_BASE}/pairings/${currentFamilyCode}.json`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
@@ -1563,14 +1733,40 @@
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(unpairPayload)
             })
-          ]);
+          ];
+
+          // Đồng thời ngắt tất cả các thiết bị con đã đăng ký
+          try {
+            const famRes = await fetch(`${FIREBASE_BASE}/families/${currentFamilyCode}/devices.json`);
+            const famData = await famRes.json();
+            if (famData && typeof famData === 'object') {
+              for (const devId of Object.keys(famData)) {
+                patchPromises.push(
+                  fetch(`${FIREBASE_BASE}/families/${currentFamilyCode}/devices/${devId}.json`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(unpairPayload)
+                  }),
+                  fetch(`${FIREBASE_BASE}/devices/${devId}.json`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(unpairPayload)
+                  })
+                );
+              }
+            }
+          } catch (fetchErr) {
+            console.warn('Error fetching family devices during unpair:', fetchErr);
+          }
+
+          await Promise.all(patchPromises);
 
           localStorage.removeItem('cva_student_paired_code');
           if (studentWebHeartbeatInterval) clearInterval(studentWebHeartbeatInterval);
 
           setTimeout(() => {
             loadingOverlay.classList.remove('active');
-            alert('✅ Đã ngắt kết nối thành công! Thiết bị học sinh đã được giải phóng.');
+            alert('✅ Đã ngắt kết nối thành công! Các thiết bị học sinh đã được giải phóng.');
             checkDevicePairingStatus();
           }, 1000);
 
