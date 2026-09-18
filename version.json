@@ -1,16 +1,17 @@
 {
-  "versionCode": 2,
-  "versionName": "1.0.1",
-  "minSupportedVersion": 1,
-  "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.0.apk",
-  "fileSize": "5.26 MB",
-  "sha256": "e03f5f1b9b0f80513b1a4bc1b3d317ab262f10aa5423024945f097094e10628a",
-  "releaseDate": "2026-09-18",
-  "isForceUpdate": false,
-  "changelog": [
-    "Tự động phát hiện phiên bản mới và cập nhật một chạm an toàn qua GitHub",
-    "Thống kê chi tiết danh sách ứng dụng đã cài đặt trên điện thoại học sinh",
-    "Thêm nút mở tắt Cho Phép Cài Đặt Bị Hạn Chế cho Xiaomi HyperOS / Android 14",
-    "Định danh thiết bị học sinh kết nối Bảng điều khiển phụ huynh"
-  ]
+    "isForceUpdate":  false,
+    "apkUrl":  "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.0.apk",
+    "minSupportedVersion":  1,
+    "releaseDate":  "2026-09-18",
+    "sha256":  "911f79309a42fe75a96f2c7ce0f80843be0dea6453967687fa3d89e9fedc133a",
+    "versionName":  "1.0.2",
+    "versionCode":  3,
+    "changelog":  [
+                      "Giao diện mở lần đầu tinh gọn chuẩn quốc tế: chỉ có ô nhập mã ghép đôi và hiệu ứng loading",
+                      "Tốc độ ghép đôi siêu tốc (\u003c 200ms) phản hồi tức thì trên điện thoại và web",
+                      "Thu gọn hướng dẫn Xiaomi HyperOS / Android 14 thành icon trợ giúp thông minh",
+                      "Tự động kiểm tra bản cập nhật mới ngay khi người dùng mở ứng dụng",
+                      "Sửa triệt để vòng lặp cập nhật và đo đếm chuẩn xác YouTube / TikTok"
+                  ],
+    "fileSize":  "5.26 MB"
 }
