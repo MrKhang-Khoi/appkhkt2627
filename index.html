@@ -864,15 +864,54 @@
             </button>
           </div>
 
-          <!-- PHÁT CHUÔNG / NHẮC NHỞ -->
-          <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 12px; display: flex; align-items: center; justify-content: space-between;">
-            <div>
-              <div style="font-size: 0.82rem; font-weight: 700; color: #fff;">Nhắc Nhở Học Tập</div>
-              <div style="font-size: 0.7rem; color: #94a3b8;">Gửi thông báo động viên tới máy con</div>
+          <!-- NHẮN TIN & NHẮC NHỞ HỌC TẬP 2 CHIỀU -->
+          <div style="background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 1.1rem;">💌</span>
+                <div>
+                  <div style="font-size: 0.84rem; font-weight: 800; color: #fff;">Nhắn Tin & Nhắc Nhở Con</div>
+                  <div style="font-size: 0.7rem; color: #94a3b8;">Gửi lời nhắn trực tiếp tới điện thoại học sinh</div>
+                </div>
+              </div>
+              <button type="button" id="btnCheckFirebaseConn" style="background: rgba(37, 99, 235, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); font-size: 0.7rem; font-weight: 700; padding: 5px 10px; border-radius: 8px; cursor: pointer;">
+                🔄 Kiểm tra kết nối
+              </button>
             </div>
-            <button type="button" id="btnSendReminder" style="background: rgba(255, 255, 255, 0.1); color: #cbd5e1; border: 1px solid rgba(255, 255, 255, 0.2); font-size: 0.75rem; font-weight: 700; padding: 7px 14px; border-radius: 8px; cursor: pointer;">
-              Gửi Tin
-            </button>
+
+            <!-- CHIP MẪU NHANH -->
+            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+              <button type="button" class="quick-msg-chip" data-msg="Bố mẹ chúc con học tập tốt và giữ gìn sức khỏe nhé! 📚" style="background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.12); color: #cbd5e1; font-size: 0.7rem; padding: 4px 8px; border-radius: 6px; cursor: pointer;">
+                📚 Chúc học tốt
+              </button>
+              <button type="button" class="quick-msg-chip" data-msg="Đã đến giờ nghỉ ngơi rồi con ơi, ngủ sớm nhé! 🌙" style="background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.12); color: #cbd5e1; font-size: 0.7rem; padding: 4px 8px; border-radius: 6px; cursor: pointer;">
+                🌙 Đi ngủ sớm
+              </button>
+              <button type="button" class="quick-msg-chip" data-msg="Nghỉ tay xuống ăn cơm cùng gia đình con nhé! 🍲" style="background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.12); color: #cbd5e1; font-size: 0.7rem; padding: 4px 8px; border-radius: 6px; cursor: pointer;">
+                🍲 Ăn cơm
+              </button>
+              <button type="button" class="quick-msg-chip" data-msg="Tập trung học xong sớm rồi giải trí con nhé! ⭐" style="background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.12); color: #cbd5e1; font-size: 0.7rem; padding: 4px 8px; border-radius: 6px; cursor: pointer;">
+                ⭐ Tập trung
+              </button>
+            </div>
+
+            <!-- Ô NHẬP VÀ NÚT GỬI -->
+            <div style="display: flex; gap: 8px;">
+              <input type="text" id="inputParentMessage" placeholder="Nhập lời nhắn gửi đến con..." style="flex: 1; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 8px; padding: 8px 12px; color: #fff; font-size: 0.78rem; outline: none;" />
+              <button type="button" id="btnSendParentMessage" style="background: #2563eb; color: #fff; border: none; font-size: 0.75rem; font-weight: 700; padding: 8px 14px; border-radius: 8px; cursor: pointer; white-space: nowrap;">
+                Gửi Tin 🚀
+              </button>
+            </div>
+
+            <!-- KHUNG HIỂN THỊ TRẠNG THÁI & PHẢN HỒI CỦA HỌC SINH -->
+            <div id="parentMessageFeed" style="background: rgba(30, 41, 59, 0.5); border-radius: 8px; padding: 10px; font-size: 0.74rem;">
+              <div id="lastSentMessageDisplay" style="color: #cbd5e1; margin-bottom: 6px; font-style: italic;">
+                Chưa có tin nhắn nào được gửi hôm nay.
+              </div>
+              <div id="childReplyBox" style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 6px; padding: 8px 10px; color: #34d399; font-weight: 600; display: none;">
+                💬 Con phản hồi: <span id="childReplyText">--</span> <span id="childReplyTime" style="font-size: 0.68rem; color: #94a3b8; font-weight: 400; margin-left: 6px;"></span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1410,6 +1449,33 @@
         if (dashGameTime) dashGameTime.textContent = '--';
         if (dashSocialTime) dashSocialTime.textContent = '--';
       }
+
+      // Cập nhật dữ liệu Tin nhắn & Phản hồi của con
+      const lastSentMessageDisplay = document.getElementById('lastSentMessageDisplay');
+      const childReplyBox = document.getElementById('childReplyBox');
+      const childReplyText = document.getElementById('childReplyText');
+      const childReplyTime = document.getElementById('childReplyTime');
+
+      const msg = deviceData.message || deviceData.reminder;
+      if (msg && msg.text) {
+        if (lastSentMessageDisplay) {
+          const sentTime = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '';
+          lastSentMessageDisplay.textContent = `Bố mẹ đã nhắn: "${msg.text}" ${sentTime ? `(${sentTime})` : ''}`;
+        }
+        if (msg.replyText) {
+          if (childReplyBox) childReplyBox.style.display = 'block';
+          if (childReplyText) childReplyText.textContent = `"${msg.replyText}"`;
+          if (childReplyTime) {
+            const replyTime = msg.replyTimestamp ? new Date(msg.replyTimestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : 'Vừa xong';
+            childReplyTime.textContent = `(Lúc ${replyTime})`;
+          }
+        } else {
+          if (childReplyBox) childReplyBox.style.display = 'none';
+        }
+      } else {
+        if (lastSentMessageDisplay) lastSentMessageDisplay.textContent = 'Chưa có tin nhắn nào được gửi hôm nay.';
+        if (childReplyBox) childReplyBox.style.display = 'none';
+      }
     }
 
     // 5. BẢNG GIÁM SÁT & ĐỒNG HÀNH THỜI GIAN THỰC (KHI PHỤ HUYNH BẤM VÀO THIẾT BỊ CON)
@@ -1423,16 +1489,26 @@
     let isFocusModeActive = false;
     let currentSelectedDeviceId = null;
 
+    const btnCheckFirebaseConn = document.getElementById('btnCheckFirebaseConn');
+    const inputParentMessage = document.getElementById('inputParentMessage');
+    const btnSendParentMessage = document.getElementById('btnSendParentMessage');
+
     async function openChildDashboard(deviceId) {
       currentSelectedDeviceId = deviceId;
       if (!childDashboardModal) return;
       childDashboardModal.classList.add('active');
 
+      if (btnCheckFirebaseConn) btnCheckFirebaseConn.textContent = '🔄 Đang đo đạc...';
+
       try {
+        const t0 = performance.now();
         const [devRes, famDevRes] = await Promise.all([
           fetch(`${FIREBASE_BASE}/devices/${deviceId}.json`, { cache: 'no-cache' }).catch(() => null),
           fetch(`${FIREBASE_BASE}/families/${currentFamilyCode}/devices/${deviceId}.json`, { cache: 'no-cache' }).catch(() => null)
         ]);
+        const latency = Math.round(performance.now() - t0);
+        if (btnCheckFirebaseConn) btnCheckFirebaseConn.textContent = `⚡ Firebase: ${latency}ms`;
+
         const devData = (devRes && devRes.ok) ? await devRes.json() : null;
         const famDevData = (famDevRes && famDevRes.ok) ? await famDevRes.json() : null;
         const targetData = devData || famDevData;
@@ -1443,11 +1519,39 @@
         }
       } catch (err) {
         console.warn('Child dashboard load error:', err);
+        if (btnCheckFirebaseConn) btnCheckFirebaseConn.textContent = '⚠️ Lỗi kết nối';
       }
     }
 
+    if (btnCheckFirebaseConn) {
+      btnCheckFirebaseConn.addEventListener('click', async () => {
+        btnCheckFirebaseConn.textContent = '🔄 Đang kiểm tra...';
+        const t0 = performance.now();
+        await checkDevicePairingStatus();
+        if (currentSelectedDeviceId) {
+          await openChildDashboard(currentSelectedDeviceId);
+        }
+        const latency = Math.round(performance.now() - t0);
+        btnCheckFirebaseConn.textContent = `⚡ Kết nối tốt: ${latency}ms`;
+        setTimeout(() => {
+          btnCheckFirebaseConn.textContent = '🔄 Kiểm tra kết nối';
+        }, 3500);
+      });
+    }
+
+    // Gán sự kiện chọn chip tin nhắn mẫu nhanh
+    document.querySelectorAll('.quick-msg-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        if (inputParentMessage) {
+          inputParentMessage.value = chip.getAttribute('data-msg') || '';
+          inputParentMessage.focus();
+        }
+      });
+    });
+
     if (activeDeviceRow) {
       activeDeviceRow.addEventListener('click', async () => {
+        await checkDevicePairingStatus();
         if (currentSelectedDeviceId) {
           openChildDashboard(currentSelectedDeviceId);
         } else {
@@ -1502,26 +1606,63 @@
       });
     }
 
-    if (btnSendReminder) {
-      btnSendReminder.addEventListener('click', async () => {
-        alert('🔔 Đã gửi tin nhắn nhắc nhở tới máy con: "Bố mẹ chúc con học tập tốt và giữ gìn sức khỏe nhé!"');
+    // Xử lý gửi tin nhắn tới con
+    if (btnSendParentMessage) {
+      btnSendParentMessage.addEventListener('click', async () => {
+        const text = (inputParentMessage && inputParentMessage.value.trim()) || 'Bố mẹ chúc con học tập tốt và giữ gìn sức khỏe nhé! 📚';
+        btnSendParentMessage.disabled = true;
+        btnSendParentMessage.textContent = 'Đang gửi...';
+
         try {
           const targetDevId = currentSelectedDeviceId || currentFamilyCode;
-          const reminderPayload = JSON.stringify({ text: "Bố mẹ chúc con học tập tốt và giữ gìn sức khỏe nhé!", timestamp: Date.now() });
+          const msgPayload = JSON.stringify({
+            id: 'msg_' + Date.now(),
+            text: text,
+            sender: 'PARENT',
+            timestamp: Date.now(),
+            replyText: null,
+            replyTimestamp: null,
+            status: 'SENT'
+          });
+
           await Promise.all([
-            fetch(`${FIREBASE_BASE}/devices/${targetDevId}/reminder.json`, {
+            fetch(`${FIREBASE_BASE}/families/${currentFamilyCode}/devices/${targetDevId}/message.json`, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
-              body: reminderPayload
+              body: msgPayload
+            }),
+            fetch(`${FIREBASE_BASE}/devices/${targetDevId}/message.json`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: msgPayload
             }),
             fetch(`${FIREBASE_BASE}/families/${currentFamilyCode}/devices/${targetDevId}/reminder.json`, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
-              body: reminderPayload
+              body: msgPayload
+            }),
+            fetch(`${FIREBASE_BASE}/devices/${targetDevId}/reminder.json`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: msgPayload
             })
           ]);
+
+          const lastSentMessageDisplay = document.getElementById('lastSentMessageDisplay');
+          if (lastSentMessageDisplay) {
+            lastSentMessageDisplay.textContent = `Bố mẹ vừa gửi: "${text}" (Vừa xong - Đang chờ con đọc/trả lời)`;
+          }
+          const childReplyBox = document.getElementById('childReplyBox');
+          if (childReplyBox) childReplyBox.style.display = 'none';
+
+          if (inputParentMessage) inputParentMessage.value = '';
+          alert(`💌 Đã gửi tin nhắn tới máy con:\n"${text}"\n\nĐiện thoại học sinh sẽ nhận được thông báo rung/chuông và có thể bấm trả lời ngay!`);
         } catch (err) {
-          console.warn('Reminder dispatch error:', err);
+          console.warn('Lỗi gửi tin nhắn:', err);
+          alert('Không thể gửi tin nhắn qua Firebase. Vui lòng kiểm tra kết nối mạng.');
+        } finally {
+          btnSendParentMessage.disabled = false;
+          btnSendParentMessage.textContent = 'Gửi Tin 🚀';
         }
       });
     }
@@ -1640,7 +1781,14 @@
 
               row.append(leftGrp, arrowSpan);
 
-              row.addEventListener('click', () => {
+              row.addEventListener('click', async () => {
+                stateDiv.replaceChildren();
+                const checkSpan = document.createElement('span');
+                checkSpan.style.color = '#38bdf8';
+                checkSpan.style.fontWeight = 'bold';
+                checkSpan.textContent = '🔄 Đang kiểm tra kết nối Firebase...';
+                stateDiv.appendChild(checkSpan);
+                await checkDevicePairingStatus();
                 openChildDashboard(dev.deviceId);
               });
 

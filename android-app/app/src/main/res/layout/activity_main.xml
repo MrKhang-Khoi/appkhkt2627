@@ -813,6 +813,186 @@
                             android:textSize="10sp"
                             android:gravity="center" />
                     </LinearLayout>
+
+                    <!-- KHUNG NHẬN TIN NHẮN TỪ BỐ MẸ & PHẢN HỒI -->
+                    <LinearLayout
+                        android:id="@+id/layoutParentMessageBox"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:background="@drawable/bg_device_card"
+                        android:orientation="vertical"
+                        android:padding="16dp"
+                        android:visibility="gone">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginBottom="8dp">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="💌 Tin nhắn từ Bố Mẹ:"
+                                android:textColor="#FBBF24"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/tvParentMessageTime"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:gravity="end"
+                                android:text="Vừa xong"
+                                android:textColor="#64748B"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/tvParentMessageContent"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_input_field"
+                            android:padding="12dp"
+                            android:textColor="#F8FAFC"
+                            android:textSize="13sp"
+                            android:lineSpacingExtra="3dp"
+                            android:text="Bố mẹ chúc con học tập tốt và giữ gìn sức khỏe nhé!" />
+
+                        <!-- PHẢN HỒI NHANH CỦA HỌC SINH -->
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Trả lời nhanh cho Bố Mẹ:"
+                            android:textColor="#94A3B8"
+                            android:textSize="11sp"
+                            android:layout_marginTop="12dp"
+                            android:layout_marginBottom="6dp" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:layout_marginBottom="6dp">
+
+                            <TextView
+                                android:id="@+id/btnQuickReply1"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:layout_marginEnd="4dp"
+                                android:background="@drawable/bg_tab_inactive"
+                                android:gravity="center"
+                                android:text="👍 Vâng ạ!"
+                                android:textColor="#CBD5E1"
+                                android:textSize="11sp"
+                                android:clickable="true"
+                                android:focusable="true" />
+
+                            <TextView
+                                android:id="@+id/btnQuickReply2"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:layout_marginStart="4dp"
+                                android:background="@drawable/bg_tab_inactive"
+                                android:gravity="center"
+                                android:text="📚 Đang học ạ!"
+                                android:textColor="#CBD5E1"
+                                android:textSize="11sp"
+                                android:clickable="true"
+                                android:focusable="true" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:layout_marginBottom="8dp">
+
+                            <TextView
+                                android:id="@+id/btnQuickReply3"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:layout_marginEnd="4dp"
+                                android:background="@drawable/bg_tab_inactive"
+                                android:gravity="center"
+                                android:text="⏰ Sắp xong ạ!"
+                                android:textColor="#CBD5E1"
+                                android:textSize="11sp"
+                                android:clickable="true"
+                                android:focusable="true" />
+
+                            <TextView
+                                android:id="@+id/btnQuickReply4"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:layout_marginStart="4dp"
+                                android:background="@drawable/bg_tab_inactive"
+                                android:gravity="center"
+                                android:text="🍲 Ăn cơm ạ!"
+                                android:textColor="#CBD5E1"
+                                android:textSize="11sp"
+                                android:clickable="true"
+                                android:focusable="true" />
+                        </LinearLayout>
+
+                        <!-- Ô TỰ GÕ TRẢ LỜI -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="44dp"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginTop="4dp">
+
+                            <EditText
+                                android:id="@+id/etCustomReply"
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="1"
+                                android:background="@drawable/bg_input_field"
+                                android:hint="Nhập lời nhắn gửi Bố Mẹ..."
+                                android:textColorHint="#64748B"
+                                android:textColor="#FFFFFF"
+                                android:textSize="12sp"
+                                android:paddingStart="12dp"
+                                android:paddingEnd="12dp"
+                                android:imeOptions="actionSend"
+                                android:inputType="text" />
+
+                            <TextView
+                                android:id="@+id/btnSendCustomReply"
+                                android:layout_width="wrap_content"
+                                android:layout_height="match_parent"
+                                android:layout_marginStart="6dp"
+                                android:background="@drawable/bg_pill_button"
+                                android:paddingStart="14dp"
+                                android:paddingEnd="14dp"
+                                android:gravity="center"
+                                android:text="Gửi 🚀"
+                                android:textColor="#FFFFFF"
+                                android:textSize="12sp"
+                                android:textStyle="bold"
+                                android:clickable="true"
+                                android:focusable="true" />
+                        </LinearLayout>
+
+                        <!-- TRẠNG THÁI ĐÃ PHẢN HỒI -->
+                        <TextView
+                            android:id="@+id/tvStudentReplyStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:textColor="#10B981"
+                            android:textSize="11sp"
+                            android:textStyle="italic"
+                            android:visibility="gone" />
+                    </LinearLayout>
                 </LinearLayout>
 
             </LinearLayout>

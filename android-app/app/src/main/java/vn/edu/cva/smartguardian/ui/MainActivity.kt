@@ -2,7 +2,11 @@ package vn.edu.cva.smartguardian.ui
 
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.AppOpsManager
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.admin.DevicePolicyManager
+import androidx.core.app.NotificationCompat
 import android.content.BroadcastReceiver
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -97,6 +101,19 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnModalCancelUnpair: TextView
     private lateinit var btnModalConfirmUnpair: TextView
     private lateinit var layoutUnpairOverlay: FrameLayout
+
+    // 6. Khung Nhận Tin Nhắn Phụ Huynh & Phản Hồi Học Sinh
+    private lateinit var layoutParentMessageBox: LinearLayout
+    private lateinit var tvParentMessageTime: TextView
+    private lateinit var tvParentMessageContent: TextView
+    private lateinit var btnQuickReply1: TextView
+    private lateinit var btnQuickReply2: TextView
+    private lateinit var btnQuickReply3: TextView
+    private lateinit var btnQuickReply4: TextView
+    private lateinit var etCustomReply: EditText
+    private lateinit var btnSendCustomReply: TextView
+    private lateinit var tvStudentReplyStatus: TextView
+    private var lastSeenMessageId: String = ""
 
     private var unpairJob: Job? = null
     private var heartbeatJob: Job? = null
@@ -227,6 +244,18 @@ class MainActivity : AppCompatActivity() {
         btnModalCancelUnpair = findViewById(R.id.btnModalCancelUnpair)
         btnModalConfirmUnpair = findViewById(R.id.btnModalConfirmUnpair)
         layoutUnpairOverlay = findViewById(R.id.layoutUnpairOverlay)
+
+        // 6. Khung Nhận Tin Nhắn Phụ Huynh & Phản Hồi Học Sinh
+        layoutParentMessageBox = findViewById(R.id.layoutParentMessageBox)
+        tvParentMessageTime = findViewById(R.id.tvParentMessageTime)
+        tvParentMessageContent = findViewById(R.id.tvParentMessageContent)
+        btnQuickReply1 = findViewById(R.id.btnQuickReply1)
+        btnQuickReply2 = findViewById(R.id.btnQuickReply2)
+        btnQuickReply3 = findViewById(R.id.btnQuickReply3)
+        btnQuickReply4 = findViewById(R.id.btnQuickReply4)
+        etCustomReply = findViewById(R.id.etCustomReply)
+        btnSendCustomReply = findViewById(R.id.btnSendCustomReply)
+        tvStudentReplyStatus = findViewById(R.id.tvStudentReplyStatus)
     }
 
     private fun setupListeners() {
@@ -309,6 +338,24 @@ class MainActivity : AppCompatActivity() {
         // Bấm vào thiết bị con trong Parent Hub -> Mở Bảng Giám Sát Đồng Hành
         findViewById<View>(R.id.layoutParentChildRow).setOnClickListener {
             showChildCompanionDialog()
+        }
+
+        // Xử lý phản hồi tin nhắn của Phụ huynh
+        btnQuickReply1.setOnClickListener { sendStudentReply("👍 Vâng ạ bố mẹ!") }
+        btnQuickReply2.setOnClickListener { sendStudentReply("📚 Con đang học bài ạ!") }
+        btnQuickReply3.setOnClickListener { sendStudentReply("⏰ Con sắp xong rồi ạ!") }
+        btnQuickReply4.setOnClickListener { sendStudentReply("🍲 Con chuẩn bị ăn cơm ạ!") }
+
+        btnSendCustomReply.setOnClickListener {
+            val text = etCustomReply.text.toString().trim()
+            if (text.isNotEmpty()) {
+                sendStudentReply(text)
+                etCustomReply.setText("")
+                val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+                imm?.hideSoftInputFromWindow(etCustomReply.windowToken, 0)
+            } else {
+                Toast.makeText(this, "Vui lòng nhập lời nhắn gửi Bố Mẹ", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -874,7 +921,149 @@ class MainActivity : AppCompatActivity() {
         heartbeatJob = lifecycleScope.launch(Dispatchers.IO) {
             while (isActive) {
                 sendHeartbeatPing(pairedCode)
+                checkIncomingParentMessage(pairedCode)
                 delay(10_000)
+            }
+        }
+    }
+
+    private suspend fun checkIncomingParentMessage(pairedCode: String) {
+        try {
+            val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: "UNKNOWN"
+            val req = Request.Builder()
+                .url("$FIREBASE_RTDB_URL/families/$pairedCode/devices/$androidId/message.json")
+                .build()
+            firebaseClient.newCall(req).execute().use { response ->
+                if (response.isSuccessful) {
+                    val body = response.body?.string()
+                    if (!body.isNullOrEmpty() && body != "null") {
+                        val json = JSONObject(body)
+                        val msgId = json.optString("id", "")
+                        val text = json.optString("text", "")
+                        val timestamp = json.optLong("timestamp", 0L)
+                        val replyText = json.optString("replyText", "")
+
+                        if (text.isNotEmpty()) {
+                            withContext(Dispatchers.Main) {
+                                layoutParentMessageBox.visibility = View.VISIBLE
+                                tvParentMessageContent.text = text
+                                if (timestamp > 0) {
+                                    val timeStr = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(timestamp))
+                                    tvParentMessageTime.text = timeStr
+                                }
+                                if (replyText.isNotEmpty()) {
+                                    tvStudentReplyStatus.visibility = View.VISIBLE
+                                    tvStudentReplyStatus.text = "Con đã phản hồi: \"$replyText\""
+                                } else {
+                                    tvStudentReplyStatus.visibility = View.GONE
+                                }
+
+                                if (msgId.isNotEmpty() && msgId != lastSeenMessageId) {
+                                    lastSeenMessageId = msgId
+                                    showParentMessageNotification(text)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "checkIncomingParentMessage error: ${e.message}")
+        }
+    }
+
+    private fun showParentMessageNotification(messageText: String) {
+        try {
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val channelId = "cva_parent_messages"
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = NotificationChannel(
+                    channelId,
+                    "Tin Nhắn Từ Bố Mẹ",
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = "Thông báo tin nhắn và lời nhắc nhở từ phụ huynh"
+                    enableVibration(true)
+                }
+                notificationManager.createNotificationChannel(channel)
+            }
+
+            val pendingIntent = PendingIntent.getActivity(
+                this,
+                0,
+                Intent(this, MainActivity::class.java),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+
+            val notification = NotificationCompat.Builder(this, channelId)
+                .setSmallIcon(android.R.drawable.ic_dialog_email)
+                .setContentTitle("💌 Tin nhắn từ Bố Mẹ")
+                .setContentText(messageText)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(messageText))
+                .setContentIntent(pendingIntent)
+                .setAutoCancel(true)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .build()
+
+            notificationManager.notify(2001, notification)
+        } catch (e: Exception) {
+            Log.w(TAG, "showParentMessageNotification error: ${e.message}")
+        }
+    }
+
+    private fun sendStudentReply(replyText: String) {
+        val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
+        val pairedCode = prefs.getString("paired_code", "") ?: ""
+        if (pairedCode.isEmpty()) return
+
+        val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: "UNKNOWN"
+        val now = System.currentTimeMillis()
+
+        tvStudentReplyStatus.visibility = View.VISIBLE
+        tvStudentReplyStatus.text = "✅ Đã gửi phản hồi: \"$replyText\""
+        Toast.makeText(this, "💌 Đã gửi phản hồi tới Bố Mẹ!", Toast.LENGTH_SHORT).show()
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val mediaType = "application/json; charset=utf-8".toMediaType()
+                val replyJson = JSONObject().apply {
+                    put("replyText", replyText)
+                    put("replyTimestamp", now)
+                    put("status", "REPLIED")
+                }
+                val body = replyJson.toString().toRequestBody(mediaType)
+
+                // 1. Cập nhật vào /families/$pairedCode/devices/$androidId/message.json
+                val reqFam = Request.Builder()
+                    .url("$FIREBASE_RTDB_URL/families/$pairedCode/devices/$androidId/message.json")
+                    .patch(body)
+                    .build()
+                firebaseClient.newCall(reqFam).execute().close()
+
+                // 2. Cập nhật vào /devices/$androidId/message.json
+                val reqDev = Request.Builder()
+                    .url("$FIREBASE_RTDB_URL/devices/$androidId/message.json")
+                    .patch(body)
+                    .build()
+                firebaseClient.newCall(reqDev).execute().close()
+
+                // 3. Cập nhật legacy /devices/$pairedCode/message.json và reminder.json
+                val reqLegMsg = Request.Builder()
+                    .url("$FIREBASE_RTDB_URL/devices/$pairedCode/message.json")
+                    .patch(body)
+                    .build()
+                firebaseClient.newCall(reqLegMsg).execute().close()
+
+                val reqLegRem = Request.Builder()
+                    .url("$FIREBASE_RTDB_URL/devices/$pairedCode/reminder.json")
+                    .patch(body)
+                    .build()
+                firebaseClient.newCall(reqLegRem).execute().close()
+
+                // Gửi ngay 1 nhịp tim cập nhật online tức thời
+                sendHeartbeatPing(pairedCode)
+            } catch (e: Exception) {
+                Log.w(TAG, "sendStudentReply error: ${e.message}")
             }
         }
     }
