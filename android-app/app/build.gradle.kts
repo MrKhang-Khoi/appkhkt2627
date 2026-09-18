@@ -11,8 +11,8 @@ android {
         applicationId = "vn.edu.cva.smartguardian"
         minSdk = 26
         targetSdk = 35
-        versionCode = 13
-        versionName = "1.1.3"
+        versionCode = 14
+        versionName = "1.1.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -68,4 +68,5 @@ dependencies {
     implementation(libs.androidx.lifecycle.service)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.okhttp)
+    implementation("com.google.android.gms:play-services-location:21.3.0")
 }

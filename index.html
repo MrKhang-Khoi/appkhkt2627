@@ -9,6 +9,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   
+  <!-- LEAFLET MAPS FOR LIVE GPS TRACKING -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
   <style>
     :root {
       --bg: #07090e;
@@ -916,6 +920,48 @@
         </div>
       </div>
 
+      <!-- 5. BẢN ĐỒ VỊ TRÍ & TÌM CON THỜI GIAN THỰC (LIVE GPS TRACKING) -->
+      <div style="margin-bottom: 16px;">
+        <div style="font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span>📍</span> Vị Trí & Tìm Con Thời Gian Thực
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span id="dashGpsStatusBadge" style="font-size: 0.65rem; padding: 2px 7px; border-radius: 9999px; background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); font-weight: 700;">GPS Sẵn Sàng</span>
+            <span id="dashBatteryBadge" style="font-size: 0.65rem; padding: 2px 7px; border-radius: 9999px; background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); font-weight: 700;">🔋 --%</span>
+          </div>
+        </div>
+
+        <div style="background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 14px;">
+          <!-- ĐỊA CHỈ & THỜI GIAN ĐỊNH VỊ -->
+          <div style="margin-bottom: 10px;">
+            <div style="font-size: 0.72rem; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;">Địa chỉ hiện tại:</div>
+            <div id="dashChildAddress" style="font-size: 0.82rem; font-weight: 700; color: #f8fafc; margin-top: 3px; line-height: 1.4;">
+              Đang chờ đồng bộ vị trí...
+            </div>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 6px; font-size: 0.68rem; color: #64748b;">
+              <span>Tọa độ: <strong id="dashChildCoords" style="color: #94a3b8;">--</strong></span>
+              <span>Sai số: <strong id="dashChildAccuracy" style="color: #38bdf8;">--</strong></span>
+              <span>Lúc: <strong id="dashChildLocTime" style="color: #94a3b8;">--</strong></span>
+            </div>
+          </div>
+
+          <!-- CONTAINER BẢN ĐỒ LEAFLET -->
+          <div id="childLocationMap" style="height: 200px; width: 100%; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.12); z-index: 1;"></div>
+
+          <!-- NÚT ĐIỀU KHIỂN ĐỊNH VỊ & CHỈ ĐƯỜNG -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px;">
+            <button type="button" id="btnLocateChildNow" style="background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #fff; border: none; padding: 9px 12px; border-radius: 10px; font-size: 0.76rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+              <span>🛰️</span> Quét Vị Trí Ngay
+            </button>
+            <button type="button" id="btnOpenGoogleMapsDir" style="background: rgba(30, 41, 59, 0.8); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.35); padding: 9px 12px; border-radius: 10px; font-size: 0.76rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+              <span>🚗</span> Mở Chỉ Đường
+            </button>
+          </div>
+          <div id="locateStatusNotice" style="font-size: 0.7rem; color: #94a3b8; text-align: center; margin-top: 6px; min-height: 16px;"></div>
+        </div>
+      </div>
+
       <button type="button" class="btn-pill" id="btnCloseChildDashboardBottom" style="background: #334155; font-size: 0.85rem; min-height: 44px; margin-top: 4px;">
         Đóng Bảng Điều Khiển
       </button>
@@ -1476,6 +1522,53 @@
         if (lastSentMessageDisplay) lastSentMessageDisplay.textContent = 'Chưa có tin nhắn nào được gửi hôm nay.';
         if (childReplyBox) childReplyBox.style.display = 'none';
       }
+
+      // Cập nhật vị trí & Trạng thái GPS
+      const dashGpsStatusBadge = document.getElementById('dashGpsStatusBadge');
+      const dashBatteryBadge = document.getElementById('dashBatteryBadge');
+      const dashChildAddress = document.getElementById('dashChildAddress');
+      const dashChildCoords = document.getElementById('dashChildCoords');
+      const dashChildAccuracy = document.getElementById('dashChildAccuracy');
+      const dashChildLocTime = document.getElementById('dashChildLocTime');
+
+      if (dashGpsStatusBadge) {
+        const gpsStatus = deviceData.gpsStatus || (deviceData.location ? 'ENABLED' : 'ENABLED');
+        if (gpsStatus === 'ENABLED') {
+          dashGpsStatusBadge.textContent = 'GPS Sẵn Sàng';
+          dashGpsStatusBadge.style.color = '#34d399';
+          dashGpsStatusBadge.style.background = 'rgba(16, 185, 129, 0.15)';
+          dashGpsStatusBadge.style.borderColor = 'rgba(16, 185, 129, 0.3)';
+        } else {
+          dashGpsStatusBadge.textContent = '⚠️ GPS Đang Tắt';
+          dashGpsStatusBadge.style.color = '#f87171';
+          dashGpsStatusBadge.style.background = 'rgba(239, 68, 68, 0.15)';
+          dashGpsStatusBadge.style.borderColor = 'rgba(239, 68, 68, 0.3)';
+        }
+      }
+
+      const bat = typeof deviceData.batteryLevel === 'number' && deviceData.batteryLevel >= 0 
+        ? deviceData.batteryLevel 
+        : (deviceData.location && typeof deviceData.location.batteryLevel === 'number' ? deviceData.location.batteryLevel : null);
+      if (dashBatteryBadge) {
+        dashBatteryBadge.textContent = bat !== null ? `🔋 ${bat}%` : '🔋 --%';
+      }
+
+      const loc = deviceData.location;
+      if (loc && typeof loc.latitude === 'number' && typeof loc.longitude === 'number') {
+        lastKnownChildCoords = { lat: loc.latitude, lng: loc.longitude };
+        if (dashChildAddress) dashChildAddress.textContent = loc.address || 'Đã xác định tọa độ học sinh';
+        if (dashChildCoords) dashChildCoords.textContent = `${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}`;
+        if (dashChildAccuracy) dashChildAccuracy.textContent = `±${Math.round(loc.accuracy || 15)}m`;
+        if (dashChildLocTime) {
+          dashChildLocTime.textContent = loc.timestamp ? new Date(loc.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : 'Vừa xong';
+        }
+        initOrUpdateChildMap(loc.latitude, loc.longitude, loc.accuracy, loc.address);
+      } else {
+        if (dashChildAddress) dashChildAddress.textContent = 'Chưa có dữ liệu vị trí gần đây. Bấm "Quét Vị Trí Ngay" bên dưới để định vị.';
+        if (dashChildCoords) dashChildCoords.textContent = '--';
+        if (dashChildAccuracy) dashChildAccuracy.textContent = '--';
+        if (dashChildLocTime) dashChildLocTime.textContent = '--';
+      }
     }
 
     // 5. BẢNG GIÁM SÁT & ĐỒNG HÀNH THỜI GIAN THỰC (KHI PHỤ HUYNH BẤM VÀO THIẾT BỊ CON)
@@ -1488,6 +1581,57 @@
 
     let isFocusModeActive = false;
     let currentSelectedDeviceId = null;
+    let childLeafletMap = null;
+    let childMapMarker = null;
+    let childAccuracyCircle = null;
+    let lastKnownChildCoords = null;
+
+    function initOrUpdateChildMap(lat, lng, accuracy, address) {
+      if (typeof L === 'undefined') return;
+      const mapEl = document.getElementById('childLocationMap');
+      if (!mapEl) return;
+
+      if (!childLeafletMap) {
+        childLeafletMap = L.map('childLocationMap', {
+          zoomControl: true,
+          attributionControl: false
+        }).setView([lat, lng], 16);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 19
+        }).addTo(childLeafletMap);
+
+        const customIcon = L.divIcon({
+          className: 'custom-child-pin',
+          html: '<div style="background: #2563eb; color: #fff; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; border: 2.5px solid #fff; box-shadow: 0 4px 12px rgba(37,99,235,0.6);">🎒</div>',
+          iconSize: [32, 32],
+          iconAnchor: [16, 16]
+        });
+
+        childMapMarker = L.marker([lat, lng], { icon: customIcon }).addTo(childLeafletMap);
+        childAccuracyCircle = L.circle([lat, lng], {
+          radius: accuracy || 25,
+          color: '#38bdf8',
+          fillColor: '#38bdf8',
+          fillOpacity: 0.15,
+          weight: 1.5
+        }).addTo(childLeafletMap);
+      } else {
+        childLeafletMap.setView([lat, lng], 16);
+        if (childMapMarker) childMapMarker.setLatLng([lat, lng]);
+        if (childAccuracyCircle) {
+          childAccuracyCircle.setLatLng([lat, lng]);
+          childAccuracyCircle.setRadius(accuracy || 25);
+        }
+        setTimeout(() => {
+          if (childLeafletMap) childLeafletMap.invalidateSize();
+        }, 200);
+      }
+
+      if (childMapMarker) {
+        childMapMarker.bindPopup(`<div style="color: #0f172a; font-family: sans-serif;"><b style="font-size: 13px;">🎒 Vị trí của con</b><br><span style="color: #475569; font-size: 11px;">${address || 'Đang cập nhật'}</span></div>`).openPopup();
+      }
+    }
 
     const btnCheckFirebaseConn = document.getElementById('btnCheckFirebaseConn');
     const inputParentMessage = document.getElementById('inputParentMessage');
@@ -1497,6 +1641,10 @@
       currentSelectedDeviceId = deviceId;
       if (!childDashboardModal) return;
       childDashboardModal.classList.add('active');
+
+      setTimeout(() => {
+        if (childLeafletMap) childLeafletMap.invalidateSize();
+      }, 300);
 
       if (btnCheckFirebaseConn) btnCheckFirebaseConn.textContent = '🔄 Đang đo đạc...';
 
@@ -1568,6 +1716,96 @@
     if (btnCloseChildDashboardBottom) {
       btnCloseChildDashboardBottom.addEventListener('click', () => {
         if (childDashboardModal) childDashboardModal.classList.remove('active');
+      });
+    }
+
+    const btnLocateChildNow = document.getElementById('btnLocateChildNow');
+    const locateStatusNotice = document.getElementById('locateStatusNotice');
+    const btnOpenGoogleMapsDir = document.getElementById('btnOpenGoogleMapsDir');
+
+    if (btnLocateChildNow) {
+      btnLocateChildNow.addEventListener('click', async () => {
+        if (!currentSelectedDeviceId || !currentFamilyCode) return;
+        btnLocateChildNow.disabled = true;
+        btnLocateChildNow.textContent = '⏳ Đang gửi lệnh...';
+        if (locateStatusNotice) locateStatusNotice.textContent = 'Đang gửi lệnh yêu cầu GPS tới máy con...';
+
+        try {
+          const reqBody = JSON.stringify({
+            status: 'PENDING',
+            requestedAt: Date.now(),
+            requestedBy: 'PARENT'
+          });
+
+          await Promise.all([
+            fetch(`${FIREBASE_BASE}/families/${currentFamilyCode}/devices/${currentSelectedDeviceId}/commands/locate_now.json`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: reqBody
+            }),
+            fetch(`${FIREBASE_BASE}/devices/${currentSelectedDeviceId}/commands/locate_now.json`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: reqBody
+            })
+          ]);
+
+          if (locateStatusNotice) locateStatusNotice.textContent = '🛰️ Đã phát lệnh. Đang đợi máy con bật GPS và trả tọa độ...';
+
+          let pollCount = 0;
+          const pollInterval = setInterval(async () => {
+            pollCount++;
+            try {
+              const res = await fetch(`${FIREBASE_BASE}/families/${currentFamilyCode}/devices/${currentSelectedDeviceId}/location.json`, { cache: 'no-cache' });
+              if (res.ok) {
+                const locData = await res.json();
+                if (locData && locData.timestamp && (Date.now() - locData.timestamp) < 60000) {
+                  clearInterval(pollInterval);
+                  btnLocateChildNow.disabled = false;
+                  btnLocateChildNow.textContent = '🛰️ Quét Vị Trí Ngay';
+                  if (locateStatusNotice) {
+                    locateStatusNotice.textContent = '✅ Đã cập nhật tọa độ thành công!';
+                    locateStatusNotice.style.color = '#34d399';
+                    setTimeout(() => {
+                      locateStatusNotice.textContent = '';
+                      locateStatusNotice.style.color = '#94a3b8';
+                    }, 4000);
+                  }
+                  await openChildDashboard(currentSelectedDeviceId);
+                  return;
+                }
+              }
+            } catch (pollErr) {
+              console.warn('Lỗi kiểm tra vị trí:', pollErr);
+            }
+
+            if (pollCount >= 6) {
+              clearInterval(pollInterval);
+              btnLocateChildNow.disabled = false;
+              btnLocateChildNow.textContent = '🛰️ Quét Vị Trí Ngay';
+              if (locateStatusNotice) {
+                locateStatusNotice.textContent = 'ℹ️ Máy con chưa phản hồi GPS (có thể đang ở vùng mất sóng). Đã hiển thị vị trí gần nhất.';
+                setTimeout(() => { locateStatusNotice.textContent = ''; }, 5000);
+              }
+            }
+          }, 2000);
+        } catch (err) {
+          console.warn('Lỗi quét vị trí:', err);
+          btnLocateChildNow.disabled = false;
+          btnLocateChildNow.textContent = '🛰️ Quét Vị Trí Ngay';
+          if (locateStatusNotice) locateStatusNotice.textContent = '⚠️ Lỗi kết nối Firebase.';
+        }
+      });
+    }
+
+    if (btnOpenGoogleMapsDir) {
+      btnOpenGoogleMapsDir.addEventListener('click', () => {
+        if (lastKnownChildCoords && lastKnownChildCoords.lat && lastKnownChildCoords.lng) {
+          const url = `https://www.google.com/maps/dir/?api=1&destination=${lastKnownChildCoords.lat},${lastKnownChildCoords.lng}`;
+          window.open(url, '_blank');
+        } else {
+          alert('Chưa có tọa độ định vị của con để mở Google Maps.');
+        }
       });
     }
 

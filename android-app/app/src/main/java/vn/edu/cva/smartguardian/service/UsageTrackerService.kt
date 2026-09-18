@@ -28,6 +28,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.util.Calendar
+import vn.edu.cva.smartguardian.location.LocationHelper
 
 class UsageTrackerService : Service() {
 
@@ -111,6 +112,64 @@ class UsageTrackerService : Service() {
                     sharedHttpClient.newCall(reqPairing).execute().close()
                 } catch (e: Exception) {
                     Log.w("UsageTrackerService", "sendHeartbeatPing failed: ${e.message}")
+                }
+            }
+        }
+
+        fun checkLocationRequest(context: Context) {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val pairedCode = prefs.getString("paired_code", "") ?: ""
+            if (pairedCode.isEmpty()) return
+            val androidId = prefs.getString("device_id", "")?.takeIf { it.isNotEmpty() }
+                ?: Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+                ?: "UNKNOWN"
+
+            syncScope.launch {
+                try {
+                    val req = okhttp3.Request.Builder()
+                        .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId/commands/locate_now.json")
+                        .build()
+                    sharedHttpClient.newCall(req).execute().use { response ->
+                        if (response.isSuccessful) {
+                            val body = response.body?.string()
+                            if (!body.isNullOrEmpty() && body != "null") {
+                                val json = JSONObject(body)
+                                val status = json.optString("status", "")
+                                if (status == "PENDING" || status.isEmpty()) {
+                                    val loc = LocationHelper.fetchCurrentLocation(context)
+                                    val mediaType = "application/json; charset=utf-8".toMediaType()
+                                    if (loc != null) {
+                                        val locBody = loc.toJsonObject().toString().toRequestBody(mediaType)
+
+                                        val putFamLoc = okhttp3.Request.Builder()
+                                            .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId/location.json")
+                                            .put(locBody)
+                                            .build()
+                                        sharedHttpClient.newCall(putFamLoc).execute().close()
+
+                                        val putDevLoc = okhttp3.Request.Builder()
+                                            .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$androidId/location.json")
+                                            .put(locBody)
+                                            .build()
+                                        sharedHttpClient.newCall(putDevLoc).execute().close()
+                                    }
+
+                                    val doneJson = JSONObject().apply {
+                                        put("status", "COMPLETED")
+                                        put("completedAt", System.currentTimeMillis())
+                                    }
+                                    val doneBody = doneJson.toString().toRequestBody(mediaType)
+                                    val updateCmd = okhttp3.Request.Builder()
+                                        .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId/commands/locate_now.json")
+                                        .put(doneBody)
+                                        .build()
+                                    sharedHttpClient.newCall(updateCmd).execute().close()
+                                }
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w("UsageTrackerService", "checkLocationRequest error: ${e.message}")
                 }
             }
         }
@@ -310,10 +369,15 @@ class UsageTrackerService : Service() {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                val fgsType = if (LocationHelper.hasLocationPermission(this)) {
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                } else {
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                }
                 startForeground(
                     NOTIFICATION_ID,
                     notification,
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                    fgsType
                 )
             } else {
                 startForeground(NOTIFICATION_ID, notification)
@@ -329,7 +393,10 @@ class UsageTrackerService : Service() {
                 // 1. Luôn gửi nhịp tim sống còn (Heartbeat) dù có quyền Usage hay không
                 sendHeartbeatPing(this@UsageTrackerService)
 
-                // 2. Thu thập thống kê chi tiết nếu được cấp quyền
+                // 2. Kiểm tra lệnh định vị tức thì từ phụ huynh
+                checkLocationRequest(this@UsageTrackerService)
+
+                // 3. Thu thập thống kê chi tiết nếu được cấp quyền
                 try {
                     collectAndSave(this@UsageTrackerService)
                 } catch (_: Exception) {}

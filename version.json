@@ -3,16 +3,16 @@
     "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.0.apk",
     "minSupportedVersion": 1,
     "releaseDate": "2026-09-18",
-    "sha256": "01BA705992FEF2969EAB8D698C1C4A5140EA4DA39685A431853617E24A7FA8A6",
-    "versionName": "1.1.3",
-    "versionCode": 13,
-    "latestVersionName": "1.1.3",
-    "latestVersionCode": 13,
+    "sha256": "5757EDC4BC2B9F2CB37A70AF767391CCB16A0CBBC2FC8B108896CCDD9269D6DA",
+    "versionName": "1.1.4",
+    "versionCode": 14,
+    "latestVersionName": "1.1.4",
+    "latestVersionCode": 14,
     "changelog": [
-        "Kiểm tra kết nối Firebase tức thì (Instant Connectivity Check) khi phụ huynh bấm vào thẻ thiết bị con",
-        "Hoàn thiện tính năng Nhắn Tin & Nhắc Nhở 2 Chiều: Phụ huynh gửi tin nhắn động viên, học sinh nhận thông báo và phản hồi trực tiếp",
-        "Bổ sung mẫu phản hồi nhanh thân thiện cho học sinh (👍 Vâng ạ, 📚 Đang học ạ, ⏰ Sắp xong ạ, 🍲 Ăn cơm ạ)",
-        "Tự động làm mới nhịp tim Trực tuyến ngay khi học sinh gửi phản hồi về máy phụ huynh"
+        "Tích hợp tính năng Định vị con thời gian thực (Live GPS & On-Demand Locator)",
+        "Bản đồ tương tác OpenStreetMap & Leaflet trực tiếp trên bảng điều khiển phụ huynh",
+        "Đo lường sai số GPS, địa chỉ đường phố, mức pin thiết bị và nút chỉ đường Google Maps",
+        "Tối ưu hóa pin On-Demand (0% hao pin khi ở chế độ chờ), tự động tắt GPS sau khi quét"
     ],
-    "fileSize": "5.29 MB"
+    "fileSize": "5.73 MB"
 }

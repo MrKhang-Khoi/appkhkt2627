@@ -52,6 +52,7 @@ import vn.edu.cva.smartguardian.service.SafeVpnFilterService
 import vn.edu.cva.smartguardian.service.UsageTrackerService
 import vn.edu.cva.smartguardian.update.AppUpdateManager
 import vn.edu.cva.smartguardian.update.UpdateInfo
+import vn.edu.cva.smartguardian.location.LocationHelper
 
 class MainActivity : AppCompatActivity() {
 
@@ -129,6 +130,17 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private val locationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val fineGranted = permissions[android.Manifest.permission.ACCESS_FINE_LOCATION] == true
+        val coarseGranted = permissions[android.Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (fineGranted || coarseGranted) {
+            Log.d(TAG, "Quyền vị trí đã được cấp thành công!")
+            UsageTrackerService.start(this)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -139,7 +151,17 @@ class MainActivity : AppCompatActivity() {
         // 1. Tự động quét cập nhật tức thời qua Firebase Cloud
         performUpdateCheck(userInitiated = false)
 
-        // 2. Mặc định khởi động ở Tab Học Sinh chuẩn Screen 3
+        // 2. Kiểm tra & yêu cầu quyền vị trí nếu chưa có
+        if (!LocationHelper.hasLocationPermission(this)) {
+            locationPermissionLauncher.launch(
+                arrayOf(
+                    android.Manifest.permission.ACCESS_FINE_LOCATION,
+                    android.Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+        }
+
+        // 3. Mặc định khởi động ở Tab Học Sinh chuẩn Screen 3
         switchToStudentTab()
 
         val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
@@ -922,8 +944,58 @@ class MainActivity : AppCompatActivity() {
             while (isActive) {
                 sendHeartbeatPing(pairedCode)
                 checkIncomingParentMessage(pairedCode)
+                checkIncomingLocationCommand(pairedCode)
                 delay(10_000)
             }
+        }
+    }
+
+    private suspend fun checkIncomingLocationCommand(pairedCode: String) {
+        try {
+            val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: "UNKNOWN"
+            val req = Request.Builder()
+                .url("$FIREBASE_RTDB_URL/families/$pairedCode/devices/$androidId/commands/locate_now.json")
+                .build()
+            firebaseClient.newCall(req).execute().use { response ->
+                if (response.isSuccessful) {
+                    val body = response.body?.string()
+                    if (!body.isNullOrEmpty() && body != "null") {
+                        val json = JSONObject(body)
+                        val status = json.optString("status", "")
+                        if (status == "PENDING" || status.isEmpty()) {
+                            val loc = LocationHelper.fetchCurrentLocation(this@MainActivity)
+                            val mediaType = "application/json; charset=utf-8".toMediaType()
+                            if (loc != null) {
+                                val locBody = loc.toJsonObject().toString().toRequestBody(mediaType)
+                                val putFamLoc = Request.Builder()
+                                    .url("$FIREBASE_RTDB_URL/families/$pairedCode/devices/$androidId/location.json")
+                                    .put(locBody)
+                                    .build()
+                                firebaseClient.newCall(putFamLoc).execute().close()
+
+                                val putDevLoc = Request.Builder()
+                                    .url("$FIREBASE_RTDB_URL/devices/$androidId/location.json")
+                                    .put(locBody)
+                                    .build()
+                                firebaseClient.newCall(putDevLoc).execute().close()
+                            }
+
+                            val doneJson = JSONObject().apply {
+                                put("status", "COMPLETED")
+                                put("completedAt", System.currentTimeMillis())
+                            }
+                            val doneBody = doneJson.toString().toRequestBody(mediaType)
+                            val updateCmd = Request.Builder()
+                                .url("$FIREBASE_RTDB_URL/families/$pairedCode/devices/$androidId/commands/locate_now.json")
+                                .put(doneBody)
+                                .build()
+                            firebaseClient.newCall(updateCmd).execute().close()
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "checkIncomingLocationCommand error: ${e.message}")
         }
     }
 
@@ -1085,6 +1157,8 @@ class MainActivity : AppCompatActivity() {
                 put("androidVersion", "Android ${Build.VERSION.RELEASE}")
                 put("isPaired", true)
                 put("status", "paired")
+                put("gpsStatus", if (LocationHelper.isGpsEnabled(this@MainActivity)) "ENABLED" else "DISABLED")
+                put("batteryLevel", LocationHelper.getBatteryLevel(this@MainActivity))
             }
             val body = pingJson.toString().toRequestBody(jsonMediaType)
 
