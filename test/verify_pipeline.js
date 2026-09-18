@@ -6,7 +6,7 @@ const path = require('path');
 const { chromium } = require('C:\\Users\\HPZBook\\.gemini\\antigravity\\brain\\bd57cfbc-2b98-48fe-997a-99e347ce01fe\\scratch\\node_modules\\playwright');
 
 const PORT = 8101;
-const BASE_DIR = 'c:\\Users\\HPZBook\\Desktop\\PM ALL\\khkt-smart-guardian';
+const BASE_DIR = path.join(__dirname, '..');
 const ARTIFACTS_DIR = 'C:\\Users\\HPZBook\\.gemini\\antigravity\\brain\\bd57cfbc-2b98-48fe-997a-99e347ce01fe';
 
 // Simple static server

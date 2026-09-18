@@ -1,8 +1,35 @@
-const { chromium } = require('C:\\Users\\HPZBook\\.gemini\\antigravity\\brain\\bd57cfbc-2b98-48fe-997a-99e347ce01fe\\scratch\\node_modules\\playwright');
+
+const http = require('http');
 const path = require('path');
 const fs = require('fs');
+const { chromium } = require('C:\\Users\\HPZBook\\.gemini\\antigravity\\brain\\bd57cfbc-2b98-48fe-997a-99e347ce01fe\\scratch\\node_modules\\playwright');
+
+const BASE_DIR = path.join(__dirname, '..');
+const PORT = 8102;
+
+const server = http.createServer((req, res) => {
+  let reqPath = req.url.split('?')[0];
+  const filePath = path.join(BASE_DIR, reqPath);
+  if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+    const ext = path.extname(filePath);
+    const mimeTypes = {
+      '.html': 'text/html; charset=utf-8',
+      '.js': 'text/javascript; charset=utf-8',
+      '.json': 'application/json',
+      '.css': 'text/css',
+      '.png': 'image/png'
+    };
+    res.writeHead(200, { 'Content-Type': mimeTypes[ext] || 'application/octet-stream' });
+    fs.createReadStream(filePath).pipe(res);
+  } else {
+    res.writeHead(404);
+    res.end('Not found');
+  }
+});
 
 async function runInteractiveLabTest() {
+  await new Promise(resolve => server.listen(PORT, resolve));
+  console.log("Lab test server listening on port " + PORT);
   console.log('================================================================');
   console.log('  CVA-SMARTGUARDIAN: KIỂM THỬ TƯƠNG TÁC ĐA NỀN TẢNG (DUAL-SCREEN)');
   console.log('================================================================\n');
@@ -20,7 +47,7 @@ async function runInteractiveLabTest() {
     }
   });
 
-  const targetUrl = 'http://localhost:8100/live-test/index.html';
+  const targetUrl = 'http://localhost:8102/live-test/index.html';
   console.log(`[1/7] Điều hướng đến Phòng Thí Nghiệm Test Lab: ${targetUrl}`);
   await page.goto(targetUrl, { waitUntil: 'networkidle' });
 
@@ -92,6 +119,7 @@ async function runInteractiveLabTest() {
 
   console.log('\n=== TẤT CẢ CÁC BƯỚC KIỂM THỬ ĐỀU ĐẠT CHỈ TIÊU PASS 100% HOÀN HẢO ===\n');
   await browser.close();
+  server.close();
 }
 
 runInteractiveLabTest().catch(err => {
