@@ -14,7 +14,7 @@
 
 ### 📱 Quét Mã QR Tải Nhanh Trên Điện Thoại:
 <p align="center">
-  <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.0.apk" alt="QR Code Tải APK" width="200"/>
+  <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https://mrkhang-khoi.github.io/appkhkt2627/?tab=download" alt="QR Code Tải APK" width="200"/>
   <br/>
   <em>(Dùng Zalo, Camera hoặc Trình duyệt để quét mã tải APK trực tiếp)</em>
 </p>

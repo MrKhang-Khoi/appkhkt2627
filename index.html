@@ -836,6 +836,22 @@
   
   <!-- TAB 2: TẢI APK & CÀI ĐẶT -->
   <div id="viewDownloadTab" class="hub-view">
+    <!-- CẢNH BÁO RIÊNG CHO TRÌNH DUYỆT ZALO -->
+    <div id="zaloNoticeBanner" style="display: none; background: linear-gradient(135deg, #b91c1c, #991b1b); border: 2px solid #f87171; border-radius: 16px; padding: 18px 24px; margin-bottom: 24px; box-shadow: 0 10px 30px rgba(185, 28, 28, 0.4); animation: pulse 2s infinite;">
+      <div style="display: flex; align-items: flex-start; gap: 14px;">
+        <span style="font-size: 2rem;">⚠️</span>
+        <div style="flex: 1;">
+          <div style="font-size: 1.1rem; font-weight: 800; color: #fff; margin-bottom: 6px;">
+            BẠN ĐANG TRUY CẬP TỪ TRÌNH DUYỆT ZALO
+          </div>
+          <div style="font-size: 0.92rem; color: #fecaca; line-height: 1.6;">
+            Ứng dụng Zalo <strong>chặn tải file APK trực tiếp</strong> và sẽ báo lỗi <em>"Định dạng tập tin không được hỗ trợ"</em>.<br>
+            👉 <strong>CÁCH TẢI NGAY:</strong> Nhìn lên <strong>góc trên cùng bên phải màn hình</strong> ➔ Bấm vào biểu tượng <strong>DẤU 3 CHẤM (⋮)</strong> ➔ Chọn <strong>"Mở bằng trình duyệt"</strong> (hoặc <em>Open in browser / Chrome</em>) để tải và cài đặt bình thường!
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div style="background: linear-gradient(135deg, rgba(37, 99, 235, 0.15), rgba(16, 185, 129, 0.1)); border: 1px solid #1e3a8a; border-radius: 20px; padding: 32px; display: flex; justify-content: space-between; align-items: center; gap: 24px; flex-wrap: wrap; margin-bottom: 30px;">
       <div style="max-width: 650px;">
         <span style="background: #10b981; color: #fff; font-size: 0.72rem; padding: 4px 10px; border-radius: 6px; font-weight: 800; display: inline-block; margin-bottom: 12px;">BẢN CHÍNH THỨC V1.0</span>
@@ -866,7 +882,7 @@
         </div>
       </div>
       <div style="background: #fff; padding: 16px; border-radius: 16px; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.4);">
-        <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.0.apk" alt="QR Code" style="width: 180px; height: 180px; display: block; margin: 0 auto 10px auto;">
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=https://mrkhang-khoi.github.io/appkhkt2627/?tab=download" alt="QR Code" style="width: 180px; height: 180px; display: block; margin: 0 auto 10px auto;">
         <div style="font-size: 0.8rem; font-weight: 800; color: #0f172a;">QUÉT MÃ ĐỂ TẢI NGAY</div>
         <div style="font-size: 0.68rem; color: #64748b;">(Mở Zalo hoặc Camera quét)</div>
       </div>
@@ -1009,6 +1025,30 @@
   <script src="src/core/web-blocker.js"></script>
 
   <script>
+    
+    // Tự động chuyển tab nếu có ?tab=download hoặc #download
+    window.addEventListener('DOMContentLoaded', function() {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('tab') === 'download' || window.location.hash === '#download') {
+        switchPortalTab('download');
+      }
+
+      // Phát hiện nếu đang mở bằng Zalo Webview
+      const isZalo = /Zalo/i.test(navigator.userAgent) || /ZaloTheme/i.test(navigator.userAgent);
+      if (isZalo) {
+        const zb = document.getElementById('zaloNoticeBanner');
+        if (zb) zb.style.display = 'block';
+
+        // Gắn sự kiện cảnh báo khi bấm nút tải trong Zalo
+        const btnDls = document.querySelectorAll('a[download]');
+        btnDls.forEach(btn => {
+          btn.addEventListener('click', function(e) {
+            alert('⚠️ Zalo đang chặn tải file APK trực tiếp!\n\n👉 Bạn hãy nhìn lên góc trên cùng bên phải, bấm vào biểu tượng DẤU 3 CHẤM (⋮) ➔ Chọn "Mở bằng trình duyệt" (hoặc Chrome) để tải app về máy!');
+          });
+        });
+      }
+    });
+
     // 1. Quản lý trạng thái
     let perms = {
       usage: false,
