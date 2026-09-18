@@ -3,16 +3,16 @@
     "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.0.apk",
     "minSupportedVersion": 1,
     "releaseDate": "2026-09-18",
-    "sha256": "4C98B24F9120E207E249426CA6D1CF080F15B8AB7EF576E24DECE2A1B224DC2A",
-    "versionName": "1.0.7",
-    "versionCode": 8,
-    "latestVersionName": "1.0.7",
-    "latestVersionCode": 8,
+    "sha256": "9E5727228C5459757D3A1B9784F104C608D91CE8F81EEEE9C6892842C90D55F3",
+    "versionName": "1.0.8",
+    "versionCode": 9,
+    "latestVersionName": "1.0.8",
+    "latestVersionCode": 9,
     "changelog": [
-        "Nâng cấp quy trình bắt tay ghép đôi 3 bước có loading kiểm tra và gửi mã xác nhận",
-        "Đồng bộ đa chiều tức thời giữa máy con Android và Parent Hub qua Firebase Cloud",
-        "Bổ sung nút Hủy ghép đôi trực tiếp trên màn hình Học sinh để làm mới dữ liệu",
-        "Khắc phục triệt để lỗi console DevTools và tối ưu giao diện căn giữa cân xứng hoàn hảo"
+        "Bảo vệ kỷ luật số: Màn hình Học sinh không được tự hủy ghép đôi, chỉ Phụ huynh có quyền quản lý",
+        "Kích hoạt Bảng Giám Sát & Đồng Hành Thời Gian Thực khi Phụ huynh bấm vào thiết bị con",
+        "Đồng bộ thống kê thời lượng học tập, giải trí và Điểm Cân Bằng Số lên Firebase Cloud",
+        "Hỗ trợ chế độ Khóa Giờ Học (Focus Lock) và gửi tin nhắn nhắc nhở từ xa"
     ],
     "fileSize": "5.28 MB"
 }

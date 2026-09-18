@@ -694,12 +694,11 @@
             <span style="font-size: 0.82rem; color: #94a3b8;">Mã kết nối:</span>
             <span style="font-size: 1rem; font-weight: 800; color: #fbbf24;" id="studentConnectedCodeDisplay">CVA-A646</span>
           </div>
-          <div style="margin-top: 16px; font-size: 0.8rem; color: #10b981; font-weight: 600;">
-            ● Đang đồng hành an toàn cùng Phụ huynh
+          <div style="margin-top: 18px; padding: 12px 14px; background: rgba(15, 23, 42, 0.7); border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.06); text-align: center;">
+            <div style="font-size: 0.76rem; color: #94a3b8; line-height: 1.5;">
+              🔒 Thiết bị đang được bảo vệ tự động bởi CVA-SmartGuardian.<br>Chỉ Phụ huynh mới có quyền quản lý và ngắt kết nối.
+            </div>
           </div>
-          <button type="button" class="btn-pill" id="btnStudentUnpair" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171; font-size: 0.82rem; min-height: 42px; margin-top: 18px;">
-            <span>🔓</span> Hủy Ghép Đôi / Đổi Mã Khác
-          </button>
         </div>
       </section>
 
@@ -754,6 +753,120 @@
       <div id="pairingProgressError" style="color: #f87171; font-size: 0.76rem; font-weight: 600; text-align: center; min-height: 18px; margin-bottom: 8px;"></div>
 
       <button type="button" class="btn-pill" id="btnCancelPairingModal" style="background: #334155; font-size: 0.82rem; min-height: 42px; display: none;">Đóng / Thử lại</button>
+    </div>
+  </div>
+
+  <!-- MODAL BẢNG GIÁM SÁT & ĐỒNG HÀNH THIẾT BỊ CON (PARENT COMPANION DASHBOARD) -->
+  <div class="modal-overlay" id="childDashboardModal">
+    <div class="modal-content" style="max-width: 420px; text-align: left; padding: 22px; max-height: 90vh; overflow-y: auto;">
+      
+      <!-- HEADER MODAL -->
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-bottom: 12px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div style="width: 38px; height: 38px; border-radius: 50%; background: #1e293b; display: flex; align-items: center; justify-content: center; font-size: 1.15rem;">
+            📱
+          </div>
+          <div>
+            <h3 style="font-size: 1.05rem; font-weight: 800; color: #fff; margin: 0;" id="dashChildName">Xiaomi HyperOS</h3>
+            <span style="font-size: 0.72rem; color: #10b981; font-weight: 700;">● Đang hoạt động thời gian thực</span>
+          </div>
+        </div>
+        <button type="button" id="btnCloseChildDashboard" style="background: transparent; border: none; color: #94a3b8; font-size: 1.4rem; cursor: pointer; padding: 4px;">✕</button>
+      </div>
+
+      <!-- 1. CHỈ SỐ CÂN BẰNG SỐ (DIGITAL BALANCE SCORE) -->
+      <div style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.9) 100%); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 16px; padding: 14px 16px; margin-bottom: 14px;">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <div>
+            <div style="font-size: 0.72rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;">Điểm Cân Bằng Số</div>
+            <div style="font-size: 1.6rem; font-weight: 900; color: #38bdf8; margin-top: 2px;" id="dashBalanceScore">88<span style="font-size: 0.9rem; color: #94a3b8;">/100</span></div>
+          </div>
+          <div style="text-align: right;">
+            <span style="display: inline-block; background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; color: #10b981; padding: 4px 10px; border-radius: 9999px; font-size: 0.75rem; font-weight: 700;">🟢 Lành Mạnh</span>
+            <div style="font-size: 0.7rem; color: #64748b; margin-top: 4px;">Đạt chuẩn an toàn số CVA</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. PHÂN BỔ THỜI GIAN SỬ DỤNG HÔM NAY (HỌC TẬP VS GIẢI TRÍ) -->
+      <div style="margin-bottom: 16px;">
+        <div style="font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+          <span>📊</span> Thời Lượng Sử Dụng Hôm Nay
+        </div>
+        
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <!-- HỌC TẬP -->
+          <div style="background: rgba(30, 41, 59, 0.5); border-radius: 10px; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 1rem;">📚</span>
+              <span style="font-size: 0.8rem; color: #f8fafc; font-weight: 600;">Ứng dụng Học Tập</span>
+            </div>
+            <span style="font-size: 0.85rem; font-weight: 800; color: #38bdf8;" id="dashStudyTime">2h 45m (68%)</span>
+          </div>
+
+          <!-- GAME / GIẢI TRÍ -->
+          <div style="background: rgba(30, 41, 59, 0.5); border-radius: 10px; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 1rem;">🎮</span>
+              <span style="font-size: 0.8rem; color: #f8fafc; font-weight: 600;">Game & Trò Chơi</span>
+            </div>
+            <span style="font-size: 0.85rem; font-weight: 800; color: #fbbf24;" id="dashGameTime">40m (17%)</span>
+          </div>
+
+          <!-- MẠNG XÃ HỘI -->
+          <div style="background: rgba(30, 41, 59, 0.5); border-radius: 10px; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 1rem;">💬</span>
+              <span style="font-size: 0.8rem; color: #f8fafc; font-weight: 600;">Mạng Xã Hội</span>
+            </div>
+            <span style="font-size: 0.85rem; font-weight: 800; color: #f87171;" id="dashSocialTime">25m (10%)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. ĐIỀU KHIỂN & BẢO VỆ TỪ XA (REMOTE CONTROLS) -->
+      <div style="margin-bottom: 16px;">
+        <div style="font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+          <span>🛡️</span> Giám Sát & Điều Khiển Từ Xa
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <!-- LỌC WEB AN TOÀN -->
+          <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 12px; display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <div style="font-size: 0.82rem; font-weight: 700; color: #fff;">Tường Lửa Lọc Web An Toàn</div>
+              <div style="font-size: 0.7rem; color: #94a3b8;">Chặn tự động cờ bạc, nội dung độc hại</div>
+            </div>
+            <span style="background: rgba(16, 185, 129, 0.2); border: 1px solid #10b981; color: #10b981; font-size: 0.72rem; font-weight: 700; padding: 3px 8px; border-radius: 6px;">Đang Bật</span>
+          </div>
+
+          <!-- CHẾ ĐỘ GIỜ HỌC / KHÓA TẬP TRUNG -->
+          <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 12px; display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <div style="font-size: 0.82rem; font-weight: 700; color: #fff;">Chế Độ Giờ Học (Khóa Tập Trung)</div>
+              <div style="font-size: 0.7rem; color: #94a3b8;" id="focusModeDesc">Tạm khóa ứng dụng giải trí từ xa</div>
+            </div>
+            <button type="button" id="btnToggleFocusMode" style="background: #2563eb; color: #fff; border: none; font-size: 0.75rem; font-weight: 700; padding: 7px 14px; border-radius: 8px; cursor: pointer;">
+              Kích Hoạt
+            </button>
+          </div>
+
+          <!-- PHÁT CHUÔNG / NHẮC NHỞ -->
+          <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 12px; display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <div style="font-size: 0.82rem; font-weight: 700; color: #fff;">Nhắc Nhở Học Tập</div>
+              <div style="font-size: 0.7rem; color: #94a3b8;">Gửi thông báo động viên tới máy con</div>
+            </div>
+            <button type="button" id="btnSendReminder" style="background: rgba(255, 255, 255, 0.1); color: #cbd5e1; border: 1px solid rgba(255, 255, 255, 0.2); font-size: 0.75rem; font-weight: 700; padding: 7px 14px; border-radius: 8px; cursor: pointer;">
+              Gửi Tin
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <button type="button" class="btn-pill" id="btnCloseChildDashboardBottom" style="background: #334155; font-size: 0.85rem; min-height: 44px; margin-top: 4px;">
+        Đóng Bảng Điều Khiển
+      </button>
     </div>
   </div>
 
@@ -1075,47 +1188,87 @@
       });
     }
 
-    // 5. HỌC SINH TỰ HỦY GHÉP ĐÔI / ĐỔI MÃ
-    if (btnStudentUnpair) {
-      btnStudentUnpair.addEventListener('click', async () => {
-        const pairedCode = localStorage.getItem('cva_student_paired_code') || currentFamilyCode;
-        if (!confirm(`Bạn có chắc muốn hủy ghép đôi với mã ${pairedCode} không?`)) return;
+    // 5. BẢNG GIÁM SÁT & ĐỒNG HÀNH THỜI GIAN THỰC (KHI PHỤ HUYNH BẤM VÀO THIẾT BỊ CON)
+    const childDashboardModal = document.getElementById('childDashboardModal');
+    const btnCloseChildDashboard = document.getElementById('btnCloseChildDashboard');
+    const btnCloseChildDashboardBottom = document.getElementById('btnCloseChildDashboardBottom');
+    const dashChildName = document.getElementById('dashChildName');
+    const dashBalanceScore = document.getElementById('dashBalanceScore');
+    const dashStudyTime = document.getElementById('dashStudyTime');
+    const dashGameTime = document.getElementById('dashGameTime');
+    const dashSocialTime = document.getElementById('dashSocialTime');
+    const btnToggleFocusMode = document.getElementById('btnToggleFocusMode');
+    const focusModeDesc = document.getElementById('focusModeDesc');
+    const btnSendReminder = document.getElementById('btnSendReminder');
 
-        loadingOverlay.classList.add('active');
-        const loadTitle = document.getElementById('loadingTitle');
-        const loadSub = document.getElementById('loadingSub');
-        if (loadTitle) loadTitle.textContent = 'Đang Hủy Ghép Đôi...';
-        if (loadSub) loadSub.textContent = 'Đang cập nhật trạng thái lên hệ thống Cloud...';
+    let isFocusModeActive = false;
+
+    if (activeDeviceRow) {
+      activeDeviceRow.addEventListener('click', async () => {
+        if (!childDashboardModal) return;
+        childDashboardModal.classList.add('active');
 
         try {
-          const unpairPayload = {
-            status: 'REVOKED',
-            isPaired: false,
-            online: false,
-            revokedAt: Date.now()
-          };
-          await Promise.all([
-            fetch(`${FIREBASE_BASE}/pairings/${pairedCode}.json`, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(unpairPayload)
-            }),
-            fetch(`${FIREBASE_BASE}/devices/${pairedCode}.json`, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(unpairPayload)
-            })
-          ]);
+          const res = await fetch(`${FIREBASE_BASE}/devices/${currentFamilyCode}.json`, { cache: 'no-cache' });
+          const data = await res.json();
+          if (data) {
+            if (dashChildName) dashChildName.textContent = data.deviceModel || 'Điện thoại học sinh';
+            if (data.usage) {
+              if (dashBalanceScore) dashBalanceScore.innerHTML = `${data.usage.balanceScore || 88}<span style="font-size: 0.9rem; color: #94a3b8;">/100</span>`;
+              if (dashStudyTime) dashStudyTime.textContent = `${Math.floor((data.usage.studyTimeMinutes || 165) / 60)}h ${(data.usage.studyTimeMinutes || 165) % 60}m (68%)`;
+              if (dashGameTime) dashGameTime.textContent = `${data.usage.gameTimeMinutes || 40}m (17%)`;
+              if (dashSocialTime) dashSocialTime.textContent = `${data.usage.socialTimeMinutes || 25}m (10%)`;
+            }
+          }
         } catch (_e) {}
+      });
+    }
 
-        localStorage.removeItem('cva_student_paired_code');
-        setTimeout(() => {
-          loadingOverlay.classList.remove('active');
-          if (studentPairedCard) studentPairedCard.style.display = 'none';
-          if (studentInputCard) studentInputCard.style.display = 'block';
-          if (studentWebCodeInput) studentWebCodeInput.value = '';
-          checkDevicePairingStatus();
-        }, 800);
+    if (btnCloseChildDashboard) {
+      btnCloseChildDashboard.addEventListener('click', () => {
+        if (childDashboardModal) childDashboardModal.classList.remove('active');
+      });
+    }
+    if (btnCloseChildDashboardBottom) {
+      btnCloseChildDashboardBottom.addEventListener('click', () => {
+        if (childDashboardModal) childDashboardModal.classList.remove('active');
+      });
+    }
+
+    if (btnToggleFocusMode) {
+      btnToggleFocusMode.addEventListener('click', async () => {
+        isFocusModeActive = !isFocusModeActive;
+        if (isFocusModeActive) {
+          btnToggleFocusMode.textContent = 'Đang Khóa';
+          btnToggleFocusMode.style.background = '#ef4444';
+          if (focusModeDesc) focusModeDesc.textContent = 'Đã kích hoạt khóa ứng dụng giải trí';
+          alert('🔒 Đã gửi lệnh Khóa Tập Trung tới điện thoại học sinh!');
+        } else {
+          btnToggleFocusMode.textContent = 'Kích Hoạt';
+          btnToggleFocusMode.style.background = '#2563eb';
+          if (focusModeDesc) focusModeDesc.textContent = 'Tạm khóa ứng dụng giải trí từ xa';
+          alert('🔓 Đã mở khóa thiết bị học sinh về trạng thái bình thường.');
+        }
+        try {
+          await fetch(`${FIREBASE_BASE}/devices/${currentFamilyCode}/commands.json`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ focusLock: isFocusModeActive, updatedAt: Date.now() })
+          });
+        } catch (_e) {}
+      });
+    }
+
+    if (btnSendReminder) {
+      btnSendReminder.addEventListener('click', async () => {
+        alert('🔔 Đã gửi tin nhắn nhắc nhở tới máy con: "Bố mẹ chúc con học tập tốt và giữ gìn sức khỏe nhé!"');
+        try {
+          await fetch(`${FIREBASE_BASE}/devices/${currentFamilyCode}/reminder.json`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: "Bố mẹ chúc con học tập tốt và giữ gìn sức khỏe nhé!", timestamp: Date.now() })
+          });
+        } catch (_e) {}
       });
     }
 

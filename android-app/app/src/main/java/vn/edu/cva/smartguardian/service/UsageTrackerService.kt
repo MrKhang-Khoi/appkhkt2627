@@ -21,6 +21,9 @@ import kotlinx.coroutines.launch
 import vn.edu.cva.smartguardian.data.AppCategory
 import vn.edu.cva.smartguardian.data.AppClassifier
 import vn.edu.cva.smartguardian.ui.MainActivity
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
 import java.util.Calendar
 
 class UsageTrackerService : Service() {
@@ -117,6 +120,33 @@ class UsageTrackerService : Service() {
                 .putInt("balance_score", balanceScore)
                 .putLong("last_updated_at", System.currentTimeMillis())
                 .apply()
+
+            // Đồng bộ trực tiếp thống kê lên Firebase để Parent Hub theo dõi thời gian thực
+            val pairedCode = prefs.getString("paired_code", "") ?: ""
+            if (pairedCode.isNotEmpty()) {
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        val client = okhttp3.OkHttpClient.Builder()
+                            .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                            .build()
+                        val mediaType = "application/json; charset=utf-8".toMediaType()
+                        val usageJson = JSONObject().apply {
+                            put("studyTimeMinutes", (studyTimeMs / 60000).toInt())
+                            put("gameTimeMinutes", (gameTimeMs / 60000).toInt())
+                            put("socialTimeMinutes", (socialTimeMs / 60000).toInt())
+                            put("utilityTimeMinutes", (utilityTimeMs / 60000).toInt())
+                            put("totalScreenTimeMinutes", (totalScreenTimeMs / 60000).toInt())
+                            put("balanceScore", balanceScore)
+                            put("lastSync", System.currentTimeMillis())
+                        }
+                        val req = okhttp3.Request.Builder()
+                            .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$pairedCode/usage.json")
+                            .put(usageJson.toString().toRequestBody(mediaType))
+                            .build()
+                        client.newCall(req).execute().close()
+                    } catch (_: Exception) {}
+                }
+            }
 
             // Phát broadcast thông báo cho UI nếu đang mở
             val updateIntent = Intent(ACTION_USAGE_UPDATED)
