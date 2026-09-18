@@ -1,0 +1,16 @@
+{
+  "versionCode": 2,
+  "versionName": "1.0.1",
+  "minSupportedVersion": 1,
+  "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.0.apk",
+  "fileSize": "5.25 MB",
+  "sha256": "8d8bef4c82e5ca64f001b0a5fc1490c4dc3f0e3458de817c340548cfd3a39294",
+  "releaseDate": "2026-09-18",
+  "isForceUpdate": false,
+  "changelog": [
+    "Tự động phát hiện phiên bản mới và cập nhật một chạm an toàn qua GitHub",
+    "Thống kê chi tiết danh sách ứng dụng đã cài đặt trên điện thoại học sinh",
+    "Thêm nút mở tắt Cho Phép Cài Đặt Bị Hạn Chế cho Xiaomi HyperOS / Android 14",
+    "Định danh thiết bị học sinh kết nối Bảng điều khiển phụ huynh"
+  ]
+}

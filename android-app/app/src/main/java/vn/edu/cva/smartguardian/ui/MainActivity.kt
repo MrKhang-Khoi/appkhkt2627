@@ -23,6 +23,8 @@ import android.content.pm.PackageManager
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import vn.edu.cva.smartguardian.R
 import vn.edu.cva.smartguardian.data.AppCategory
 import vn.edu.cva.smartguardian.data.AppClassifier
@@ -30,6 +32,8 @@ import vn.edu.cva.smartguardian.receiver.SmartGuardianAdminReceiver
 import vn.edu.cva.smartguardian.service.GuardianAccessibilityService
 import vn.edu.cva.smartguardian.service.SafeVpnFilterService
 import vn.edu.cva.smartguardian.service.UsageTrackerService
+import vn.edu.cva.smartguardian.update.AppUpdateManager
+import vn.edu.cva.smartguardian.update.UpdateInfo
 
 class MainActivity : AppCompatActivity() {
 
@@ -47,6 +51,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnOpenAppInfo: Button
     private lateinit var tvDeviceIdentityInfo: TextView
     private lateinit var btnViewInstalledApps: Button
+    private lateinit var btnCheckUpdate: Button
 
     private var isVpnRunning = false
 
@@ -77,6 +82,9 @@ class MainActivity : AppCompatActivity() {
         if (hasUsageStatsPermission()) {
             UsageTrackerService.start(this)
         }
+
+        // Tự động kiểm tra bản cập nhật mới từ GitHub trong nền
+        performUpdateCheck(userInitiated = false)
     }
 
     override fun onResume() {
@@ -112,6 +120,7 @@ class MainActivity : AppCompatActivity() {
         btnOpenAppInfo = findViewById(R.id.btnOpenAppInfo)
         tvDeviceIdentityInfo = findViewById(R.id.tvDeviceIdentityInfo)
         btnViewInstalledApps = findViewById(R.id.btnViewInstalledApps)
+        btnCheckUpdate = findViewById(R.id.btnCheckUpdate)
 
         updateDeviceIdentityUI()
     }
@@ -182,6 +191,87 @@ class MainActivity : AppCompatActivity() {
                 startActivity(browserIntent)
             } catch (e: Exception) {
                 Toast.makeText(this, "Không thể mở trình duyệt: $dashboardUrl", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        btnCheckUpdate.setOnClickListener {
+            performUpdateCheck(userInitiated = true)
+        }
+    }
+
+    private fun performUpdateCheck(userInitiated: Boolean) {
+        lifecycleScope.launch {
+            if (userInitiated) {
+                Toast.makeText(this@MainActivity, "Đang kết nối máy chủ GitHub kiểm tra cập nhật...", Toast.LENGTH_SHORT).show()
+            }
+            val updateInfo = AppUpdateManager.checkForUpdate(this@MainActivity)
+            if (updateInfo != null) {
+                showUpdateAvailableDialog(updateInfo)
+            } else if (userInitiated) {
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle("Thông Báo")
+                    .setMessage("Ứng dụng CVA-SmartGuardian của bạn đang là phiên bản mới nhất!")
+                    .setPositiveButton("Đóng", null)
+                    .show()
+            }
+        }
+    }
+
+    private fun showUpdateAvailableDialog(updateInfo: UpdateInfo) {
+        val changelogText = if (updateInfo.changelog.isNotEmpty()) {
+            "\n\n📋 TÍNH NĂNG MỚI:\n" + updateInfo.changelog.joinToString("\n") { "• $it" }
+        } else ""
+
+        val sizeText = if (updateInfo.fileSize.isNotEmpty()) " (${updateInfo.fileSize})" else ""
+
+        val builder = AlertDialog.Builder(this)
+            .setTitle("🚀 Có Bản Cập Nhật Mới: v${updateInfo.versionName}")
+            .setMessage("Đã có phiên bản mới trên GitHub$sizeText. Bạn có muốn tải về và cài đặt ngay không?$changelogText")
+            .setPositiveButton("Cập Nhật Ngay") { _, _ ->
+                startDownloadAndInstall(updateInfo)
+            }
+
+        if (!updateInfo.isForceUpdate) {
+            builder.setNegativeButton("Để Sau", null)
+        } else {
+            builder.setCancelable(false)
+        }
+
+        builder.show()
+    }
+
+    private fun startDownloadAndInstall(updateInfo: UpdateInfo) {
+        val progressBar = android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            isIndeterminate = false
+            max = 100
+            progress = 0
+            setPadding(40, 24, 40, 24)
+        }
+
+        val progressDialog = AlertDialog.Builder(this)
+            .setTitle("Đang Tải Bản Cập Nhật v${updateInfo.versionName}")
+            .setMessage("Vui lòng đợi giây lát trong khi tải gói cài đặt từ GitHub...")
+            .setView(progressBar)
+            .setCancelable(false)
+            .create()
+
+        progressDialog.show()
+
+        lifecycleScope.launch {
+            val result = AppUpdateManager.downloadAndVerifyApk(this@MainActivity, updateInfo) { percent ->
+                progressBar.progress = percent
+            }
+            progressDialog.dismiss()
+
+            result.onSuccess { apkFile ->
+                Toast.makeText(this@MainActivity, "Tải bản cập nhật thành công! Đang mở trình cài đặt...", Toast.LENGTH_SHORT).show()
+                AppUpdateManager.installApk(this@MainActivity, apkFile)
+            }.onFailure { error ->
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle("Cập Nhật Thất Bại")
+                    .setMessage("Không thể tải hoặc xác minh tệp cập nhật:\n${error.message}")
+                    .setPositiveButton("Đóng", null)
+                    .show()
             }
         }
     }

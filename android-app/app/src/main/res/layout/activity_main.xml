@@ -439,5 +439,17 @@
             android:textStyle="bold"
             android:layout_marginBottom="12dp" />
 
+        <!-- NÚT KIỂM TRA CẬP NHẬT PHIÊN BẢN (AUTO-UPDATE) -->
+        <Button
+            android:id="@+id/btnCheckUpdate"
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:text="🔄 Kiểm Tra Bản Cập Nhật (GitHub Auto-Update)"
+            android:textColor="@color/on_primary"
+            android:backgroundTint="#047857"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="24dp" />
+
     </LinearLayout>
 </ScrollView>
