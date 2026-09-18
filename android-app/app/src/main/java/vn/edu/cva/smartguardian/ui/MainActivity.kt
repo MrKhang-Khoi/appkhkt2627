@@ -20,11 +20,20 @@ import android.widget.TextView
 import android.widget.Toast
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.util.Log
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
+import java.util.concurrent.TimeUnit
 import vn.edu.cva.smartguardian.R
 import vn.edu.cva.smartguardian.data.AppCategory
 import vn.edu.cva.smartguardian.data.AppClassifier
@@ -42,6 +51,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvBalanceScore: TextView
     private lateinit var tvTotalScreenTime: TextView
     private lateinit var tvLiveStatusBadge: TextView
+    private lateinit var tvCompanionBadge: TextView
 
     private lateinit var btnPermissionUsage: Button
     private lateinit var btnPermissionAccessibility: Button
@@ -54,6 +64,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnCheckUpdate: Button
 
     private var isVpnRunning = false
+    private val firebaseClient = OkHttpClient.Builder()
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(10, TimeUnit.SECONDS)
+        .build()
+    private val FIREBASE_RTDB_URL = "https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app"
 
     private val vpnLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -90,12 +105,24 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         checkAllPermissions()
-        loadUsageStatsFromPrefs()
+
+        if (hasUsageStatsPermission()) {
+            UsageTrackerService.start(this)
+            lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                UsageTrackerService.collectAndSave(this@MainActivity)
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    loadUsageStatsFromPrefs()
+                }
+            }
+        } else {
+            loadUsageStatsFromPrefs()
+        }
 
         val filter = IntentFilter(UsageTrackerService.ACTION_USAGE_UPDATED)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(usageUpdateReceiver, filter, RECEIVER_NOT_EXPORTED)
+            registerReceiver(usageUpdateReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
         } else {
+            @Suppress("DEPRECATION")
             registerReceiver(usageUpdateReceiver, filter)
         }
     }
@@ -111,6 +138,7 @@ class MainActivity : AppCompatActivity() {
         tvBalanceScore = findViewById(R.id.tvBalanceScore)
         tvTotalScreenTime = findViewById(R.id.tvTotalScreenTime)
         tvLiveStatusBadge = findViewById(R.id.tvLiveStatusBadge)
+        tvCompanionBadge = findViewById(R.id.tvCompanionBadge)
 
         btnPermissionUsage = findViewById(R.id.btnPermissionUsage)
         btnPermissionAccessibility = findViewById(R.id.btnPermissionAccessibility)
@@ -125,12 +153,20 @@ class MainActivity : AppCompatActivity() {
         updateDeviceIdentityUI()
     }
 
+    private fun getPairingCode(): String {
+        val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: "DEVICE"
+        val shortId = if (androidId.length >= 4) androidId.takeLast(4).uppercase() else "8A20"
+        return "CVA-$shortId"
+    }
+
     private fun updateDeviceIdentityUI() {
         val manufacturer = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
         val model = Build.MODEL
         val androidVer = "Android ${Build.VERSION.RELEASE}"
-        val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)?.take(6)?.uppercase() ?: "CVA"
-        tvDeviceIdentityInfo.text = "Thiết bị: $manufacturer $model ($androidVer)\nMã ghép đôi học sinh: CVA-8A2 | Device ID: #$androidId"
+        val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: "DEVICE"
+        val pairingCode = getPairingCode()
+        tvDeviceIdentityInfo.text = "Thiết bị: $manufacturer $model ($androidVer)\nMã ghép đôi học sinh: $pairingCode | ID: #$androidId"
+        tvCompanionBadge.text = "⏳ Mã ghép đôi: $pairingCode • Nhập trên Bảng Phụ huynh"
     }
 
     private fun setupListeners() {
@@ -406,20 +442,129 @@ class MainActivity : AppCompatActivity() {
         val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
         val studyMs = prefs.getLong("study_time_ms", 0L)
         val gameMs = prefs.getLong("game_time_ms", 0L)
+        val socialMs = prefs.getLong("social_time_ms", 0L)
         val totalMs = prefs.getLong("total_screen_time_ms", 0L)
         val score = prefs.getInt("balance_score", 100)
 
         val studyMinutes = (studyMs / 1000 / 60).toInt()
-        val gameMinutes = (gameMs / 1000 / 60).toInt()
+        val gameAndSocialMinutes = ((gameMs + socialMs) / 1000 / 60).toInt()
         val totalMinutes = (totalMs / 1000 / 60).toInt()
 
         tvStudyTime.text = "${studyMinutes}p"
-        tvGameTime.text = "${gameMinutes}p"
+        tvGameTime.text = "${gameAndSocialMinutes}p"
         tvBalanceScore.text = "$score"
 
         val hours = totalMinutes / 60
         val remainingMinutes = totalMinutes % 60
         tvTotalScreenTime.text = "Tổng thời gian sáng màn hình: ${hours} giờ ${remainingMinutes} phút"
+
+        syncWithFirebase()
+    }
+
+    private fun syncWithFirebase() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: "DEVICE"
+                val pairingCode = getPairingCode()
+                val manufacturer = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
+                val model = Build.MODEL
+                val androidVer = "Android ${Build.VERSION.RELEASE}"
+
+                val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
+                val studyMs = prefs.getLong("study_time_ms", 0L)
+                val gameMs = prefs.getLong("game_time_ms", 0L)
+                val socialMs = prefs.getLong("social_time_ms", 0L)
+                val totalMs = prefs.getLong("total_screen_time_ms", 0L)
+                val score = prefs.getInt("balance_score", 100)
+
+                val studyMinutes = (studyMs / 1000 / 60).toInt()
+                val gameAndSocialMinutes = ((gameMs + socialMs) / 1000 / 60).toInt()
+                val totalMinutes = (totalMs / 1000 / 60).toInt()
+
+                val jsonMediaType = "application/json; charset=utf-8".toMediaType()
+
+                // 1. Kiểm tra node pairing trên Firebase RTDB
+                val checkReq = Request.Builder()
+                    .url("$FIREBASE_RTDB_URL/pairings/$pairingCode.json")
+                    .get()
+                    .build()
+
+                var isPairedOnCloud = false
+                try {
+                    firebaseClient.newCall(checkReq).execute().use { resp ->
+                        if (resp.isSuccessful) {
+                            val body = resp.body?.string()
+                            if (!body.isNullOrBlank() && body != "null") {
+                                val json = JSONObject(body)
+                                if (json.optString("status") == "paired") {
+                                    isPairedOnCloud = true
+                                }
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w("MainActivity", "Firebase check pairing warning: ${e.message}")
+                }
+
+                // 2. Khởi tạo/cập nhật node pairing nếu chưa paired
+                if (!isPairedOnCloud) {
+                    val pairingData = JSONObject().apply {
+                        put("pairingCode", pairingCode)
+                        put("deviceId", androidId)
+                        put("deviceModel", "$manufacturer $model")
+                        put("androidVersion", androidVer)
+                        put("status", "pending")
+                        put("lastSeen", System.currentTimeMillis())
+                    }
+                    val putPairingReq = Request.Builder()
+                        .url("$FIREBASE_RTDB_URL/pairings/$pairingCode.json")
+                        .put(pairingData.toString().toRequestBody(jsonMediaType))
+                        .build()
+                    try {
+                        firebaseClient.newCall(putPairingReq).execute().close()
+                    } catch (e: Exception) {
+                        Log.w("MainActivity", "Firebase put pairing warning: ${e.message}")
+                    }
+                }
+
+                // 3. Đẩy thống kê thời gian thực lên node /devices/$pairingCode.json
+                val deviceStats = JSONObject().apply {
+                    put("pairingCode", pairingCode)
+                    put("deviceId", androidId)
+                    put("deviceModel", "$manufacturer $model")
+                    put("androidVersion", androidVer)
+                    put("totalMinutes", totalMinutes)
+                    put("studyMinutes", studyMinutes)
+                    put("gameAndSocialMinutes", gameAndSocialMinutes)
+                    put("balanceScore", score)
+                    put("isPaired", isPairedOnCloud)
+                    put("lastSync", System.currentTimeMillis())
+                    put("online", true)
+                }
+                val putStatsReq = Request.Builder()
+                    .url("$FIREBASE_RTDB_URL/devices/$pairingCode.json")
+                    .put(deviceStats.toString().toRequestBody(jsonMediaType))
+                    .build()
+                try {
+                    firebaseClient.newCall(putStatsReq).execute().close()
+                } catch (e: Exception) {
+                    Log.w("MainActivity", "Firebase put stats warning: ${e.message}")
+                }
+
+                // 4. Phản hồi giao diện
+                withContext(Dispatchers.Main) {
+                    if (isPairedOnCloud) {
+                        tvCompanionBadge.text = "🛡️ Đã ghép đôi với Phụ huynh ($pairingCode) • Đang đồng hành"
+                        tvLiveStatusBadge.text = "ĐANG ĐỒNG HÀNH"
+                    } else {
+                        tvCompanionBadge.text = "⏳ Chờ Phụ huynh ghép đôi • Mã: $pairingCode"
+                        tvLiveStatusBadge.text = "CHỜ GHÉP ĐÔI"
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Lỗi đồng bộ Firebase", e)
+            }
+        }
     }
 
     private fun hasUsageStatsPermission(): Boolean {

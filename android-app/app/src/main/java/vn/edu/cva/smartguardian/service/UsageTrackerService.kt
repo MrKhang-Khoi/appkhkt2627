@@ -42,6 +42,86 @@ class UsageTrackerService : Service() {
                 context.startService(intent)
             }
         }
+        fun collectAndSave(context: Context) {
+            val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager ?: return
+
+            val calendar = Calendar.getInstance()
+            val endTime = calendar.timeInMillis
+            calendar.set(Calendar.HOUR_OF_DAY, 0)
+            calendar.set(Calendar.MINUTE, 0)
+            calendar.set(Calendar.SECOND, 0)
+            calendar.set(Calendar.MILLISECOND, 0)
+            val startTime = calendar.timeInMillis
+
+            val statsMap = usageStatsManager.queryAndAggregateUsageStats(startTime, endTime)
+            val statsCollection = if (!statsMap.isNullOrEmpty()) {
+                statsMap.values
+            } else {
+                usageStatsManager.queryUsageStats(
+                    UsageStatsManager.INTERVAL_DAILY,
+                    startTime,
+                    endTime
+                ) ?: emptyList()
+            }
+
+            if (statsCollection.isEmpty()) return
+
+            var studyTimeMs = 0L
+            var gameTimeMs = 0L
+            var socialTimeMs = 0L
+            var utilityTimeMs = 0L
+
+            val pm = context.packageManager
+
+            for (stat in statsCollection) {
+                val totalTime = stat.totalTimeInForeground
+                if (totalTime <= 0) continue
+
+                var appInfo: android.content.pm.ApplicationInfo? = null
+                val appLabel = try {
+                    appInfo = pm.getApplicationInfo(stat.packageName, 0)
+                    pm.getApplicationLabel(appInfo).toString()
+                } catch (e: Exception) {
+                    stat.packageName
+                }
+
+                val metadata = AppClassifier.classify(stat.packageName, appLabel, appInfo)
+                when (metadata.category) {
+                    AppCategory.STUDY -> studyTimeMs += totalTime
+                    AppCategory.GAME -> gameTimeMs += totalTime
+                    AppCategory.SOCIAL -> socialTimeMs += totalTime
+                    AppCategory.UTILITY, AppCategory.OTHER -> utilityTimeMs += totalTime
+                }
+            }
+
+            val totalScreenTimeMs = studyTimeMs + gameTimeMs + socialTimeMs + utilityTimeMs
+
+            // Tính điểm cân bằng số (Balance Score từ 0 đến 100)
+            val balanceScore = if (totalScreenTimeMs > 0) {
+                val studyRatio = studyTimeMs.toDouble() / totalScreenTimeMs
+                val gameRatio = gameTimeMs.toDouble() / totalScreenTimeMs
+                val score = ((studyRatio * 1.0 + (1.0 - gameRatio) * 0.5) * 100).toInt()
+                score.coerceIn(10, 100)
+            } else {
+                100
+            }
+
+            // Lưu vào SharedPreferences
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit()
+                .putLong("study_time_ms", studyTimeMs)
+                .putLong("game_time_ms", gameTimeMs)
+                .putLong("social_time_ms", socialTimeMs)
+                .putLong("utility_time_ms", utilityTimeMs)
+                .putLong("total_screen_time_ms", totalScreenTimeMs)
+                .putInt("balance_score", balanceScore)
+                .putLong("last_updated_at", System.currentTimeMillis())
+                .apply()
+
+            // Phát broadcast thông báo cho UI nếu đang mở
+            val updateIntent = Intent(ACTION_USAGE_UPDATED)
+            context.sendBroadcast(updateIntent)
+        }
     }
 
     override fun onCreate() {
@@ -112,83 +192,9 @@ class UsageTrackerService : Service() {
     private fun startTrackingLoop() {
         serviceScope.launch {
             while (isActive) {
-                collectAndSaveUsageStats()
+                collectAndSave(this@UsageTrackerService)
                 delay(30_000) // Cập nhật mỗi 30 giây
             }
         }
-    }
-
-    private fun collectAndSaveUsageStats() {
-        val usageStatsManager = getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager ?: return
-
-        val calendar = Calendar.getInstance()
-        val endTime = calendar.timeInMillis
-        calendar.set(Calendar.HOUR_OF_DAY, 0)
-        calendar.set(Calendar.MINUTE, 0)
-        calendar.set(Calendar.SECOND, 0)
-        val startTime = calendar.timeInMillis
-
-        val usageStatsList = usageStatsManager.queryUsageStats(
-            UsageStatsManager.INTERVAL_DAILY,
-            startTime,
-            endTime
-        )
-
-        if (usageStatsList.isNullOrEmpty()) return
-
-        var studyTimeMs = 0L
-        var gameTimeMs = 0L
-        var socialTimeMs = 0L
-        var utilityTimeMs = 0L
-
-        val pm = packageManager
-
-        for (stat in usageStatsList) {
-            val totalTime = stat.totalTimeInForeground
-            if (totalTime <= 0) continue
-
-            val appLabel = try {
-                val appInfo = pm.getApplicationInfo(stat.packageName, 0)
-                pm.getApplicationLabel(appInfo).toString()
-            } catch (e: Exception) {
-                stat.packageName
-            }
-
-            val metadata = AppClassifier.classify(stat.packageName, appLabel)
-            when (metadata.category) {
-                AppCategory.STUDY -> studyTimeMs += totalTime
-                AppCategory.GAME -> gameTimeMs += totalTime
-                AppCategory.SOCIAL -> socialTimeMs += totalTime
-                AppCategory.UTILITY, AppCategory.OTHER -> utilityTimeMs += totalTime
-            }
-        }
-
-        val totalScreenTimeMs = studyTimeMs + gameTimeMs + socialTimeMs + utilityTimeMs
-
-        // Tính điểm cân bằng số (Balance Score từ 0 đến 100)
-        val balanceScore = if (totalScreenTimeMs > 0) {
-            val studyRatio = studyTimeMs.toDouble() / totalScreenTimeMs
-            val gameRatio = gameTimeMs.toDouble() / totalScreenTimeMs
-            val score = ((studyRatio * 1.0 + (1.0 - gameRatio) * 0.5) * 100).toInt()
-            score.coerceIn(10, 100)
-        } else {
-            100
-        }
-
-        // Lưu vào SharedPreferences
-        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit()
-            .putLong("study_time_ms", studyTimeMs)
-            .putLong("game_time_ms", gameTimeMs)
-            .putLong("social_time_ms", socialTimeMs)
-            .putLong("utility_time_ms", utilityTimeMs)
-            .putLong("total_screen_time_ms", totalScreenTimeMs)
-            .putInt("balance_score", balanceScore)
-            .putLong("last_updated_at", System.currentTimeMillis())
-            .apply()
-
-        // Phát broadcast thông báo cho UI nếu đang mở
-        val updateIntent = Intent(ACTION_USAGE_UPDATED)
-        sendBroadcast(updateIntent)
     }
 }

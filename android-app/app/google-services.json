@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "864751916889",
+    "firebase_url": "https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "cva-smartguardian",
+    "storage_bucket": "cva-smartguardian.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:864751916889:android:1ab268f13159073c15de48",
+        "android_client_info": {
+          "package_name": "vn.edu.cva.smartguardian"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAJCPlKyXxaIhktMPSgSGDgXjGl556gYYE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
