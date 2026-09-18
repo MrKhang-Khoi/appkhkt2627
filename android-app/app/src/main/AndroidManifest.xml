@@ -16,6 +16,11 @@
         android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
 
+    <!-- QUYỀN TRUY VẤN TẤT CẢ ỨNG DỤNG ĐÃ CÀI ĐẶT (ĐỂ THỐNG KÊ DANH SÁCH APP TRÊN MÁY HỌC SINH) -->
+    <uses-permission
+        android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
+
     <application
         android:allowBackup="false"
         android:icon="@drawable/ic_launcher"

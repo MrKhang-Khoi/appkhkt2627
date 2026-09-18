@@ -18,9 +18,14 @@ import android.view.accessibility.AccessibilityManager
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import vn.edu.cva.smartguardian.R
+import vn.edu.cva.smartguardian.data.AppCategory
+import vn.edu.cva.smartguardian.data.AppClassifier
 import vn.edu.cva.smartguardian.receiver.SmartGuardianAdminReceiver
 import vn.edu.cva.smartguardian.service.GuardianAccessibilityService
 import vn.edu.cva.smartguardian.service.SafeVpnFilterService
@@ -39,6 +44,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnToggleVpn: Button
     private lateinit var btnPermissionAdmin: Button
     private lateinit var btnOpenDashboard: Button
+    private lateinit var btnOpenAppInfo: Button
+    private lateinit var tvDeviceIdentityInfo: TextView
+    private lateinit var btnViewInstalledApps: Button
 
     private var isVpnRunning = false
 
@@ -101,9 +109,37 @@ class MainActivity : AppCompatActivity() {
         btnToggleVpn = findViewById(R.id.btnToggleVpn)
         btnPermissionAdmin = findViewById(R.id.btnPermissionAdmin)
         btnOpenDashboard = findViewById(R.id.btnOpenDashboard)
+        btnOpenAppInfo = findViewById(R.id.btnOpenAppInfo)
+        tvDeviceIdentityInfo = findViewById(R.id.tvDeviceIdentityInfo)
+        btnViewInstalledApps = findViewById(R.id.btnViewInstalledApps)
+
+        updateDeviceIdentityUI()
+    }
+
+    private fun updateDeviceIdentityUI() {
+        val manufacturer = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
+        val model = Build.MODEL
+        val androidVer = "Android ${Build.VERSION.RELEASE}"
+        val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)?.take(6)?.uppercase() ?: "CVA"
+        tvDeviceIdentityInfo.text = "Thiết bị: $manufacturer $model ($androidVer)\nMã ghép đôi học sinh: CVA-8A2 | Device ID: #$androidId"
     }
 
     private fun setupListeners() {
+        btnOpenAppInfo.setOnClickListener {
+            try {
+                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.fromParts("package", packageName, null)
+                }
+                startActivity(intent)
+            } catch (e: Exception) {
+                Toast.makeText(this, "Không thể mở cài đặt: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        btnViewInstalledApps.setOnClickListener {
+            showInstalledAppsDialog()
+        }
+
         btnPermissionUsage.setOnClickListener {
             val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
             startActivity(intent)
@@ -140,7 +176,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnOpenDashboard.setOnClickListener {
-            val dashboardUrl = "http://10.0.2.2:8100/khkt-smart-guardian/src/parent-dashboard/index.html"
+            val dashboardUrl = "https://mrkhang-khoi.github.io/appkhkt2627/?tab=dashboard"
             val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(dashboardUrl))
             try {
                 startActivity(browserIntent)
@@ -148,6 +184,63 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "Không thể mở trình duyệt: $dashboardUrl", Toast.LENGTH_SHORT).show()
             }
         }
+    }
+
+    private fun showInstalledAppsDialog() {
+        val pm = packageManager
+        val installedApps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
+
+        var studyCount = 0
+        var gameCount = 0
+        var socialCount = 0
+        var utilityCount = 0
+        val sampleList = mutableListOf<String>()
+
+        for (app in installedApps) {
+            val isSystem = (app.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+            val appLabel = pm.getApplicationLabel(app).toString()
+            val metadata = AppClassifier.classify(app.packageName, appLabel)
+
+            if (!isSystem || metadata.category != AppCategory.UTILITY) {
+                when (metadata.category) {
+                    AppCategory.STUDY -> {
+                        studyCount++
+                        if (sampleList.size < 15) sampleList.add("📚 $appLabel (Học tập)")
+                    }
+                    AppCategory.GAME -> {
+                        gameCount++
+                        if (sampleList.size < 15) sampleList.add("🎮 $appLabel (Game)")
+                    }
+                    AppCategory.SOCIAL -> {
+                        socialCount++
+                        if (sampleList.size < 15) sampleList.add("🌐 $appLabel (MXH/Video)")
+                    }
+                    AppCategory.UTILITY, AppCategory.OTHER -> {
+                        utilityCount++
+                    }
+                }
+            }
+        }
+
+        val totalCustomApps = studyCount + gameCount + socialCount + utilityCount
+        val message = StringBuilder()
+        message.append("📊 TỔNG SỐ ỨNG DỤNG ĐÃ CÀI: $totalCustomApps\n\n")
+        message.append("• 📚 Học tập (Study): $studyCount ứng dụng\n")
+        message.append("• 🎮 Trò chơi (Game): $gameCount ứng dụng\n")
+        message.append("• 🌐 Mạng xã hội / Video: $socialCount ứng dụng\n")
+        message.append("• ⚙️ Tiện ích & Công cụ: $utilityCount ứng dụng\n\n")
+        message.append("📋 MỘT SỐ ỨNG DỤNG TIÊU BIỂU TRÊN MÁY:\n")
+        if (sampleList.isEmpty()) {
+            message.append("(Hệ thống đang hoạt động với các app mặc định)")
+        } else {
+            sampleList.forEach { message.append("$it\n") }
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Thống Kê Ứng Dụng Thiết Bị")
+            .setMessage(message.toString())
+            .setPositiveButton("Đóng", null)
+            .show()
     }
 
     private fun checkAllPermissions() {

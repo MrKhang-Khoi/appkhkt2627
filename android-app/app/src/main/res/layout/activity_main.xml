@@ -172,6 +172,45 @@
                 android:layout_gravity="center_horizontal" />
         </LinearLayout>
 
+        <!-- BANNER HƯỚNG DẪN MỞ KHÓA CHO XIAOMI / ANDROID 13+ (RESTRICTED SETTINGS) -->
+        <LinearLayout
+            android:id="@+id/cardXiaomiGuide"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#261A0C"
+            android:padding="14dp"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⚠️ MÁY BÁO &quot;ỨNG DỤNG BỊ TỪ CHỐI CẤP QUYỀN&quot;?"
+                android:textColor="@color/accent_gold"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Do tính năng bảo mật của Android 14 / Xiaomi HyperOS đối với file APK:\n1. Bấm nút bên dưới để mở thẳng trang Thông Tin Ứng Dụng\n2. Nhìn góc trên bên phải ➔ Bấm dấu 3 chấm (⋮)\n3. Chọn &quot;Cho phép cài đặt bị hạn chế&quot; ➔ Xác nhận 10s là cấp quyền được ngay 100%!"
+                android:textColor="@color/text_main"
+                android:textSize="11sp"
+                android:layout_marginTop="4dp"
+                android:lineSpacingExtra="2dp" />
+
+            <Button
+                android:id="@+id/btnOpenAppInfo"
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:text="👉 BẤM ĐÂY ĐỂ MỞ THÔNG TIN ỨNG DỤNG"
+                android:textColor="@color/on_primary"
+                android:backgroundTint="#B45309"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:layout_marginTop="8dp" />
+        </LinearLayout>
+
         <!-- TIÊU ĐỀ PHÂN MỤC CÀI ĐẶT QUYỀN -->
         <TextView
             android:layout_width="wrap_content"
@@ -350,15 +389,53 @@
                 android:textSize="12sp" />
         </LinearLayout>
 
+        <!-- KHỐI ĐỊNH DANH THIẾT BỊ & GHÉP ĐÔI HỌC SINH -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@color/surface"
+            android:padding="14dp"
+            android:layout_marginBottom="14dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="📱 ĐỊNH DANH THIẾT BỊ &amp; GHÉP ĐÔI HỌC SINH"
+                android:textColor="@color/primary"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvDeviceIdentityInfo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Thiết bị: Đang tải... | Mã ghép đôi: CVA-8A2"
+                android:textColor="@color/text_muted"
+                android:textSize="12sp"
+                android:layout_marginTop="4dp" />
+
+            <Button
+                android:id="@+id/btnViewInstalledApps"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:text="📊 Thống Kê Ứng Dụng Đã Cài Đặt (Phân Loại)"
+                android:textColor="@color/on_primary"
+                android:backgroundTint="@color/primary"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:layout_marginTop="10dp" />
+        </LinearLayout>
+
         <!-- NÚT KẾT NỐI BẢNG ĐIỀU KHIỂN PHỤ HUYNH -->
         <Button
             android:id="@+id/btnOpenDashboard"
             android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:text="Xem Báo Cáo Phụ Huynh Trực Tiếp (Web)"
+            android:layout_height="50dp"
+            android:text="🌐 Mở Bảng Điều Khiển Phụ Huynh (Web)"
             android:textColor="@color/on_primary"
             android:backgroundTint="@color/accent_gold"
-            android:textSize="14sp"
+            android:textSize="13sp"
             android:textStyle="bold"
             android:layout_marginBottom="12dp" />
 
