@@ -23,9 +23,17 @@ class GuardianAccessibilityService : AccessibilityService() {
 
     private var lastCheckedUrl: String = ""
     private var lastBlockTimestamp: Long = 0L
+    private var lastHeartbeatTimestamp: Long = 0L
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
+
+        // Gửi nhịp tim định kỳ (tối đa 1 lần mỗi 20s) khi học sinh đang tương tác với thiết bị
+        val now = System.currentTimeMillis()
+        if (now - lastHeartbeatTimestamp > 20_000L) {
+            lastHeartbeatTimestamp = now
+            UsageTrackerService.sendHeartbeatPing(this)
+        }
 
         val packageName = event.packageName?.toString() ?: return
 

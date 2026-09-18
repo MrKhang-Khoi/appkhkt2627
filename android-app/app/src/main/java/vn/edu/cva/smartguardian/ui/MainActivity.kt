@@ -884,11 +884,18 @@ class MainActivity : AppCompatActivity() {
         try {
             val now = System.currentTimeMillis()
             val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: "UNKNOWN"
+            val manufacturer = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
+            val model = Build.MODEL
             val jsonMediaType = "application/json; charset=utf-8".toMediaType()
             val pingJson = JSONObject().apply {
                 put("lastSync", now)
                 put("lastHeartbeat", now)
                 put("online", true)
+                put("deviceId", androidId)
+                put("deviceModel", "$manufacturer $model")
+                put("androidVersion", "Android ${Build.VERSION.RELEASE}")
+                put("isPaired", true)
+                put("status", "paired")
             }
             val body = pingJson.toString().toRequestBody(jsonMediaType)
 

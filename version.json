@@ -3,16 +3,16 @@
     "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.0.apk",
     "minSupportedVersion": 1,
     "releaseDate": "2026-09-18",
-    "sha256": "A71CB02E51B5EA993BAB109EA87FE716356267AD587806E61EA92B77A536CB98",
-    "versionName": "1.1.0",
-    "versionCode": 11,
-    "latestVersionName": "1.1.0",
-    "latestVersionCode": 11,
+    "sha256": "8C2E91BFEB6FD27E67F2A8FE205391E1FD660C88EE9F09C1BF1834D2DEBAA161",
+    "versionName": "1.1.2",
+    "versionCode": 12,
+    "latestVersionName": "1.1.2",
+    "latestVersionCode": 12,
     "changelog": [
-        "Nâng cấp Heartbeat Engine đa tầng: Phát xung nhịp tim 10 giây/lần trực tiếp từ MainActivity & Background Service",
+        "Đồng bộ tức thời thông báo cập nhật tự động qua Firebase Cloud (v1.1.2)",
+        "Cơ chế Nhịp tim Trợ năng (Accessibility Heartbeat): Tự động báo Trực tuyến khi học sinh sử dụng bất kỳ app nào",
         "Khắc phục triệt để lỗi không cập nhật Trực tuyến khi mở ứng dụng trên điện thoại (đặc biệt Xiaomi/HyperOS)",
-        "Tách biệt độc lập nhịp tim sống còn với quyền Usage Stats: Luôn báo online khi thiết bị có kết nối mạng",
-        "Tự động chuyển Ngoại tuyến (Đỏ) chính xác trong vòng 45 giây khi ngắt Wi-Fi/4G"
+        "Bảo toàn dữ liệu ghép đôi và tự động hồi phục kết nối đa thiết bị"
     ],
-    "fileSize": "5.28 MB"
+    "fileSize": "5.29 MB"
 }
