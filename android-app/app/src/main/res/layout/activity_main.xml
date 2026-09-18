@@ -1,234 +1,228 @@
-<?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/background"
-    android:fillViewport="true">
+    android:background="@color/background">
 
-    <LinearLayout
+    <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical">
+        android:layout_height="match_parent"
+        android:background="@color/background"
+        android:fillViewport="true">
 
-        <!-- ============================================================== -->
-        <!-- MÀN HÌNH 1: ONBOARDING GHÉP ĐÔI (CHỈ HIỆN KHI CHƯA GHÉP ĐÔI) -->
-        <!-- ============================================================== -->
         <LinearLayout
-            android:id="@+id/layoutOnboarding"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:padding="24dp"
-            android:visibility="visible">
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
 
-            <!-- LOGO & BRAND -->
-            <ImageView
-                android:layout_width="68dp"
-                android:layout_height="68dp"
-                android:src="@drawable/ic_launcher"
-                android:contentDescription="Logo"
-                android:layout_marginBottom="14dp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="CVA-SmartGuardian"
-                android:textColor="@color/text_main"
-                android:textSize="22sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="HỆ SINH THÁI ĐỒNG HÀNH &amp; TỰ CHỦ SỐ"
-                android:textColor="@color/accent_gold"
-                android:textSize="11sp"
-                android:textStyle="bold"
-                android:letterSpacing="0.08"
-                android:layout_marginTop="4dp"
-                android:layout_marginBottom="28dp" />
-
-            <!-- KHUNG NHẬP MÃ GHÉP ĐÔI -->
+            <!-- ============================================================== -->
+            <!-- MÀN HÌNH 1: ONBOARDING GHÉP ĐÔI (CHỈ HIỆN KHI CHƯA GHÉP ĐÔI) -->
+            <!-- ============================================================== -->
             <LinearLayout
+                android:id="@+id/layoutOnboarding"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:padding="24dp"
+                android:visibility="visible">
+
+                <!-- LOGO & BRAND -->
+                <ImageView
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:src="@drawable/ic_launcher"
+                    android:contentDescription="Logo"
+                    android:layout_marginBottom="12dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="CVA-SmartGuardian"
+                    android:textColor="@color/text_main"
+                    android:textSize="22sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="HỆ SINH THÁI ĐỒNG HÀNH SỐ"
+                    android:textColor="@color/accent_gold"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.08"
+                    android:layout_marginTop="4dp"
+                    android:layout_marginBottom="28dp" />
+
+                <!-- KHUNG NHẬP MÃ GHÉP ĐÔI TỐI GIẢN CHUẨN M3 -->
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    app:cardCornerRadius="20dp"
+                    app:cardBackgroundColor="@color/surface"
+                    app:strokeColor="@color/surface_border"
+                    app:strokeWidth="1dp"
+                    app:cardElevation="0dp"
+                    android:layout_marginBottom="20dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="20dp">
+
+                        <EditText
+                            android:id="@+id/etPairingCodeInput"
+                            android:layout_width="match_parent"
+                            android:layout_height="56dp"
+                            android:background="@drawable/bg_code_field"
+                            android:textColor="#FBBF24"
+                            android:textColorHint="#64748B"
+                            android:textSize="20sp"
+                            android:textStyle="bold"
+                            android:gravity="center"
+                            android:hint="CVA-XXXX"
+                            android:textAllCaps="true"
+                            android:inputType="textCapCharacters|textNoSuggestions"
+                            android:letterSpacing="0.12"
+                            android:paddingLeft="16dp"
+                            android:paddingRight="16dp"
+                            android:layout_marginBottom="16dp" />
+
+                        <!-- NÚT KẾT NỐI -->
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnConnectPairing"
+                            android:layout_width="match_parent"
+                            android:layout_height="52dp"
+                            android:text="🔗 KẾT NỐI"
+                            android:textColor="@color/on_primary"
+                            app:backgroundTint="@color/primary"
+                            app:cornerRadius="26dp"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+
+                        <!-- VÒNG LOADING XOAY -->
+                        <ProgressBar
+                            android:id="@+id/pbPairingLoading"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="center"
+                            android:layout_marginTop="14dp"
+                            android:visibility="gone" />
+
+                        <TextView
+                            android:id="@+id/tvPairingStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="center"
+                            android:textColor="#34D399"
+                            android:textSize="12sp"
+                            android:textStyle="bold"
+                            android:layout_marginTop="8dp"
+                            android:visibility="gone" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- THÔNG TIN MÃ THIẾT BỊ MÁY NÀY (ẨN) -->
+                <TextView
+                    android:id="@+id/tvMyDevicePin"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:visibility="gone" />
+
+                <!-- ICON NHỎ TRỢ GIÚP XIAOMI / ANDROID 14 -->
+                <TextView
+                    android:id="@+id/btnXiaomiHelp"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="ℹ️ Trợ giúp cấp quyền Xiaomi HyperOS / Android 14"
+                    android:textColor="#93C5FD"
+                    android:textSize="11sp"
+                    android:background="@drawable/bg_help_pill"
+                    android:paddingLeft="16dp"
+                    android:paddingRight="16dp"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp"
+                    android:clickable="true"
+                    android:focusable="true" />
+            </LinearLayout>
+
+            <!-- ============================================================== -->
+            <!-- MÀN HÌNH 2: DASHBOARD CHÍNH (CHỈ HIỆN KHI ĐÃ GHÉP ĐÔI)        -->
+            <!-- ============================================================== -->
+            <LinearLayout
+                android:id="@+id/layoutDashboard"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:background="@color/surface"
                 android:padding="20dp"
-                android:layout_marginBottom="20dp">
+                android:visibility="gone">
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="🔗 KẾT NỐI VỚI PHỤ HUYNH"
-                    android:textColor="@color/text_main"
-                    android:textSize="15sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Nhập mã ghép đôi do Ba/Mẹ cung cấp trên Bảng điều khiển Web để kích hoạt chế độ đồng hành."
-                    android:textColor="@color/text_muted"
-                    android:textSize="12sp"
-                    android:layout_marginTop="6dp"
-                    android:layout_marginBottom="16dp"
-                    android:lineSpacingExtra="2dp" />
-
-                <EditText
-                    android:id="@+id/etPairingCodeInput"
+                <!-- THẺ LỜI CHÀO & HUY HIỆU ĐỒNG HÀNH -->
+                <com.google.android.material.card.MaterialCardView
                     android:layout_width="match_parent"
-                    android:layout_height="54dp"
-                    android:background="#0F172A"
-                    android:textColor="#FBBF24"
-                    android:textColorHint="#64748B"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    android:gravity="center"
-                    android:hint="NHẬP MÃ (VD: CVA-8A20)"
-                    android:textAllCaps="true"
-                    android:inputType="textCapCharacters|textNoSuggestions"
-                    android:letterSpacing="0.1"
-                    android:paddingLeft="16dp"
-                    android:paddingRight="16dp"
-                    android:layout_marginBottom="16dp" />
-
-                <!-- NÚT KẾT NỐI -->
-                <Button
-                    android:id="@+id/btnConnectPairing"
-                    android:layout_width="match_parent"
-                    android:layout_height="52dp"
-                    android:text="🔗 KẾT NỐI NGAY"
-                    android:textColor="@color/on_primary"
-                    android:backgroundTint="@color/primary"
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
-
-                <!-- VÒNG LOADING XOAY -->
-                <ProgressBar
-                    android:id="@+id/pbPairingLoading"
-                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_gravity="center"
-                    android:layout_marginTop="14dp"
-                    android:visibility="gone" />
+                    app:cardCornerRadius="18dp"
+                    app:cardBackgroundColor="@color/surface"
+                    app:strokeColor="@color/surface_border"
+                    app:strokeWidth="1dp"
+                    app:cardElevation="0dp"
+                    android:layout_marginBottom="16dp">
 
-                <TextView
-                    android:id="@+id/tvPairingStatus"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center"
-                    android:textColor="#34D399"
-                    android:textSize="12sp"
-                    android:textStyle="bold"
-                    android:layout_marginTop="8dp"
-                    android:visibility="gone" />
-            </LinearLayout>
-
-            <!-- THÔNG TIN MÃ THIẾT BỊ MÁY NÀY -->
-            <TextView
-                android:id="@+id/tvMyDevicePin"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Mã định danh máy: CVA-XXXX"
-                android:textColor="@color/text_muted"
-                android:textSize="12sp"
-                android:layout_marginBottom="16dp" />
-
-            <!-- ICON NHỎ TRỢ GIÚP XIAOMI / ANDROID 14 -->
-            <TextView
-                android:id="@+id/btnXiaomiHelp"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="ℹ️ Trợ giúp cấp quyền Xiaomi HyperOS / Android 14"
-                android:textColor="#93C5FD"
-                android:textSize="11sp"
-                android:background="#1E293B"
-                android:paddingLeft="14dp"
-                android:paddingRight="14dp"
-                android:paddingTop="8dp"
-                android:paddingBottom="8dp"
-                android:clickable="true"
-                android:focusable="true" />
-        </LinearLayout>
-
-        <!-- ============================================================== -->
-        <!-- MÀN HÌNH 2: DASHBOARD CHÍNH (CHỈ HIỆN KHI ĐÃ GHÉP ĐÔI)        -->
-        <!-- ============================================================== -->
-        <LinearLayout
-            android:id="@+id/layoutDashboard"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="20dp"
-            android:visibility="gone">
-
-            <!-- THẺ LỜI CHÀO & HUY HIỆU ĐỒNG HÀNH -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:background="@color/surface"
-                android:padding="16dp"
-                android:layout_marginBottom="16dp">
-
-                <ImageView
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:src="@drawable/ic_launcher"
-                    android:contentDescription="Logo"
-                    android:layout_marginEnd="14dp" />
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:id="@+id/tvGreeting"
-                        android:layout_width="wrap_content"
+                    <LinearLayout
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Xin chào, Nguyễn Hoàng Nam! ✨"
-                        android:textColor="@color/text_main"
-                        android:textSize="17sp"
-                        android:textStyle="bold" />
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:padding="16dp">
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Lớp 8A2 • THCS Chu Văn An"
-                        android:textColor="@color/accent_gold"
-                        android:textSize="12sp"
-                        android:textStyle="bold"
-                        android:layout_marginTop="2dp" />
+                        <ImageView
+                            android:layout_width="44dp"
+                            android:layout_height="44dp"
+                            android:src="@drawable/ic_launcher"
+                            android:contentDescription="Logo"
+                            android:layout_marginEnd="14dp" />
 
-                    <TextView
-                        android:id="@+id/tvCompanionBadge"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="🛡️ Đã kết nối Phụ huynh • Đang đồng hành"
-                        android:textColor="@color/text_muted"
-                        android:textSize="11sp"
-                        android:layout_marginTop="2dp" />
-                </LinearLayout>
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
 
-                <TextView
-                    android:id="@+id/tvLiveStatusBadge"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="ĐANG ĐỒNG HÀNH"
-                    android:textColor="@color/success"
-                    android:textSize="11sp"
-                    android:textStyle="bold"
-                    android:background="#132B1E"
-                    android:paddingLeft="10dp"
-                    android:paddingRight="10dp"
-                    android:paddingTop="6dp"
-                    android:paddingBottom="6dp" />
-            </LinearLayout>
+                            <TextView
+                                android:id="@+id/tvGreeting"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Xin chào ............"
+                                android:textColor="@color/text_main"
+                                android:textSize="16sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/tvCompanionBadge"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Cổng Rèn Luyện Tự Chủ Số"
+                                android:textColor="@color/text_muted"
+                                android:textSize="11sp"
+                                android:layout_marginTop="2dp" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/tvLiveStatusBadge"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="ĐÃ GHÉP ĐÔI"
+                            android:textColor="@color/success"
+                            android:textSize="11sp"
+                            android:textStyle="bold"
+                            android:background="#132B1E"
+                            android:paddingLeft="10dp"
+                            android:paddingRight="10dp"
+                            android:paddingTop="6dp"
+                            android:paddingBottom="6dp" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
 
             <!-- SÂN KHẤU TỰ CHỦ SỐ (DIGITAL WELLBEING STAGE) -->
             <LinearLayout
@@ -655,4 +649,64 @@
 
         </LinearLayout>
     </LinearLayout>
-</ScrollView>
+    </ScrollView>
+
+    <!-- OVERLAY LOADING KHI PHỤ HUYNH NGẮT KẾT NỐI -->
+    <FrameLayout
+        android:id="@+id/layoutUnpairOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#EB07090E"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone">
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:layout_margin="32dp"
+            app:cardCornerRadius="24dp"
+            app:cardBackgroundColor="@color/surface"
+            app:strokeColor="@color/surface_border"
+            app:strokeWidth="1dp"
+            app:cardElevation="12dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:padding="28dp">
+
+                <ProgressBar
+                    android:id="@+id/pbUnpairProgress"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:indeterminate="true"
+                    android:indeterminateTint="@color/primary"
+                    android:layout_marginBottom="18dp" />
+
+                <TextView
+                    android:id="@+id/tvUnpairTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Thông Báo Từ Phụ Huynh"
+                    android:textColor="@color/text_main"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:id="@+id/tvUnpairMsg"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Phụ huynh đã ngắt kết nối thiết bị này.\nĐang hoàn tất đăng xuất và làm mới dữ liệu..."
+                    android:textColor="@color/text_muted"
+                    android:textSize="13sp"
+                    android:gravity="center"
+                    android:lineSpacingExtra="4dp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+    </FrameLayout>
+</FrameLayout>

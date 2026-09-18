@@ -2,14 +2,18 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CVA-SmartGuardian — Bảng Điều Khiển & Ghép Đôi Phụ Huynh</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>CVA-SmartGuardian Hub — Cổng Điều Khiển & Ghép Đôi</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  
   <style>
     :root {
-      --bg: #0b0f19;
-      --surface: #111827;
-      --card: #1e293b;
-      --border: #334155;
+      --bg: #07090e;
+      --surface: rgba(17, 24, 39, 0.85);
+      --surface-card: rgba(30, 41, 59, 0.7);
+      --border: rgba(255, 255, 255, 0.09);
       --primary: #2563eb;
       --primary-hover: #1d4ed8;
       --success: #10b981;
@@ -17,666 +21,765 @@
       --danger: #ef4444;
       --text: #f8fafc;
       --text-muted: #94a3b8;
+      --glow-blue: rgba(37, 99, 235, 0.28);
+      --glow-gold: rgba(245, 158, 11, 0.25);
     }
 
     * {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      -webkit-tap-highlight-color: transparent;
     }
 
     body {
       background: var(--bg);
+      background-image: 
+        radial-gradient(circle at 50% -15%, rgba(37, 99, 235, 0.22), transparent 65%),
+        radial-gradient(circle at 10% 85%, rgba(16, 185, 129, 0.08), transparent 45%);
       color: var(--text);
       min-height: 100vh;
       display: flex;
       flex-direction: column;
-      padding: 16px;
+      align-items: center;
+      padding: 16px 14px 40px;
     }
 
-    .container {
-      max-width: 900px;
-      margin: 0 auto;
+    .app-shell {
       width: 100%;
+      max-width: 440px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
     }
 
-    /* HEADER */
-    .header {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 18px 24px;
-      margin-bottom: 20px;
+    /* TOP BAR */
+    .top-bar {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      flex-wrap: wrap;
-      gap: 12px;
+      padding: 4px 6px;
     }
 
-    .brand h1 {
-      font-size: 1.35rem;
+    .brand-group {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
     }
 
-    .brand p {
-      font-size: 0.85rem;
-      color: var(--text-muted);
-      margin-top: 4px;
+    .brand-icon {
+      width: 38px;
+      height: 38px;
+      background: linear-gradient(135deg, #2563eb, #1e40af);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      box-shadow: 0 4px 14px var(--glow-blue);
+      border: 1px solid rgba(255, 255, 255, 0.15);
     }
 
-    .cloud-pill {
+    .brand-text h1 {
+      font-size: 1.08rem;
+      font-weight: 800;
+      letter-spacing: -0.2px;
+      color: #fff;
+    }
+
+    .brand-text p {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--warning);
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+    }
+
+    .cloud-badge {
       display: inline-flex;
       align-items: center;
-      gap: 8px;
-      background: #132b1e;
-      border: 1px solid #059669;
+      gap: 6px;
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.3);
       color: #34d399;
-      padding: 6px 14px;
+      padding: 5px 12px;
       border-radius: 9999px;
-      font-size: 0.82rem;
-      font-weight: 600;
+      font-size: 0.72rem;
+      font-weight: 700;
     }
 
-    .dot {
-      width: 8px;
-      height: 8px;
+    .cloud-dot {
+      width: 6px;
+      height: 6px;
       border-radius: 50%;
       background: #10b981;
+      box-shadow: 0 0 8px #10b981;
       animation: pulse 2s infinite;
     }
 
     @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.4; }
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
     }
 
-    /* CARD TẢI APK */
-    .download-card {
-      background: linear-gradient(135deg, #1e3a8a 0%, #1e1b4b 100%);
-      border: 1px solid #3b82f6;
-      border-radius: 12px;
-      padding: 20px 24px;
-      margin-bottom: 20px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 16px;
-    }
-
-    .download-info h2 {
-      font-size: 1.15rem;
-      color: #fff;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .download-info p {
-      font-size: 0.82rem;
-      color: #cbd5e1;
-      margin-top: 4px;
-    }
-
-    .btn-download {
-      background: #10b981;
-      color: #fff;
-      text-decoration: none;
-      padding: 12px 24px;
-      border-radius: 8px;
-      font-size: 0.95rem;
-      font-weight: 700;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
-      transition: all 0.2s;
-    }
-
-    .btn-download:hover {
-      background: #059669;
-      transform: translateY(-2px);
-    }
-
-    /* SECTION KHỐI */
-    .section-card {
-      background: var(--surface);
+    /* SEGMENTED CONTROL 2 TABS */
+    .segmented-control {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      background: rgba(15, 23, 42, 0.85);
       border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 22px 24px;
-      margin-bottom: 20px;
+      border-radius: 14px;
+      padding: 4px;
+      user-select: none;
     }
 
-    .section-title {
-      font-size: 1.05rem;
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 0.88rem;
       font-weight: 700;
-      margin-bottom: 14px;
+      padding: 12px 0;
+      border-radius: 10px;
+      cursor: pointer;
       display: flex;
       align-items: center;
+      justify-content: center;
       gap: 8px;
-      color: #f1f5f9;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
-    /* FORM GHÉP ĐÔI */
-    .pairing-box {
-      display: flex;
-      gap: 12px;
-      flex-wrap: wrap;
-      margin-top: 10px;
-    }
-
-    .pairing-input {
-      flex: 1;
-      min-width: 240px;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 12px 16px;
-      font-size: 1.1rem;
-      font-weight: 700;
-      color: #fbbf24;
-      letter-spacing: 1.5px;
-      text-transform: uppercase;
-      outline: none;
-    }
-
-    .pairing-input:focus {
-      border-color: var(--primary);
-    }
-
-    .btn-pair {
+    .tab-btn.active {
       background: var(--primary);
       color: #fff;
-      border: none;
-      padding: 12px 24px;
-      border-radius: 8px;
-      font-size: 0.95rem;
-      font-weight: 700;
-      cursor: pointer;
-      min-height: 44px;
-      transition: all 0.2s;
+      box-shadow: 0 4px 14px var(--glow-blue);
     }
 
-    .btn-pair:hover {
-      background: var(--primary-hover);
-    }
-
-    .btn-secondary {
-      background: #334155;
-      color: #fff;
-      border: none;
-      padding: 12px 16px;
-      border-radius: 8px;
-      font-size: 0.88rem;
-      cursor: pointer;
-      min-height: 44px;
-    }
-
-    .pairing-status-box {
-      margin-top: 14px;
-      padding: 12px 16px;
-      border-radius: 8px;
-      font-size: 0.9rem;
-      display: none;
-    }
-
-    .pairing-status-box.paired {
-      display: block;
-      background: #132b1e;
-      border: 1px solid #10b981;
-      color: #34d399;
-    }
-
-    .pairing-status-box.error {
-      display: block;
-      background: #2b1313;
-      border: 1px solid #ef4444;
-      color: #fca5a5;
-    }
-
-    /* GRID THỐNG KÊ */
-    .metrics-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-      gap: 14px;
-      margin-top: 16px;
-    }
-
-    .metric-card {
-      background: var(--card);
+    /* GLASS CARD */
+    .glass-card {
+      background: var(--surface);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
       border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 16px;
+      border-radius: 22px;
+      padding: 24px 20px;
+      box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.65);
+    }
+
+    .tab-view {
+      display: none;
+      flex-direction: column;
+      gap: 16px;
+      animation: fadeIn 0.25s ease;
+    }
+
+    .tab-view.active {
+      display: flex;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* PIN GATE */
+    .pin-box {
       text-align: center;
     }
 
-    .metric-title {
-      font-size: 0.8rem;
-      color: var(--text-muted);
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    .metric-val {
-      font-size: 1.8rem;
+    .pin-title {
+      font-size: 1.15rem;
       font-weight: 800;
-      margin: 8px 0;
       color: #fff;
     }
 
-    .metric-sub {
+    .pin-subtitle {
       font-size: 0.78rem;
       color: var(--text-muted);
+      margin-top: 4px;
+      margin-bottom: 20px;
     }
 
-    /* PHÂN TÍCH TỶ LỆ THANH */
-    .bar-container {
-      background: #0f172a;
-      border-radius: 6px;
-      height: 14px;
+    /* PIN DOTS INDICATOR */
+    .pin-dots {
       display: flex;
-      overflow: hidden;
-      margin: 14px 0 8px 0;
+      justify-content: center;
+      gap: 16px;
+      margin-bottom: 24px;
     }
 
-    .bar-study {
-      background: #10b981;
-      transition: width 0.3s ease;
+    .pin-dot {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      border: 2px solid #475569;
+      background: transparent;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
-    .bar-game {
-      background: #ef4444;
-      transition: width 0.3s ease;
+    .pin-dot.filled {
+      border-color: var(--warning);
+      background: var(--warning);
+      box-shadow: 0 0 12px var(--glow-gold);
+      transform: scale(1.15);
     }
 
-    .legend-row {
+    /* TACTILE NUMPAD */
+    .numpad {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      max-width: 280px;
+      margin: 0 auto;
+    }
+
+    .num-key {
+      height: 56px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: rgba(30, 41, 59, 0.6);
+      color: #fff;
+      font-size: 1.35rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+      outline: none;
+      user-select: none;
+    }
+
+    .num-key:active {
+      background: var(--primary);
+      transform: scale(0.92);
+      border-color: transparent;
+    }
+
+    .num-key.action-key {
+      background: transparent;
+      border: none;
+      font-size: 1.1rem;
+      color: var(--text-muted);
+    }
+
+    .num-key.action-key:active {
+      background: rgba(239, 68, 68, 0.2);
+      color: #fca5a5;
+    }
+
+    /* PARENT HUB BANNER */
+    .family-code-banner {
+      background: linear-gradient(135deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.95));
+      border: 1.5px dashed rgba(245, 158, 11, 0.45);
+      border-radius: 18px;
+      padding: 18px;
+      text-align: center;
+    }
+
+    .family-code-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: #fcd34d;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+
+    .family-code-value {
+      font-size: 2.3rem;
+      font-weight: 900;
+      color: #fbbf24;
+      letter-spacing: 3px;
+      margin: 6px 0;
+      text-shadow: 0 2px 14px rgba(245, 158, 11, 0.35);
+    }
+
+    .btn-pill {
+      width: 100%;
+      height: 50px;
+      border-radius: 25px;
+      border: none;
+      background: var(--primary);
+      color: #fff;
+      font-size: 0.92rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 4px 14px var(--glow-blue);
+      transition: all 0.2s;
+    }
+
+    .btn-pill:active {
+      transform: scale(0.98);
+    }
+
+    .btn-copy {
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      color: #fbbf24;
+      padding: 7px 18px;
+      border-radius: 9999px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+
+    .btn-copy:active {
+      transform: scale(0.95);
+    }
+
+    .badge-paired {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #34d399;
+      padding: 5px 12px;
+      border-radius: 9999px;
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+    }
+
+    .status-row {
       display: flex;
       justify-content: space-between;
-      font-size: 0.8rem;
-      color: var(--text-muted);
+      align-items: center;
+      padding: 14px 16px;
+      background: rgba(15, 23, 42, 0.7);
+      border-radius: 14px;
+      border: 1px solid var(--border);
     }
 
-    .device-info-table {
+    .btn-danger-pill {
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      color: #fca5a5;
+    }
+
+    .btn-danger-pill:active {
+      background: #ef4444;
+      color: #fff;
+    }
+
+    /* MODAL */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(7, 9, 14, 0.88);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      z-index: 100;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: #111827;
+      border: 1px solid var(--border);
+      border-radius: 22px;
       width: 100%;
-      border-collapse: collapse;
-      margin-top: 14px;
-      font-size: 0.88rem;
+      max-width: 380px;
+      padding: 26px;
+      text-align: center;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.75);
     }
 
-    .device-info-table td {
-      padding: 8px 12px;
-      border-bottom: 1px solid var(--border);
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3.5px solid rgba(255, 255, 255, 0.1);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 12px auto;
     }
 
-    .device-info-table td:first-child {
-      color: var(--text-muted);
-      width: 35%;
+    @keyframes spin {
+      to { transform: rotate(360deg); }
     }
 
-    .device-info-table td:last-child {
-      font-weight: 600;
+    .shake {
+      animation: shake 0.4s ease-in-out;
+    }
+
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      20%, 60% { transform: translateX(-8px); }
+      40%, 80% { transform: translateX(8px); }
     }
   </style>
 </head>
 <body>
 
-  <div class="container">
-    <!-- HEADER -->
-    <header class="header">
-      <div class="brand">
-        <h1>🛡️ CVA-SmartGuardian</h1>
-        <p>Bảng Điều Khiển Phụ Huynh & Cổng Ghép Đôi Cloud (Đồng bộ thời gian thực)</p>
+  <div class="app-shell">
+    
+    <!-- TOP HEADER -->
+    <header class="top-bar">
+      <div class="brand-group">
+        <div class="brand-icon">🛡️</div>
+        <div class="brand-text">
+          <h1>CVA-SmartGuardian</h1>
+          <p>Hệ Sinh Thái Đồng Hành Số</p>
+        </div>
       </div>
-      <div class="cloud-pill" id="cloudPill">
-        <span class="dot"></span>
-        <span id="cloudStatusText">Firebase Cloud: Đang kết nối...</span>
+      <div class="cloud-badge" id="cloudBadge">
+        <span class="cloud-dot"></span>
+        <span id="cloudStatusText">Cloud Trực Tuyến</span>
       </div>
     </header>
 
-    <!-- DOWNLOAD APK CARD -->
-    <section class="download-card">
-      <div class="download-info">
-        <h2>📥 Ứng Dụng Học Sinh (Bản v1.0.2 Đã Ký Keystore)</h2>
-        <p>Giao diện mở lần đầu siêu gọn chuẩn quốc tế &amp; tốc độ ghép đôi tức thì &lt; 200ms.</p>
-        <p style="font-size: 0.75rem; color: #93c5fd; margin-top: 4px;">
-          SHA-256: <code>911f79309a42fe75a96f2c7ce0f80843...</code> • Kích thước: 5.26 MB
-        </p>
-      </div>
-      <a href="./apk/CVA-SmartGuardian-v1.0.apk" download class="btn-download">
-        ⬇️ TẢI FILE APK (v1.0.2)
-      </a>
-    </section>
+    <!-- 2 TABS SELECTOR (PHỤ HUYNH VS HỌC SINH) -->
+    <nav class="segmented-control">
+      <button type="button" class="tab-btn active" id="tabBtnParent">
+        <span>👨‍👩‍👧</span> Phụ Huynh
+      </button>
+      <button type="button" class="tab-btn" id="tabBtnStudent">
+        <span>🎒</span> Học Sinh
+      </button>
+    </nav>
 
-    <!-- SECTION 1: GHÉP ĐÔI THIẾT BỊ -->
-    <section class="section-card">
-      <div class="section-title">
-        <span>🔗</span>
-        <span>1. Đăng Nhập &amp; Ghép Đôi Điện Thoại Của Con</span>
-      </div>
+    <!-- ============================================================== -->
+    <!-- TAB 1: PHỤ HUYNH VIEW                                          -->
+    <!-- ============================================================== -->
+    <main class="tab-view active" id="viewParent">
 
-      <!-- BANNER MÃ GIA ĐÌNH CẤP CHO HỌC SINH -->
-      <div style="background: #1e293b; border: 1px dashed #3b82f6; border-radius: 10px; padding: 14px 18px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-        <div>
-          <div style="font-size: 0.8rem; color: #93c5fd; font-weight: 600;">MÃ GHÉP ĐÔI CHO CON NHẬP TRÊN APP:</div>
-          <div id="dispFamilyCode" style="font-size: 1.6rem; font-weight: 800; color: #fbbf24; letter-spacing: 2px;">CVA-8A20</div>
-          <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">
-            Đọc mã này cho con nhập vào ô "KẾT NỐI VỚI PHỤ HUYNH" trên màn hình điện thoại
+      <!-- GIAO DIỆN 1A: MÀN HÌNH NHẬP MÃ PIN BẢO MẬT (KHI CHƯA MỞ KHÓA) -->
+      <section class="glass-card" id="cardPinGate">
+        <div class="pin-box">
+          <div style="font-size: 2.2rem; margin-bottom: 6px;">🔐</div>
+          <h2 class="pin-title">Đăng Nhập Phụ Huynh</h2>
+          <p class="pin-subtitle">Nhập mã PIN 4 số để vào bảng điều khiển gia đình</p>
+          
+          <!-- 4 CHẤM PIN TRÒN PHÁT SÁNG -->
+          <div class="pin-dots" id="pinDotsRow">
+            <div class="pin-dot" id="dot1"></div>
+            <div class="pin-dot" id="dot2"></div>
+            <div class="pin-dot" id="dot3"></div>
+            <div class="pin-dot" id="dot4"></div>
+          </div>
+
+          <div id="pinErrorMsg" style="color: #f87171; font-size: 0.78rem; font-weight: 600; min-height: 20px; margin-bottom: 14px;"></div>
+
+          <!-- BÀN PHÍM CẢM ỨNG TRÒN TO -->
+          <div class="numpad">
+            <button type="button" class="num-key" onclick="handleNumPress('1')">1</button>
+            <button type="button" class="num-key" onclick="handleNumPress('2')">2</button>
+            <button type="button" class="num-key" onclick="handleNumPress('3')">3</button>
+            <button type="button" class="num-key" onclick="handleNumPress('4')">4</button>
+            <button type="button" class="num-key" onclick="handleNumPress('5')">5</button>
+            <button type="button" class="num-key" onclick="handleNumPress('6')">6</button>
+            <button type="button" class="num-key" onclick="handleNumPress('7')">7</button>
+            <button type="button" class="num-key" onclick="handleNumPress('8')">8</button>
+            <button type="button" class="num-key" onclick="handleNumPress('9')">9</button>
+            <button type="button" class="num-key action-key" onclick="handleClearPin()">Xóa</button>
+            <button type="button" class="num-key" onclick="handleNumPress('0')">0</button>
+            <button type="button" class="num-key action-key" onclick="handleBackspacePin()">⌫</button>
+          </div>
+
+          <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 16px;">
+            Mã PIN bảo mật mặc định: <strong>1234</strong>
           </div>
         </div>
-        <button type="button" id="btnCopyCode" class="btn-secondary" style="font-size: 0.8rem; padding: 6px 14px; min-height: 36px;">
-          📋 Sao Chép Mã
-        </button>
-      </div>
+      </section>
 
-      <p style="font-size: 0.84rem; color: var(--text-muted); line-height: 1.5;">
-        Hoặc nếu con đọc mã thiết bị từ app cho bạn (VD: <code>CVA-5E9C</code>), hãy nhập vào ô dưới đây rồi bấm <strong>Xác Nhận</strong>:
+      <!-- GIAO DIỆN 1B: BẢNG QUẢN LÝ PHỤ HUYNH (KHI ĐÃ NHẬP ĐÚNG PIN) -->
+      <section class="glass-card" id="cardParentHub" style="display: none;">
+        
+        <!-- THẺ LỜI CHÀO TỐI GIẢN CHUẨN YÊU CẦU -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
+          <div>
+            <div style="font-size: 1.15rem; font-weight: 800; color: #fff;" id="tvParentGreeting">Xin chào ............</div>
+            <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;">Cổng Giám Sát Gia Đình</div>
+          </div>
+          <span class="badge-paired">ĐÃ GHÉP ĐÔI</span>
+        </div>
+
+        <!-- MÃ GHÉP ĐÔI CHO CON NHẬP -->
+        <div class="family-code-banner">
+          <div class="family-code-label">MÃ GHÉP ĐÔI GIA ĐÌNH CẤP CHO CON:</div>
+          <div class="family-code-value" id="dispFamilyPairCode">CVA-8A20</div>
+          <button type="button" class="btn-copy" id="btnCopyFamilyCode">
+            <span>📋</span> Sao Chép Mã Ghép Đôi
+          </button>
+        </div>
+
+        <!-- THÔNG TIN THIẾT BỊ HỌC SINH -->
+        <div style="margin-top: 18px; display: flex; flex-direction: column; gap: 8px;">
+          <div style="font-size: 0.76rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">
+            Thiết Bị Của Con:
+          </div>
+          <div class="status-row">
+            <div>
+              <div style="font-size: 0.88rem; font-weight: 700; color: #fff;" id="childDeviceName">Xiaomi HyperOS</div>
+              <div style="font-size: 0.72rem; color: #34d399;" id="childDeviceState">● Đang hoạt động thời gian thực</div>
+            </div>
+            <span style="font-size: 0.78rem; font-weight: 700; color: #fbbf24;">Android 16</span>
+          </div>
+        </div>
+
+        <!-- TÁC VỤ NGẮT KẾT NỐI (YÊU CẦU XÁC NHẬN PIN) -->
+        <div style="margin-top: 22px;">
+          <button type="button" class="btn-pill btn-danger-pill" id="btnTriggerUnpair">
+            <span>❌</span> Ngắt Kết Nối Thiết Bị Này
+          </button>
+        </div>
+
+      </section>
+
+    </main>
+
+    <!-- ============================================================== -->
+    <!-- TAB 2: HỌC SINH VIEW (CHẾ ĐỘ CHỈ XEM - READ ONLY)              -->
+    <!-- ============================================================== -->
+    <main class="tab-view" id="viewStudent">
+      <section class="glass-card">
+        <div style="text-align: center; padding: 6px 0;">
+          <div style="font-size: 2.2rem; margin-bottom: 6px;">🎒</div>
+          <h2 style="font-size: 1.15rem; font-weight: 800; color: #fff;">Chế Độ Dành Cho Học Sinh</h2>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; margin-bottom: 18px;">
+            Mở ứng dụng trên điện thoại và nhập mã gia đình để bắt đầu rèn luyện
+          </p>
+
+          <div class="family-code-banner" style="border-style: solid; border-color: rgba(59, 130, 246, 0.45);">
+            <div class="family-code-label" style="color: #93c5fd;">MÃ GIA ĐÌNH CỦA BẠN:</div>
+            <div class="family-code-value" style="color: #60a5fa;" id="studentViewFamilyCode">CVA-8A20</div>
+            <span class="badge-paired" style="margin-top: 4px;">ĐÃ GHÉP ĐÔI</span>
+          </div>
+
+          <div style="margin-top: 20px;">
+            <a href="./apk/CVA-SmartGuardian-v1.0.apk" download class="btn-pill" style="text-decoration: none;">
+              <span>⬇️</span> Tải / Cập Nhật App Android (v1.0.2)
+            </a>
+          </div>
+
+          <div style="margin-top: 14px; font-size: 0.72rem; color: var(--text-muted);">
+            Phiên bản đã ký số Keystore • Tự động đồng bộ với máy Phụ huynh
+          </div>
+        </div>
+      </section>
+    </main>
+
+  </div>
+
+  <!-- MODAL XÁC NHẬN MÃ PIN KHI BẤM NGẮT KẾT NỐI -->
+  <div class="modal-overlay" id="unpairConfirmModal">
+    <div class="modal-content">
+      <div style="font-size: 2.2rem; margin-bottom: 6px;">⚠️</div>
+      <h3 style="font-size: 1.15rem; font-weight: 800; color: #fff; margin-bottom: 6px;">Xác Nhận Ngắt Kết Nối</h3>
+      <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 16px;">
+        Vui lòng nhập lại Mã PIN Phụ huynh để xác thực ngắt kết nối với máy con:
       </p>
 
-      <div class="pairing-box">
-        <input type="text" id="inputPairingCode" class="pairing-input" placeholder="NHẬP MÃ (VD: CVA-8A20)" maxlength="10">
-        <button type="button" id="btnPairDevice" class="btn-pair">Xác Nhận Ghép Đôi</button>
-        <button type="button" id="btnRefreshPair" class="btn-secondary">Làm Mới</button>
+      <input type="password" id="modalPinConfirm" maxlength="4" placeholder="Nhập PIN 4 số" style="width: 160px; height: 46px; text-align: center; font-size: 1.3rem; font-weight: 800; border-radius: 12px; background: rgba(15, 23, 42, 0.9); border: 1.5px solid var(--border); color: #fff; outline: none; margin-bottom: 14px;">
+
+      <div id="modalPinError" style="color: #f87171; font-size: 0.75rem; font-weight: 600; min-height: 18px; margin-bottom: 12px;"></div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+        <button type="button" class="btn-pill" id="btnCancelUnpair" style="background: #334155;">Hủy</button>
+        <button type="button" class="btn-pill" id="btnConfirmExecuteUnpair" style="background: #ef4444;">Ngắt Ngay</button>
       </div>
+    </div>
+  </div>
 
-      <div id="pairingStatusBox" class="pairing-status-box"></div>
-    </section>
-
-    <!-- SECTION 2: THỐNG KÊ THỜI GIAN THỰC TỪ ĐIỆN THOẠI CON -->
-    <section class="section-card" id="statsSection" style="opacity: 0.6;">
-      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-        <div class="section-title" style="margin-bottom: 0;">
-          <span>📊</span>
-          <span>2. Thống Kê Thời Gian Thực Từ Điện Thoại Học Sinh</span>
-        </div>
-        <span id="syncTimestamp" style="font-size: 0.78rem; color: var(--text-muted);">Chưa đồng bộ</span>
-      </div>
-
-      <!-- 4 THẺ THỐNG KÊ -->
-      <div class="metrics-grid">
-        <div class="metric-card">
-          <div class="metric-title">Tổng Thời Gian Màn Hình</div>
-          <div class="metric-val" id="tvTotalTime" style="color: #60a5fa;">0h 00p</div>
-          <div class="metric-sub">Hôm nay (Digital Wellbeing)</div>
-        </div>
-
-        <div class="metric-card">
-          <div class="metric-title">Thời Gian Học Tập</div>
-          <div class="metric-val" id="tvStudyTime" style="color: #34d399;">0p</div>
-          <div class="metric-sub">Azota, K12, Duolingo...</div>
-        </div>
-
-        <div class="metric-card">
-          <div class="metric-title">Giải Trí & Mạng Xã Hội</div>
-          <div class="metric-val" id="tvGameTime" style="color: #f87171;">0p</div>
-          <div class="metric-sub">YouTube, TikTok, Games...</div>
-        </div>
-
-        <div class="metric-card">
-          <div class="metric-title">Điểm Cân Bằng Tự Chủ</div>
-          <div class="metric-val" id="tvScore" style="color: #fbbf24;">100</div>
-          <div class="metric-sub" id="tvScoreSub">Thang điểm rèn luyện</div>
-        </div>
-      </div>
-
-      <!-- THANH TỶ LỆ HỌC TẬP VS GIẢI TRÍ -->
-      <div style="margin-top: 18px;">
-        <div style="font-size: 0.82rem; font-weight: 600; color: var(--text-muted); margin-bottom: 4px;">
-          TỶ LỆ PHÂN BỔ: HỌC TẬP (XANH) VS GIẢI TRÍ (ĐỎ)
-        </div>
-        <div class="bar-container">
-          <div id="barStudy" class="bar-study" style="width: 50%;"></div>
-          <div id="barGame" class="bar-game" style="width: 50%;"></div>
-        </div>
-        <div class="legend-row">
-          <span style="color: #34d399;">● Học tập: <strong id="lblStudyRatio">50%</strong></span>
-          <span style="color: #f87171;">● Giải trí: <strong id="lblGameRatio">50%</strong></span>
-        </div>
-      </div>
-
-      <!-- THÔNG TIN THIẾT BỊ ĐÃ KẾT NỐI -->
-      <div style="margin-top: 20px;">
-        <div style="font-size: 0.85rem; font-weight: 700; color: #cbd5e1; margin-bottom: 8px;">
-          📱 CHI TIẾT THIẾT BỊ HỌC SINH ĐANG KẾT NỐI
-        </div>
-        <table class="device-info-table">
-          <tr>
-            <td>Dòng Máy (Model)</td>
-            <td id="infoDeviceModel">Chưa xác định</td>
-          </tr>
-          <tr>
-            <td>Hệ Điều Hành</td>
-            <td id="infoAndroidVer">Android --</td>
-          </tr>
-          <tr>
-            <td>Mã Ghép Đôi</td>
-            <td id="infoPairingCode" style="color: #fbbf24;">--</td>
-          </tr>
-          <tr>
-            <td>Trạng Thái Kết Nối</td>
-            <td id="infoStatus" style="color: #10b981;">Đang chờ dữ liệu...</td>
-          </tr>
-        </table>
-      </div>
-
-      <div style="margin-top: 16px; text-align: right;">
-        <button type="button" id="btnUnpair" class="btn-secondary" style="background: #451a1a; color: #fca5a5; font-size: 0.8rem; padding: 6px 14px; min-height: 36px;">
-          ❌ Ngắt Ghép Đôi Thiết Bị Này
-        </button>
-      </div>
-    </section>
+  <!-- MODAL LOADING KHI ĐANG NGẮT TRÊN CLOUD -->
+  <div class="modal-overlay" id="loadingOverlay">
+    <div class="modal-content">
+      <div class="spinner"></div>
+      <h3 style="font-size: 1.05rem; font-weight: 800; color: #fff; margin-top: 10px;" id="loadingTitle">Đang Ngắt Kết Nối...</h3>
+      <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 4px;" id="loadingSub">Đang đồng bộ lệnh ngắt tới điện thoại học sinh...</p>
+    </div>
   </div>
 
   <script>
     const FIREBASE_BASE = "https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app";
+    const DEFAULT_PIN = "1234";
 
-    const cloudPill = document.getElementById('cloudPill');
-    const cloudStatusText = document.getElementById('cloudStatusText');
-    const inputPairingCode = document.getElementById('inputPairingCode');
-    const btnPairDevice = document.getElementById('btnPairDevice');
-    const btnRefreshPair = document.getElementById('btnRefreshPair');
-    const pairingStatusBox = document.getElementById('pairingStatusBox');
+    const tabBtnParent = document.getElementById('tabBtnParent');
+    const tabBtnStudent = document.getElementById('tabBtnStudent');
+    const viewParent = document.getElementById('viewParent');
+    const viewStudent = document.getElementById('viewStudent');
 
-    const statsSection = document.getElementById('statsSection');
-    const syncTimestamp = document.getElementById('syncTimestamp');
-    const tvTotalTime = document.getElementById('tvTotalTime');
-    const tvStudyTime = document.getElementById('tvStudyTime');
-    const tvGameTime = document.getElementById('tvGameTime');
-    const tvScore = document.getElementById('tvScore');
-    const tvScoreSub = document.getElementById('tvScoreSub');
-    const barStudy = document.getElementById('barStudy');
-    const barGame = document.getElementById('barGame');
-    const lblStudyRatio = document.getElementById('lblStudyRatio');
-    const lblGameRatio = document.getElementById('lblGameRatio');
+    const cardPinGate = document.getElementById('cardPinGate');
+    const cardParentHub = document.getElementById('cardParentHub');
+    const pinDotsRow = document.getElementById('pinDotsRow');
+    const pinErrorMsg = document.getElementById('pinErrorMsg');
 
-    const infoDeviceModel = document.getElementById('infoDeviceModel');
-    const infoAndroidVer = document.getElementById('infoAndroidVer');
-    const infoPairingCode = document.getElementById('infoPairingCode');
-    const infoStatus = document.getElementById('infoStatus');
-    const btnUnpair = document.getElementById('btnUnpair');
-    const dispFamilyCode = document.getElementById('dispFamilyCode');
-    const btnCopyCode = document.getElementById('btnCopyCode');
+    const dispFamilyPairCode = document.getElementById('dispFamilyPairCode');
+    const studentViewFamilyCode = document.getElementById('studentViewFamilyCode');
+    const btnCopyFamilyCode = document.getElementById('btnCopyFamilyCode');
+    const btnTriggerUnpair = document.getElementById('btnTriggerUnpair');
 
+    const unpairConfirmModal = document.getElementById('unpairConfirmModal');
+    const modalPinConfirm = document.getElementById('modalPinConfirm');
+    const modalPinError = document.getElementById('modalPinError');
+    const btnCancelUnpair = document.getElementById('btnCancelUnpair');
+    const btnConfirmExecuteUnpair = document.getElementById('btnConfirmExecuteUnpair');
+    const loadingOverlay = document.getElementById('loadingOverlay');
+
+    let currentPinInput = '';
     let currentPairedCode = localStorage.getItem('cva_paired_code') || 'CVA-8A20';
-    let pollingInterval = null;
+    let isParentUnlocked = sessionStorage.getItem('cva_parent_unlocked') === 'true';
 
-    if (dispFamilyCode) dispFamilyCode.textContent = currentPairedCode;
-    if (inputPairingCode) inputPairingCode.value = currentPairedCode;
+    dispFamilyPairCode.textContent = currentPairedCode;
+    studentViewFamilyCode.textContent = currentPairedCode;
 
-    if (btnCopyCode) {
-      btnCopyCode.addEventListener('click', () => {
-        navigator.clipboard.writeText(dispFamilyCode.textContent.trim());
-        alert(`Đã sao chép mã ${dispFamilyCode.textContent.trim()}! Hãy đọc mã này cho con nhập vào điện thoại.`);
-      });
-    }
+    // 1. TAB SWITCHER
+    tabBtnParent.addEventListener('click', () => {
+      tabBtnParent.classList.add('active');
+      tabBtnStudent.classList.remove('active');
+      viewParent.classList.add('active');
+      viewStudent.classList.remove('active');
+    });
 
-    // 1. Kiểm tra kết nối Firebase Realtime Database
-    async function checkFirebaseHealth() {
-      const start = performance.now();
-      try {
-        const resp = await fetch(`${FIREBASE_BASE}/.json?shallow=true`, { cache: 'no-cache' });
-        const latency = Math.round(performance.now() - start);
-        if (resp.ok) {
-          cloudPill.style.background = '#132b1e';
-          cloudPill.style.borderColor = '#059669';
-          cloudStatusText.textContent = `Firebase Cloud: Trực tuyến (${latency}ms)`;
+    tabBtnStudent.addEventListener('click', () => {
+      tabBtnStudent.classList.add('active');
+      tabBtnParent.classList.remove('active');
+      viewStudent.classList.add('active');
+      viewParent.classList.remove('active');
+    });
+
+    // 2. PIN NUMPAD INTERACTION
+    function updatePinDotsUI() {
+      for (let i = 1; i <= 4; i++) {
+        const dot = document.getElementById(`dot${i}`);
+        if (i <= currentPinInput.length) {
+          dot.classList.add('filled');
         } else {
-          cloudStatusText.textContent = `Firebase Cloud: HTTP ${resp.status}`;
+          dot.classList.remove('filled');
         }
-      } catch (err) {
-        cloudPill.style.background = '#2b1313';
-        cloudPill.style.borderColor = '#ef4444';
-        cloudStatusText.textContent = 'Firebase Cloud: Mất kết nối';
       }
     }
 
-    // 2. Thực hiện ghép đôi thiết bị
-    async function handlePairDevice() {
-      const code = inputPairingCode.value.trim().toUpperCase();
-      if (!code) {
-        showPairingStatus('Vui lòng nhập mã ghép đôi (Ví dụ: CVA-8A20)', 'error');
+    function handleNumPress(digit) {
+      if (currentPinInput.length < 4) {
+        currentPinInput += digit;
+        updatePinDotsUI();
+        if (currentPinInput.length === 4) {
+          setTimeout(verifyPin, 150);
+        }
+      }
+    }
+
+    function handleClearPin() {
+      currentPinInput = '';
+      updatePinDotsUI();
+      pinErrorMsg.textContent = '';
+    }
+
+    function handleBackspacePin() {
+      if (currentPinInput.length > 0) {
+        currentPinInput = currentPinInput.slice(0, -1);
+        updatePinDotsUI();
+      }
+    }
+
+    function verifyPin() {
+      if (currentPinInput === DEFAULT_PIN) {
+        pinErrorMsg.textContent = '';
+        isParentUnlocked = true;
+        sessionStorage.setItem('cva_parent_unlocked', 'true');
+        cardPinGate.style.display = 'none';
+        cardParentHub.style.display = 'block';
+      } else {
+        pinErrorMsg.textContent = '❌ Mã PIN không đúng! Vui lòng thử lại.';
+        pinDotsRow.classList.add('shake');
+        setTimeout(() => pinDotsRow.classList.remove('shake'), 450);
+        setTimeout(handleClearPin, 450);
+      }
+    }
+
+    if (isParentUnlocked) {
+      cardPinGate.style.display = 'none';
+      cardParentHub.style.display = 'block';
+    }
+
+    // 3. COPY CODE
+    btnCopyFamilyCode.addEventListener('click', () => {
+      navigator.clipboard.writeText(currentPairedCode);
+      btnCopyFamilyCode.innerHTML = '<span>✅</span> Đã Sao Chép!';
+      setTimeout(() => {
+        btnCopyFamilyCode.innerHTML = '<span>📋</span> Sao Chép Mã Ghép Đôi';
+      }, 2000);
+    });
+
+    // 4. UNPAIR FLOW
+    btnTriggerUnpair.addEventListener('click', () => {
+      unpairConfirmModal.classList.add('active');
+      modalPinConfirm.value = '';
+      modalPinError.textContent = '';
+      modalPinConfirm.focus();
+    });
+
+    btnCancelUnpair.addEventListener('click', () => {
+      unpairConfirmModal.classList.remove('active');
+    });
+
+    btnConfirmExecuteUnpair.addEventListener('click', async () => {
+      const pin = modalPinConfirm.value.trim();
+      if (pin !== DEFAULT_PIN) {
+        modalPinError.textContent = 'Mã PIN sai! Không thể ngắt kết nối.';
         return;
       }
 
-      btnPairDevice.disabled = true;
-      btnPairDevice.textContent = 'Đang kiểm tra...';
+      unpairConfirmModal.classList.remove('active');
+      loadingOverlay.classList.add('active');
 
       try {
-        const resp = await fetch(`${FIREBASE_BASE}/pairings/${code}.json`, { cache: 'no-cache' });
-        const data = await resp.json();
-
-        if (!data) {
-          showPairingStatus(`Không tìm thấy thiết bị với mã "${code}". Hãy kiểm tra mã hiển thị trên màn hình ứng dụng điện thoại.`, 'error');
-          btnPairDevice.disabled = false;
-          btnPairDevice.textContent = 'Xác Nhận Ghép Đôi';
-          return;
+        if (currentPairedCode) {
+          await fetch(`${FIREBASE_BASE}/pairings/${currentPairedCode}.json`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              status: 'REVOKED',
+              revokedAt: Date.now(),
+              revokedBy: 'PARENT'
+            })
+          });
         }
 
-        // Đánh dấu paired trên Firebase
-        await fetch(`${FIREBASE_BASE}/pairings/${code}.json`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            status: 'paired',
-            pairedAt: Date.now()
-          })
-        });
+        setTimeout(() => {
+          loadingOverlay.classList.remove('active');
+          alert('✅ Đã ngắt kết nối thành công! Máy học sinh sẽ tự động đăng xuất.');
+          location.reload();
+        }, 1200);
 
-        currentPairedCode = code;
-        localStorage.setItem('cva_paired_code', code);
-        showPairingStatus(`✅ Ghép đôi thành công với thiết bị: ${data.deviceModel || 'Điện thoại học sinh'} (${data.androidVersion || ''})`, 'paired');
-        
-        startDataSync();
       } catch (err) {
-        showPairingStatus(`Lỗi kết nối Firebase: ${err.message}`, 'error');
-      } finally {
-        btnPairDevice.disabled = false;
-        btnPairDevice.textContent = 'Xác Nhận Ghép Đôi';
+        loadingOverlay.classList.remove('active');
+        alert('Lỗi kết nối Firebase: ' + err.message);
       }
-    }
+    });
 
-    function showPairingStatus(msg, type) {
-      pairingStatusBox.className = `pairing-status-box ${type}`;
-      pairingStatusBox.innerHTML = msg;
-    }
-
-    // 3. Đồng bộ dữ liệu thống kê từ thiết bị
-    async function fetchDeviceStats() {
-      if (!currentPairedCode) return;
-
+    // 5. CLOUD HEALTH CHECK
+    async function checkCloudStatus() {
       try {
-        const resp = await fetch(`${FIREBASE_BASE}/devices/${currentPairedCode}.json`, { cache: 'no-cache' });
-        const data = await resp.json();
-
-        if (data) {
-          statsSection.style.opacity = '1';
-          
-          const totalM = data.totalMinutes || 0;
-          const studyM = data.studyMinutes || 0;
-          const gameM = data.gameAndSocialMinutes || 0;
-          const score = data.balanceScore !== undefined ? data.balanceScore : 100;
-
-          const h = Math.floor(totalM / 60);
-          const m = totalM % 60;
-          tvTotalTime.textContent = `${h}h ${m < 10 ? '0' : ''}${m}p`;
-          tvStudyTime.textContent = `${studyM}p`;
-          tvGameTime.textContent = `${gameM}p`;
-          tvScore.textContent = score;
-
-          if (score >= 70) {
-            tvScore.style.color = '#34d399';
-            tvScoreSub.textContent = '✓ Xuất sắc: Tự chủ số tốt';
-          } else if (score >= 50) {
-            tvScore.style.color = '#fbbf24';
-            tvScoreSub.textContent = 'Cân bằng tạm ổn';
-          } else {
-            tvScore.style.color = '#f87171';
-            tvScoreSub.textContent = '⚠️ Cần điều chỉnh thời gian giải trí';
-          }
-
-          const sum = studyM + gameM;
-          if (sum > 0) {
-            const studyPct = Math.round((studyM / sum) * 100);
-            const gamePct = 100 - studyPct;
-            barStudy.style.width = `${studyPct}%`;
-            barGame.style.width = `${gamePct}%`;
-            lblStudyRatio.textContent = `${studyPct}%`;
-            lblGameRatio.textContent = `${gamePct}%`;
-          }
-
-          infoDeviceModel.textContent = data.deviceModel || 'Android Device';
-          infoAndroidVer.textContent = data.androidVersion || 'Android';
-          infoPairingCode.textContent = currentPairedCode;
-          infoStatus.innerHTML = '<span style="color: #10b981;">● Trực tuyến (Thời gian thực)</span>';
-
-          const now = new Date();
-          syncTimestamp.textContent = `Đồng bộ: ${now.toLocaleTimeString('vi-VN')}`;
+        const start = performance.now();
+        const res = await fetch(`${FIREBASE_BASE}/.json?shallow=true`, { cache: 'no-cache' });
+        const latency = Math.round(performance.now() - start);
+        if (res.ok) {
+          document.getElementById('cloudStatusText').textContent = `Cloud Trực Tuyến (${latency}ms)`;
         }
       } catch (e) {
-        console.warn('Lỗi đọc dữ liệu thiết bị:', e);
+        document.getElementById('cloudStatusText').textContent = 'Cloud Mất Kết Nối';
       }
     }
-
-    function startDataSync() {
-      if (pollingInterval) clearInterval(pollingInterval);
-      fetchDeviceStats();
-      pollingInterval = setInterval(fetchDeviceStats, 2000);
-    }
-
-    // 4. Hủy ghép đôi
-    btnUnpair.addEventListener('click', () => {
-      if (confirm('Bạn có chắc chắn muốn ngắt ghép đôi với thiết bị này không?')) {
-        currentPairedCode = '';
-        localStorage.removeItem('cva_paired_code');
-        inputPairingCode.value = '';
-        pairingStatusBox.style.display = 'none';
-        statsSection.style.opacity = '0.6';
-        if (pollingInterval) clearInterval(pollingInterval);
-        alert('Đã ngắt ghép đôi.');
-      }
-    });
-
-    btnPairDevice.addEventListener('click', handlePairDevice);
-    btnRefreshPair.addEventListener('click', () => {
-      checkFirebaseHealth();
-      if (currentPairedCode) fetchDeviceStats();
-    });
-
-    // Tự động khôi phục nếu đã từng ghép đôi
-    window.addEventListener('DOMContentLoaded', () => {
-      checkFirebaseHealth();
-      setInterval(checkFirebaseHealth, 10000);
-
-      if (currentPairedCode) {
-        inputPairingCode.value = currentPairedCode;
-        showPairingStatus(`✅ Đang ghép đôi với mã: <strong>${currentPairedCode}</strong>`, 'paired');
-        startDataSync();
-      }
-    });
+    checkCloudStatus();
+    setInterval(checkCloudStatus, 15000);
   </script>
 </body>
 </html>

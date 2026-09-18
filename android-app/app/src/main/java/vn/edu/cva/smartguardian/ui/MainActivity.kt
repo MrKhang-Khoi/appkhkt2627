@@ -28,6 +28,8 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -74,6 +76,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnDashboardXiaomiHelp: TextView
     private lateinit var btnCheckUpdate: Button
 
+    private lateinit var layoutUnpairOverlay: View
+    private var unpairJob: Job? = null
     private var isVpnRunning = false
     private val firebaseClient = OkHttpClient.Builder()
         .connectTimeout(8, TimeUnit.SECONDS)
@@ -183,6 +187,8 @@ class MainActivity : AppCompatActivity() {
         btnDashboardXiaomiHelp = findViewById(R.id.btnDashboardXiaomiHelp)
         btnCheckUpdate = findViewById(R.id.btnCheckUpdate)
 
+        layoutUnpairOverlay = findViewById(R.id.layoutUnpairOverlay)
+
         val myPin = getMyDevicePin()
         tvMyDevicePin.text = "Mã thiết bị của máy này: $myPin"
     }
@@ -194,20 +200,86 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showOnboardingScreen() {
+        unpairJob?.cancel()
         layoutOnboarding.visibility = View.VISIBLE
         layoutDashboard.visibility = View.GONE
+        layoutUnpairOverlay.visibility = View.GONE
+        etPairingCodeInput.text?.clear()
+        tvPairingStatus.visibility = View.GONE
+        pbPairingLoading.visibility = View.GONE
     }
 
     private fun showDashboardScreen() {
         layoutOnboarding.visibility = View.GONE
         layoutDashboard.visibility = View.VISIBLE
+        layoutUnpairOverlay.visibility = View.GONE
 
-        val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
-        val pairedCode = prefs.getString("paired_code", getMyDevicePin()) ?: getMyDevicePin()
-        tvCompanionBadge.text = "🛡️ Đã kết nối Phụ huynh ($pairedCode) • Đang đồng hành"
-        tvLiveStatusBadge.text = "ĐANG ĐỒNG HÀNH"
+        tvGreeting.text = "Xin chào ............"
+        tvCompanionBadge.text = "Cổng Rèn Luyện Tự Chủ Số"
+        tvLiveStatusBadge.text = "ĐÃ GHÉP ĐÔI"
 
         loadUsageStatsFromPrefs()
+        startUnpairListener()
+    }
+
+    private fun startUnpairListener() {
+        unpairJob?.cancel()
+        unpairJob = lifecycleScope.launch(Dispatchers.IO) {
+            val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
+            while (prefs.getBoolean("is_paired", false)) {
+                val pairedCode = prefs.getString("paired_code", null) ?: break
+                try {
+                    val req = Request.Builder()
+                        .url("$FIREBASE_RTDB_URL/pairings/$pairedCode.json")
+                        .build()
+                    val resp = firebaseClient.newCall(req).execute()
+                    if (resp.isSuccessful) {
+                        val body = resp.body?.string()
+                        if (!body.isNullOrEmpty() && body != "null") {
+                            val json = JSONObject(body)
+                            val status = json.optString("status")
+                            if (status.equals("REVOKED", ignoreCase = true) || status.equals("DISCONNECTED", ignoreCase = true)) {
+                                withContext(Dispatchers.Main) {
+                                    handleRevokedByParent()
+                                }
+                                break
+                            }
+                        }
+                    }
+                    resp.close()
+                } catch (e: Exception) {
+                    Log.w("MainActivity", "Unpair poll: ${e.message}")
+                }
+                delay(2000)
+            }
+        }
+    }
+
+    private fun handleRevokedByParent() {
+        layoutUnpairOverlay.visibility = View.VISIBLE
+
+        try {
+            val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator?.vibrate(android.os.VibrationEffect.createOneShot(300, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator?.vibrate(300)
+            }
+        } catch (_: Exception) {}
+
+        lifecycleScope.launch(Dispatchers.Main) {
+            delay(1800)
+            val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit()
+                .putBoolean("is_paired", false)
+                .remove("paired_code")
+                .apply()
+
+            layoutUnpairOverlay.visibility = View.GONE
+            showOnboardingScreen()
+            Toast.makeText(this@MainActivity, "Phụ huynh đã ngắt kết nối. Thiết bị sẵn sàng ghép đôi mới.", Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun setupListeners() {
