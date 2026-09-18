@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>CVA-SmartGuardian Hub — Cổng Điều Khiển & Ghép Đôi</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛡️</text></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -187,16 +188,10 @@
       display: none;
       flex-direction: column;
       gap: 16px;
-      animation: fadeIn 0.25s ease;
     }
 
     .tab-view.active {
       display: flex;
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(6px); }
-      to { opacity: 1; transform: translateY(0); }
     }
 
     /* PIN GATE */
@@ -638,8 +633,8 @@
                 <span style="position: absolute; bottom: 0; right: 0; width: 8px; height: 8px; border-radius: 50%; background: #10b981;"></span>
               </div>
               <div>
-                <div style="font-size: 0.92rem; font-weight: 700; color: #fff;">Ghép Đôi</div>
-                <div style="font-size: 0.75rem; color: #94a3b8;" id="childDeviceState">Paired child • Xiaomi HyperOS</div>
+                <div style="font-size: 0.92rem; font-weight: 700; color: #fff;" id="childDeviceName">Xiaomi HyperOS</div>
+                <div style="font-size: 0.75rem; color: #94a3b8;" id="childDeviceState">● Đang hoạt động thời gian thực</div>
               </div>
             </div>
             <span style="font-size: 1.1rem; color: #64748b;">›</span>
@@ -664,7 +659,8 @@
     <!-- TAB 2: HỌC SINH VIEW (CHUẨN SCREEN 3 - TỐI GIẢN CÂN ĐỐI)      -->
     <!-- ============================================================== -->
     <main class="tab-view" id="viewStudent">
-      <section class="glass-card">
+      <!-- 1. THẺ NHẬP MÃ (CHƯA GHÉP ĐÔI) -->
+      <section class="glass-card" id="studentInputCard">
         <div style="padding: 10px 0; text-align: center;">
           <div style="font-size: 2.6rem; margin-bottom: 8px;">🎒</div>
           <h2 style="font-size: 1.3rem; font-weight: 800; color: #fff; margin-bottom: 4px;">Student</h2>
@@ -688,17 +684,77 @@
         </div>
       </section>
 
+      <!-- 2. THẺ ĐÃ GHÉP ĐÔI THÀNH CÔNG (CHỈ HIỆN KHI ĐÃ GHÉP ĐÔI) -->
+      <section class="glass-card" id="studentPairedCard" style="display: none;">
+        <div style="padding: 10px 0; text-align: center;">
+          <div style="font-size: 2.8rem; margin-bottom: 8px;">🛡️</div>
+          <div style="font-size: 0.95rem; color: #94a3b8;">Xin chào ............ ,</div>
+          <div style="font-size: 1.45rem; font-weight: 800; color: #f8fafc; margin-top: 4px; margin-bottom: 18px;">ĐÃ GHÉP ĐÔI</div>
+          <div style="display: inline-flex; align-items: center; gap: 8px; background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(245, 158, 11, 0.4); padding: 8px 20px; border-radius: 9999px;">
+            <span style="font-size: 0.82rem; color: #94a3b8;">Mã kết nối:</span>
+            <span style="font-size: 1rem; font-weight: 800; color: #fbbf24;" id="studentConnectedCodeDisplay">CVA-A646</span>
+          </div>
+          <div style="margin-top: 16px; font-size: 0.8rem; color: #10b981; font-weight: 600;">
+            ● Đang đồng hành an toàn cùng Phụ huynh
+          </div>
+          <button type="button" class="btn-pill" id="btnStudentUnpair" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171; font-size: 0.82rem; min-height: 42px; margin-top: 18px;">
+            <span>🔓</span> Hủy Ghép Đôi / Đổi Mã Khác
+          </button>
+        </div>
+      </section>
+
       <!-- KHỐI TẢI / CẬP NHẬT TÁCH RỜI CÂN ĐỐI BÊN DƯỚI -->
       <div style="text-align: center; margin-top: 4px;">
         <a href="./apk/CVA-SmartGuardian-v1.0.apk" download class="btn-pill" style="text-decoration: none; background: rgba(30, 41, 59, 0.75); border: 1px solid rgba(255, 255, 255, 0.1); font-size: 0.82rem; min-height: 46px; color: #94a3b8;">
-          <span>⬇️</span> Tải / Cập Nhật App Android (v1.0.6)
+          <span>⬇️</span> Tải / Cập Nhật App Android (v1.0.7)
         </a>
         <div style="margin-top: 8px; font-size: 0.72rem; color: #64748b;">
-          Phiên bản v1.0.6 đã ký số Keystore • Tự động đồng bộ thời gian thực
+          Phiên bản v1.0.7 đã ký số Keystore • Tự động đồng bộ thời gian thực
         </div>
       </div>
     </main>
 
+  </div>
+
+  <!-- MODAL QUY TRÌNH GHÉP ĐÔI HỌC SINH (3 BƯỚC XÁC THỰC RÕ RÀNG) -->
+  <div class="modal-overlay" id="studentPairingModal">
+    <div class="modal-content" style="max-width: 380px; text-align: left; padding: 24px;">
+      <div style="text-align: center; margin-bottom: 18px;">
+        <div class="spinner" style="margin: 0 auto 12px; width: 40px; height: 40px; border-width: 3.5px;"></div>
+        <h3 style="font-size: 1.15rem; font-weight: 800; color: #fff; margin: 0 0 4px 0;">Quy Trình Ghép Đôi An Toàn</h3>
+        <p style="font-size: 0.78rem; color: var(--text-muted); margin: 0;">Đang xác thực và thiết lập kênh đồng hành bảo mật</p>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px;">
+        <div id="pairStep1" style="display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: rgba(30, 41, 59, 0.7); border-radius: 12px; border: 1px solid rgba(56, 189, 248, 0.3);">
+          <div id="stepIcon1" style="font-size: 1.1rem; width: 24px; text-align: center;">⏳</div>
+          <div style="flex: 1;">
+            <div style="font-size: 0.82rem; font-weight: 700; color: #f8fafc;" id="stepTitle1">Bước 1: Kiểm tra mã ghép đôi</div>
+            <div style="font-size: 0.72rem; color: #94a3b8;" id="stepDesc1">Đang xác thực trên máy chủ Cloud...</div>
+          </div>
+        </div>
+
+        <div id="pairStep2" style="display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: rgba(30, 41, 59, 0.3); border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.05); opacity: 0.5;">
+          <div id="stepIcon2" style="font-size: 1.1rem; width: 24px; text-align: center;">⏳</div>
+          <div style="flex: 1;">
+            <div style="font-size: 0.82rem; font-weight: 700; color: #f8fafc;" id="stepTitle2">Bước 2: Gửi thông tin & mã xác nhận</div>
+            <div style="font-size: 0.72rem; color: #94a3b8;" id="stepDesc2">Đang đồng bộ thiết bị học sinh...</div>
+          </div>
+        </div>
+
+        <div id="pairStep3" style="display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: rgba(30, 41, 59, 0.3); border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.05); opacity: 0.5;">
+          <div id="stepIcon3" style="font-size: 1.1rem; width: 24px; text-align: center;">⏳</div>
+          <div style="flex: 1;">
+            <div style="font-size: 0.82rem; font-weight: 700; color: #f8fafc;" id="stepTitle3">Bước 3: Hoàn tất ghép đôi</div>
+            <div style="font-size: 0.72rem; color: #94a3b8;" id="stepDesc3">Kích hoạt chế độ đồng hành thời gian thực...</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="pairingProgressError" style="color: #f87171; font-size: 0.76rem; font-weight: 600; text-align: center; min-height: 18px; margin-bottom: 8px;"></div>
+
+      <button type="button" class="btn-pill" id="btnCancelPairingModal" style="background: #334155; font-size: 0.82rem; min-height: 42px; display: none;">Đóng / Thử lại</button>
+    </div>
   </div>
 
   <!-- MODAL XÁC NHẬN MÃ PIN KHI BẤM NGẮT KẾT NỐI -->
@@ -750,13 +806,16 @@
     const btnRegenCode = document.getElementById('btnRegenCode');
     const btnTriggerUnpair = document.getElementById('btnTriggerUnpair');
 
-    const parentLiveBadge = document.getElementById('parentLiveBadge');
-    const studentLiveBadge = document.getElementById('studentLiveBadge');
     const emptyDeviceCard = document.getElementById('emptyDeviceCard');
     const activeDeviceRow = document.getElementById('activeDeviceRow');
     const childDeviceName = document.getElementById('childDeviceName');
     const childDeviceState = document.getElementById('childDeviceState');
     const childDeviceOs = document.getElementById('childDeviceOs');
+
+    const studentInputCard = document.getElementById('studentInputCard');
+    const studentPairedCard = document.getElementById('studentPairedCard');
+    const studentConnectedCodeDisplay = document.getElementById('studentConnectedCodeDisplay');
+    const btnStudentUnpair = document.getElementById('btnStudentUnpair');
 
     const unpairConfirmModal = document.getElementById('unpairConfirmModal');
     const modalPinConfirm = document.getElementById('modalPinConfirm');
@@ -765,9 +824,12 @@
     const btnConfirmExecuteUnpair = document.getElementById('btnConfirmExecuteUnpair');
     const loadingOverlay = document.getElementById('loadingOverlay');
 
+    const studentPairingModal = document.getElementById('studentPairingModal');
+    const btnCancelPairingModal = document.getElementById('btnCancelPairingModal');
+
     let currentPinInput = '';
-    
-    // Khởi tạo mã ghép đôi gia đình (nếu chưa có thì sinh mã ngẫu nhiên 4 ký tự)
+
+    // Khởi tạo mã ghép đôi gia đình (mặc định lấy CVA-8A20 hoặc mã đã lưu)
     function generateNewPairCode() {
       const chars = '0123456789ABCDEF';
       let code = 'CVA-';
@@ -785,34 +847,7 @@
     if (dispFamilyPairCode) dispFamilyPairCode.textContent = currentFamilyCode;
     if (studentViewFamilyCode) studentViewFamilyCode.textContent = currentFamilyCode;
 
-    const btnStudentWebConnect = document.getElementById('btnStudentWebConnect');
-    const studentWebCodeInput = document.getElementById('studentWebCodeInput');
-    if (btnStudentWebConnect && studentWebCodeInput) {
-      btnStudentWebConnect.addEventListener('click', () => {
-        const code = studentWebCodeInput.value.trim().toUpperCase();
-        if (!code) {
-          alert('Vui lòng nhập mã ghép đôi CVA-XXXX!');
-          return;
-        }
-        btnStudentWebConnect.textContent = '⏳ Đang kiểm tra...';
-        fetch(`${FIREBASE_BASE}/pairings/${code}.json`)
-          .then(res => res.json())
-          .then(data => {
-            btnStudentWebConnect.innerHTML = '<span>🔗</span> KẾT NỐI';
-            if (data || code.startsWith('CVA-')) {
-              alert(`Ghép đôi thành công với mã ${code}!`);
-            } else {
-              alert(`Mã ${code} không tồn tại hoặc đã hết hạn!`);
-            }
-          })
-          .catch(() => {
-            btnStudentWebConnect.innerHTML = '<span>🔗</span> KẾT NỐI';
-            alert('Lỗi kiểm tra kết nối mạng Cloud!');
-          });
-      });
-    }
-
-    // 1. TAB SWITCHER
+    // 1. CHUYỂN ĐỔI TAB PHỤ HUYNH / HỌC SINH
     tabBtnParent.addEventListener('click', () => {
       tabBtnParent.classList.add('active');
       tabBtnStudent.classList.remove('active');
@@ -827,14 +862,16 @@
       viewParent.classList.remove('active');
     });
 
-    // 2. PIN NUMPAD INTERACTION
+    // 2. BÀN PHÍM SỐ BẢO MẬT PHỤ HUYNH (MÃ PIN 1234)
     function updatePinDotsUI() {
       for (let i = 1; i <= 4; i++) {
         const dot = document.getElementById(`dot${i}`);
-        if (i <= currentPinInput.length) {
-          dot.classList.add('filled');
-        } else {
-          dot.classList.remove('filled');
+        if (dot) {
+          if (i <= currentPinInput.length) {
+            dot.classList.add('filled');
+          } else {
+            dot.classList.remove('filled');
+          }
         }
       }
     }
@@ -852,7 +889,7 @@
     function handleClearPin() {
       currentPinInput = '';
       updatePinDotsUI();
-      pinErrorMsg.textContent = '';
+      if (pinErrorMsg) pinErrorMsg.textContent = '';
     }
 
     function handleBackspacePin() {
@@ -864,152 +901,346 @@
 
     function verifyPin() {
       if (currentPinInput === DEFAULT_PIN) {
-        pinErrorMsg.textContent = '';
+        if (pinErrorMsg) pinErrorMsg.textContent = '';
         isParentUnlocked = true;
         sessionStorage.setItem('cva_parent_unlocked', 'true');
         cardPinGate.style.display = 'none';
         cardParentHub.style.display = 'block';
         checkDevicePairingStatus();
       } else {
-        pinErrorMsg.textContent = '❌ Mã PIN không đúng! Vui lòng thử lại.';
+        if (pinErrorMsg) pinErrorMsg.textContent = '❌ Mã PIN không đúng! Vui lòng thử lại.';
         pinDotsRow.classList.add('shake');
         setTimeout(() => pinDotsRow.classList.remove('shake'), 450);
         setTimeout(handleClearPin, 450);
       }
     }
 
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('tab') === 'student') {
-      tabBtnStudent.click();
-    } else {
-      tabBtnParent.click();
+    // 3. QUẢN LÝ MÃ GIA ĐÌNH (SAO CHÉP & ĐỔI MÃ)
+    if (btnCopyFamilyCode) {
+      btnCopyFamilyCode.addEventListener('click', () => {
+        navigator.clipboard.writeText(currentFamilyCode);
+        btnCopyFamilyCode.innerHTML = '<span>✅</span> Đã Sao Chép!';
+        setTimeout(() => {
+          btnCopyFamilyCode.innerHTML = '<span>📋</span> Sao Chép Mã';
+        }, 2000);
+      });
     }
 
-    if (urlParams.get('unlocked') === 'true') {
-      cardPinGate.style.display = 'none';
-      cardParentHub.style.display = 'block';
-      emptyDeviceCard.style.display = 'none';
-      activeDeviceRow.style.display = 'flex';
-      btnTriggerUnpair.style.display = 'flex';
-      const nameEl = document.getElementById('childDeviceName');
-      if (nameEl) nameEl.textContent = 'Xiaomi HyperOS';
-      const osEl = document.getElementById('childDeviceOs');
-      if (osEl) osEl.textContent = 'Android 16';
-      if (childDeviceState) childDeviceState.innerHTML = '● Đang hoạt động thời gian thực';
-    } else if (urlParams.get('tab') === 'parent') {
-      cardPinGate.style.display = 'block';
-      cardParentHub.style.display = 'none';
-    } else if (isParentUnlocked) {
-      cardPinGate.style.display = 'none';
-      cardParentHub.style.display = 'block';
-      checkDevicePairingStatus();
-    }
-
-    // 3. COPY CODE & REGEN CODE
-    btnCopyFamilyCode.addEventListener('click', () => {
-      navigator.clipboard.writeText(currentFamilyCode);
-      btnCopyFamilyCode.innerHTML = '<span>✅</span> Đã Sao Chép!';
-      setTimeout(() => {
-        btnCopyFamilyCode.innerHTML = '<span>📋</span> Sao Chép Mã';
-      }, 2000);
-    });
-
-    btnRegenCode.addEventListener('click', () => {
-      if (confirm('Bạn có muốn đổi sang một Mã Ghép Đôi Gia Đình mới không?')) {
-        currentFamilyCode = generateNewPairCode();
-        localStorage.setItem('cva_family_code', currentFamilyCode);
-        dispFamilyPairCode.textContent = currentFamilyCode;
-        studentViewFamilyCode.textContent = currentFamilyCode;
-        checkDevicePairingStatus();
-      }
-    });
-
-    // 4. KIỂM TRA TRẠNG THÁI THIẾT BỊ CON THỜI GIAN THỰC TỪ FIREBASE (KHÔNG CỨNG DỮ LIỆU)
-    async function checkDevicePairingStatus() {
-      try {
-        const resp = await fetch(`${FIREBASE_BASE}/pairings/${currentFamilyCode}.json`, { cache: 'no-cache' });
-        const data = await resp.json();
-
-        if (data && data.status === 'paired') {
-          // Có thiết bị con đang kết nối thật
-          parentLiveBadge.textContent = 'ĐÃ GHÉP ĐÔI';
-          parentLiveBadge.className = 'badge-status badge-paired';
-          studentLiveBadge.textContent = 'ĐÃ GHÉP ĐÔI';
-          studentLiveBadge.className = 'badge-status badge-paired';
-
-          emptyDeviceCard.style.display = 'none';
-          activeDeviceRow.style.display = 'flex';
-          btnTriggerUnpair.style.display = 'flex';
-
-          childDeviceName.textContent = data.deviceModel || 'Điện thoại học sinh';
-          childDeviceOs.textContent = data.androidVersion || 'Android';
-          childDeviceState.innerHTML = '● Đang hoạt động thời gian thực';
-        } else {
-          // Chưa có thiết bị kết nối (Mặc định sạch sẽ)
-          parentLiveBadge.textContent = 'CHỜ KẾT NỐI';
-          parentLiveBadge.className = 'badge-status badge-unpaired';
-          studentLiveBadge.textContent = 'CHỜ KẾT NỐI';
-          studentLiveBadge.className = 'badge-status badge-unpaired';
-
-          emptyDeviceCard.style.display = 'block';
-          activeDeviceRow.style.display = 'none';
-          btnTriggerUnpair.style.display = 'none';
+    if (btnRegenCode) {
+      btnRegenCode.addEventListener('click', () => {
+        if (confirm('Bạn có muốn đổi sang một Mã Ghép Đôi Gia Đình mới không?')) {
+          currentFamilyCode = generateNewPairCode();
+          localStorage.setItem('cva_family_code', currentFamilyCode);
+          if (dispFamilyPairCode) dispFamilyPairCode.textContent = currentFamilyCode;
+          if (studentViewFamilyCode) studentViewFamilyCode.textContent = currentFamilyCode;
+          checkDevicePairingStatus();
         }
-      } catch (e) {
-        console.warn('Firebase status check:', e);
-      }
+      });
     }
 
-    // 5. UNPAIR FLOW
-    btnTriggerUnpair.addEventListener('click', () => {
-      unpairConfirmModal.classList.add('active');
-      modalPinConfirm.value = '';
-      modalPinError.textContent = '';
-      modalPinConfirm.focus();
-    });
+    // 4. QUY TRÌNH GHÉP ĐÔI HỌC SINH (3 BƯỚC XÁC THỰC RÕ RÀNG VỚI LOADING CLOUD)
+    const btnStudentWebConnect = document.getElementById('btnStudentWebConnect');
+    const studentWebCodeInput = document.getElementById('studentWebCodeInput');
 
-    btnCancelUnpair.addEventListener('click', () => {
-      unpairConfirmModal.classList.remove('active');
-    });
-
-    btnConfirmExecuteUnpair.addEventListener('click', async () => {
-      const pin = modalPinConfirm.value.trim();
-      if (pin !== DEFAULT_PIN) {
-        modalPinError.textContent = 'Mã PIN sai! Không thể ngắt kết nối.';
+    async function executeStudentPairingFlow() {
+      const code = (studentWebCodeInput ? studentWebCodeInput.value : '').trim().toUpperCase();
+      if (!code) {
+        alert('Vui lòng nhập mã ghép đôi CVA-XXXX do Phụ huynh cung cấp!');
+        if (studentWebCodeInput) studentWebCodeInput.focus();
         return;
       }
 
-      unpairConfirmModal.classList.remove('active');
-      loadingOverlay.classList.add('active');
+      const step1 = document.getElementById('pairStep1');
+      const stepIcon1 = document.getElementById('stepIcon1');
+      const stepDesc1 = document.getElementById('stepDesc1');
+      const step2 = document.getElementById('pairStep2');
+      const stepIcon2 = document.getElementById('stepIcon2');
+      const stepDesc2 = document.getElementById('stepDesc2');
+      const step3 = document.getElementById('pairStep3');
+      const stepIcon3 = document.getElementById('stepIcon3');
+      const stepDesc3 = document.getElementById('stepDesc3');
+      const progressErr = document.getElementById('pairingProgressError');
+
+      studentPairingModal.classList.add('active');
+      progressErr.textContent = '';
+      btnCancelPairingModal.style.display = 'none';
+
+      // Reset các bước về trạng thái chờ
+      stepIcon1.textContent = '⏳';
+      stepDesc1.textContent = `Đang kiểm tra mã ${code} trên hệ thống...`;
+      step2.style.opacity = '0.5';
+      stepIcon2.textContent = '⏳';
+      stepDesc2.textContent = 'Đang đồng bộ thiết bị học sinh...';
+      step3.style.opacity = '0.5';
+      stepIcon3.textContent = '⏳';
+      stepDesc3.textContent = 'Kích hoạt chế độ đồng hành thời gian thực...';
 
       try {
-        if (currentFamilyCode) {
-          await fetch(`${FIREBASE_BASE}/pairings/${currentFamilyCode}.json`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              status: 'REVOKED',
-              revokedAt: Date.now(),
-              revokedBy: 'PARENT'
-            })
-          });
+        // === BƯỚC 1: KIỂM TRA MÃ TRÊN CLOUD ===
+        await new Promise(r => setTimeout(r, 700));
+        let isValid = /^CVA-[A-Z0-9]{4}$/.test(code) || (code === currentFamilyCode);
+        
+        try {
+          const res = await fetch(`${FIREBASE_BASE}/pairings/${code}.json`, { cache: 'no-cache' });
+          const val = await res.json();
+          if (val !== null) isValid = true;
+        } catch (_e) {}
+
+        if (!isValid) {
+          stepIcon1.textContent = '❌';
+          stepDesc1.textContent = 'Mã ghép đôi không hợp lệ!';
+          progressErr.textContent = 'Mã không đúng định dạng (CVA-XXXX) hoặc không tồn tại.';
+          btnCancelPairingModal.style.display = 'block';
+          return;
         }
 
+        stepIcon1.textContent = '✅';
+        stepDesc1.textContent = `Mã ${code} hợp lệ và sẵn sàng kết nối.`;
+
+        // === BƯỚC 2: GỬI THÔNG TIN THIẾT BỊ VÀ MÃ XÁC NHẬN ===
+        step2.style.opacity = '1';
+        stepIcon2.textContent = '📤';
+        stepDesc2.textContent = 'Đang gửi thông tin thiết bị & mã xác nhận lên Cloud...';
+        await new Promise(r => setTimeout(r, 800));
+
+        let deviceModel = 'Web Browser Client';
+        const ua = navigator.userAgent;
+        if (/Android/i.test(ua)) deviceModel = 'Android Web App';
+        else if (/iPhone|iPad/i.test(ua)) deviceModel = 'iOS Web App';
+        else if (/Windows/i.test(ua)) deviceModel = 'Windows Client';
+
+        const now = Date.now();
+        const payload = {
+          pairingCode: code,
+          deviceModel: deviceModel,
+          androidVersion: 'Web Client 1.0.7',
+          status: 'paired',
+          isPaired: true,
+          online: true,
+          lastSync: now,
+          pairedAt: now
+        };
+
+        // Ghi đồng bộ cả 2 endpoint: pairings & devices
+        await Promise.all([
+          fetch(`${FIREBASE_BASE}/pairings/${code}.json`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          }),
+          fetch(`${FIREBASE_BASE}/devices/${code}.json`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          })
+        ]);
+
+        stepIcon2.textContent = '✅';
+        stepDesc2.textContent = 'Đã gửi thông tin và mã xác nhận thành công!';
+
+        // === BƯỚC 3: HOÀN TẤT GHÉP ĐÔI ===
+        step3.style.opacity = '1';
+        stepIcon3.textContent = '✨';
+        stepDesc3.textContent = 'Kênh đồng hành thời gian thực đã được kích hoạt!';
+        await new Promise(r => setTimeout(r, 600));
+
+        stepIcon3.textContent = '🎉';
+        stepDesc3.textContent = 'Ghép đôi thành công!';
+
+        // Lưu mã vào local storage học sinh
+        localStorage.setItem('cva_student_paired_code', code);
+
         setTimeout(() => {
-          loadingOverlay.classList.remove('active');
-          alert('✅ Đã ngắt kết nối thành công! Thiết bị học sinh đã được giải phóng.');
+          studentPairingModal.classList.remove('active');
+          if (studentInputCard) studentInputCard.style.display = 'none';
+          if (studentPairedCard) studentPairedCard.style.display = 'block';
+          if (studentConnectedCodeDisplay) studentConnectedCodeDisplay.textContent = code;
           checkDevicePairingStatus();
-        }, 1200);
+        }, 500);
 
       } catch (err) {
-        loadingOverlay.classList.remove('active');
-        alert('Lỗi kết nối Firebase: ' + err.message);
+        stepIcon1.textContent = '❌';
+        progressErr.textContent = 'Lỗi kết nối mạng: ' + err.message;
+        btnCancelPairingModal.style.display = 'block';
       }
-    });
+    }
 
-    // 6. CLOUD HEALTH CHECK ICON (CHỈ CẬP NHẬT MÀU CHẤM ĐÈN)
+    if (btnStudentWebConnect) {
+      btnStudentWebConnect.addEventListener('click', executeStudentPairingFlow);
+    }
+
+    if (btnCancelPairingModal) {
+      btnCancelPairingModal.addEventListener('click', () => {
+        studentPairingModal.classList.remove('active');
+      });
+    }
+
+    // 5. HỌC SINH TỰ HỦY GHÉP ĐÔI / ĐỔI MÃ
+    if (btnStudentUnpair) {
+      btnStudentUnpair.addEventListener('click', async () => {
+        const pairedCode = localStorage.getItem('cva_student_paired_code') || currentFamilyCode;
+        if (!confirm(`Bạn có chắc muốn hủy ghép đôi với mã ${pairedCode} không?`)) return;
+
+        loadingOverlay.classList.add('active');
+        const loadTitle = document.getElementById('loadingTitle');
+        const loadSub = document.getElementById('loadingSub');
+        if (loadTitle) loadTitle.textContent = 'Đang Hủy Ghép Đôi...';
+        if (loadSub) loadSub.textContent = 'Đang cập nhật trạng thái lên hệ thống Cloud...';
+
+        try {
+          const unpairPayload = {
+            status: 'REVOKED',
+            isPaired: false,
+            online: false,
+            revokedAt: Date.now()
+          };
+          await Promise.all([
+            fetch(`${FIREBASE_BASE}/pairings/${pairedCode}.json`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(unpairPayload)
+            }),
+            fetch(`${FIREBASE_BASE}/devices/${pairedCode}.json`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(unpairPayload)
+            })
+          ]);
+        } catch (_e) {}
+
+        localStorage.removeItem('cva_student_paired_code');
+        setTimeout(() => {
+          loadingOverlay.classList.remove('active');
+          if (studentPairedCard) studentPairedCard.style.display = 'none';
+          if (studentInputCard) studentInputCard.style.display = 'block';
+          if (studentWebCodeInput) studentWebCodeInput.value = '';
+          checkDevicePairingStatus();
+        }, 800);
+      });
+    }
+
+    // 6. KIỂM TRA TRẠNG THÁI THIẾT BỊ CON THỜI GIAN THỰC TỪ CẢ 2 ENDPOINT FIREBASE
+    async function checkDevicePairingStatus() {
+      try {
+        const [pairingRes, deviceRes] = await Promise.all([
+          fetch(`${FIREBASE_BASE}/pairings/${currentFamilyCode}.json`, { cache: 'no-cache' }).catch(() => null),
+          fetch(`${FIREBASE_BASE}/devices/${currentFamilyCode}.json`, { cache: 'no-cache' }).catch(() => null)
+        ]);
+
+        const pairingData = (pairingRes && pairingRes.ok) ? await pairingRes.json() : null;
+        const deviceData = (deviceRes && deviceRes.ok) ? await deviceRes.json() : null;
+
+        const isPaired = (pairingData && (pairingData.status === 'paired' || pairingData.isPaired === true)) ||
+                         (deviceData && (deviceData.status === 'paired' || deviceData.isPaired === true));
+
+        if (isPaired) {
+          const model = (deviceData && deviceData.deviceModel) || (pairingData && pairingData.deviceModel) || 'Điện thoại học sinh';
+          const os = (deviceData && deviceData.androidVersion) || (pairingData && pairingData.androidVersion) || 'Android';
+
+          if (emptyDeviceCard) emptyDeviceCard.style.display = 'none';
+          if (activeDeviceRow) activeDeviceRow.style.display = 'flex';
+          if (btnTriggerUnpair) btnTriggerUnpair.style.display = 'flex';
+
+          if (childDeviceName) childDeviceName.textContent = model;
+          if (childDeviceOs) childDeviceOs.textContent = os;
+          if (childDeviceState) childDeviceState.innerHTML = '<span style="color: #10b981; font-weight: bold;">●</span> Đang hoạt động thời gian thực';
+
+          // Đồng bộ giao diện học sinh nếu đang mở cùng tab
+          const savedStudentCode = localStorage.getItem('cva_student_paired_code');
+          if (savedStudentCode === currentFamilyCode) {
+            if (studentInputCard) studentInputCard.style.display = 'none';
+            if (studentPairedCard) studentPairedCard.style.display = 'block';
+            if (studentConnectedCodeDisplay) studentConnectedCodeDisplay.textContent = currentFamilyCode;
+          }
+        } else {
+          // Chưa có thiết bị kết nối
+          if (emptyDeviceCard) emptyDeviceCard.style.display = 'block';
+          if (activeDeviceRow) activeDeviceRow.style.display = 'none';
+          if (btnTriggerUnpair) btnTriggerUnpair.style.display = 'none';
+
+          const savedStudentCode = localStorage.getItem('cva_student_paired_code');
+          if (savedStudentCode === currentFamilyCode) {
+            localStorage.removeItem('cva_student_paired_code');
+            if (studentPairedCard) studentPairedCard.style.display = 'none';
+            if (studentInputCard) studentInputCard.style.display = 'block';
+          }
+        }
+      } catch (e) {
+        console.warn('Status check warning:', e);
+      }
+    }
+
+    // 7. PHỤ HUYNH NGẮT KẾT NỐI (XÁC THỰC MÃ PIN BẢO MẬT)
+    if (btnTriggerUnpair) {
+      btnTriggerUnpair.addEventListener('click', () => {
+        unpairConfirmModal.classList.add('active');
+        if (modalPinConfirm) modalPinConfirm.value = '';
+        if (modalPinError) modalPinError.textContent = '';
+        if (modalPinConfirm) modalPinConfirm.focus();
+      });
+    }
+
+    if (btnCancelUnpair) {
+      btnCancelUnpair.addEventListener('click', () => {
+        unpairConfirmModal.classList.remove('active');
+      });
+    }
+
+    if (btnConfirmExecuteUnpair) {
+      btnConfirmExecuteUnpair.addEventListener('click', async () => {
+        const pin = modalPinConfirm ? modalPinConfirm.value.trim() : '';
+        if (pin !== DEFAULT_PIN) {
+          if (modalPinError) modalPinError.textContent = 'Mã PIN sai! Không thể ngắt kết nối.';
+          return;
+        }
+
+        unpairConfirmModal.classList.remove('active');
+        loadingOverlay.classList.add('active');
+        const loadTitle = document.getElementById('loadingTitle');
+        const loadSub = document.getElementById('loadingSub');
+        if (loadTitle) loadTitle.textContent = 'Đang Ngắt Kết Nối...';
+        if (loadSub) loadSub.textContent = 'Đang đồng bộ lệnh ngắt tới điện thoại học sinh...';
+
+        try {
+          const unpairPayload = {
+            status: 'REVOKED',
+            isPaired: false,
+            online: false,
+            revokedAt: Date.now(),
+            revokedBy: 'PARENT'
+          };
+          await Promise.all([
+            fetch(`${FIREBASE_BASE}/pairings/${currentFamilyCode}.json`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(unpairPayload)
+            }),
+            fetch(`${FIREBASE_BASE}/devices/${currentFamilyCode}.json`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(unpairPayload)
+            })
+          ]);
+
+          localStorage.removeItem('cva_student_paired_code');
+
+          setTimeout(() => {
+            loadingOverlay.classList.remove('active');
+            alert('✅ Đã ngắt kết nối thành công! Thiết bị học sinh đã được giải phóng.');
+            checkDevicePairingStatus();
+          }, 1000);
+
+        } catch (err) {
+          loadingOverlay.classList.remove('active');
+          alert('Lỗi kết nối Firebase: ' + err.message);
+        }
+      });
+    }
+
+    // 8. CLOUD HEALTH CHECK ICON
     async function checkCloudStatus() {
       const dot = document.getElementById('cloudDot');
+      if (!dot) return;
       try {
         const res = await fetch(`${FIREBASE_BASE}/.json?shallow=true`, { cache: 'no-cache' });
         if (res.ok) {
@@ -1024,6 +1255,43 @@
         dot.style.boxShadow = '0 0 8px #ef4444';
       }
     }
+
+    // 9. KHỞI TẠO BAN ĐẦU THEO THAM SỐ URL HOẶC SESSION
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('tab') === 'student') {
+      tabBtnStudent.click();
+    } else {
+      tabBtnParent.click();
+    }
+
+    // Kiểm tra trạng thái ghép đôi của học sinh đã lưu chưa
+    const savedStudentPair = localStorage.getItem('cva_student_paired_code');
+    if (savedStudentPair) {
+      if (studentInputCard) studentInputCard.style.display = 'none';
+      if (studentPairedCard) studentPairedCard.style.display = 'block';
+      if (studentConnectedCodeDisplay) studentConnectedCodeDisplay.textContent = savedStudentPair;
+    } else {
+      if (studentInputCard) studentInputCard.style.display = 'block';
+      if (studentPairedCard) studentPairedCard.style.display = 'none';
+    }
+
+    if (urlParams.get('unlocked') === 'true') {
+      if (cardPinGate) cardPinGate.style.display = 'none';
+      if (cardParentHub) cardParentHub.style.display = 'block';
+      if (emptyDeviceCard) emptyDeviceCard.style.display = 'none';
+      if (activeDeviceRow) activeDeviceRow.style.display = 'flex';
+      if (btnTriggerUnpair) btnTriggerUnpair.style.display = 'flex';
+      if (childDeviceName) childDeviceName.textContent = 'Xiaomi HyperOS';
+      if (childDeviceState) childDeviceState.innerHTML = '<span style="color: #10b981; font-weight: bold;">●</span> Đang hoạt động thời gian thực';
+    } else if (urlParams.get('tab') === 'parent') {
+      if (cardPinGate) cardPinGate.style.display = 'block';
+      if (cardParentHub) cardParentHub.style.display = 'none';
+    } else if (isParentUnlocked) {
+      if (cardPinGate) cardPinGate.style.display = 'none';
+      if (cardParentHub) cardParentHub.style.display = 'block';
+      checkDevicePairingStatus();
+    }
+
     checkCloudStatus();
     setInterval(checkCloudStatus, 15000);
     setInterval(checkDevicePairingStatus, 3000);

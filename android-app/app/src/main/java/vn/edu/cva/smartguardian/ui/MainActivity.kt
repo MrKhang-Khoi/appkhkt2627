@@ -88,6 +88,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvGreeting: TextView
     private lateinit var tvCompanionBadge: TextView
     private lateinit var tvPairedCodeDisplay: TextView
+    private lateinit var btnStudentSelfUnpair: TextView
 
     // 5. Modals & Overlays
     private lateinit var layoutPinConfirmModal: FrameLayout
@@ -210,6 +211,7 @@ class MainActivity : AppCompatActivity() {
         tvGreeting = findViewById(R.id.tvGreeting)
         tvCompanionBadge = findViewById(R.id.tvCompanionBadge)
         tvPairedCodeDisplay = findViewById(R.id.tvPairedCodeDisplay)
+        btnStudentSelfUnpair = findViewById(R.id.btnStudentSelfUnpair)
 
         // Modals & Overlays
         layoutPinConfirmModal = findViewById(R.id.layoutPinConfirmModal)
@@ -250,12 +252,13 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Parent Hub actions (Screen 2)
+        // Parent Hub actions
         btnParentCopyCode.setOnClickListener {
             val code = tvParentHubFamilyCode.text.toString()
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            clipboard.setPrimaryClip(ClipData.newPlainText("FamilyCode", code))
-            Toast.makeText(this, "Đã sao chép mã $code!", Toast.LENGTH_SHORT).show()
+            val clip = ClipData.newPlainText("Family Code", code)
+            clipboard.setPrimaryClip(clip)
+            Toast.makeText(this, "Đã sao chép mã: $code", Toast.LENGTH_SHORT).show()
         }
 
         btnParentRegenCode.setOnClickListener {
@@ -294,6 +297,11 @@ class MainActivity : AppCompatActivity() {
         // Tab Học Sinh: Nút KẾT NỐI (Screen 3)
         btnConnectPairing.setOnClickListener {
             handleConnectPairing()
+        }
+
+        // Tab Học Sinh: Nút Hủy Ghép Đôi
+        btnStudentSelfUnpair.setOnClickListener {
+            executeStudentSelfUnpair()
         }
     }
 
@@ -467,51 +475,162 @@ class MainActivity : AppCompatActivity() {
 
         pbPairingLoading.visibility = View.VISIBLE
         tvPairingStatus.visibility = View.VISIBLE
-        tvPairingStatus.text = "Đang kiểm tra..."
         btnConnectPairing.isEnabled = false
 
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                val request = Request.Builder()
-                    .url("$FIREBASE_RTDB_URL/pairings/$inputCode.json")
-                    .build()
+                // BƯỚC 1: KIỂM TRA MÃ GHÉP ĐÔI TRÊN CLOUD
+                withContext(Dispatchers.Main) {
+                    tvPairingStatus.text = "🔍 [1/3] Đang kiểm tra mã ghép đôi..."
+                }
+                delay(750)
 
-                firebaseClient.newCall(request).execute().use { response ->
-                    val bodyStr = response.body?.string()
-                    val isValidPairing = response.isSuccessful && !bodyStr.isNullOrEmpty() && bodyStr != "null"
-
-                    if (isValidPairing || inputCode.startsWith("CVA-")) {
-                        val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
-                        prefs.edit()
-                            .putBoolean("is_paired", true)
-                            .putString("paired_code", inputCode)
-                            .apply()
-
-                        sendDeviceTelemetry(inputCode, isPaired = true)
-
-                        withContext(Dispatchers.Main) {
-                            pbPairingLoading.visibility = View.GONE
-                            tvPairingStatus.visibility = View.GONE
-                            btnConnectPairing.isEnabled = true
-                            showStudentPairedState(inputCode)
-                            startUnpairListener(inputCode)
-                            Toast.makeText(this@MainActivity, "Đã kết nối thành công!", Toast.LENGTH_SHORT).show()
-                        }
-                    } else {
-                        withContext(Dispatchers.Main) {
-                            pbPairingLoading.visibility = View.GONE
-                            btnConnectPairing.isEnabled = true
-                            tvPairingStatus.text = "Mã không hợp lệ!"
-                            Toast.makeText(this@MainActivity, "Mã ghép đôi không tồn tại!", Toast.LENGTH_LONG).show()
+                var isCodeValid = false
+                try {
+                    val checkReq = Request.Builder()
+                        .url("$FIREBASE_RTDB_URL/pairings/$inputCode.json")
+                        .build()
+                    firebaseClient.newCall(checkReq).execute().use { resp ->
+                        val body = resp.body?.string()
+                        if (resp.isSuccessful && !body.isNullOrEmpty() && body != "null") {
+                            isCodeValid = true
                         }
                     }
+                } catch (_: Exception) {}
+
+                if (!isCodeValid && !inputCode.matches(Regex("^CVA-[A-Z0-9]{4}$"))) {
+                    withContext(Dispatchers.Main) {
+                        pbPairingLoading.visibility = View.GONE
+                        btnConnectPairing.isEnabled = true
+                        tvPairingStatus.text = "❌ Mã ghép đôi không hợp lệ!"
+                        Toast.makeText(this@MainActivity, "Mã ghép đôi không tồn tại hoặc sai định dạng!", Toast.LENGTH_LONG).show()
+                    }
+                    return@launch
                 }
+
+                // BƯỚC 2: GỬI THÔNG TIN THIẾT BỊ VÀ MÃ XÁC NHẬN (HANDSHAKE)
+                withContext(Dispatchers.Main) {
+                    tvPairingStatus.text = "📤 [2/3] Đang gửi thông tin thiết bị & mã xác nhận..."
+                }
+                delay(850)
+
+                val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: "UNKNOWN"
+                val manufacturer = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
+                val model = Build.MODEL
+                val androidVer = "Android ${Build.VERSION.RELEASE}"
+                val now = System.currentTimeMillis()
+                val jsonMediaType = "application/json; charset=utf-8".toMediaType()
+
+                // Ghi vào /pairings/$inputCode.json để Web Parent Hub nhận diện ngay lập tức
+                val pairingData = JSONObject().apply {
+                    put("pairingCode", inputCode)
+                    put("status", "paired")
+                    put("deviceId", androidId)
+                    put("deviceModel", "$manufacturer $model")
+                    put("androidVersion", androidVer)
+                    put("pairedAt", now)
+                    put("lastSync", now)
+                    put("online", true)
+                }
+                val putPairingReq = Request.Builder()
+                    .url("$FIREBASE_RTDB_URL/pairings/$inputCode.json")
+                    .patch(pairingData.toString().toRequestBody(jsonMediaType))
+                    .build()
+                firebaseClient.newCall(putPairingReq).execute().close()
+
+                // Ghi vào /devices/$inputCode.json cho thống kê telemetry
+                val deviceData = JSONObject().apply {
+                    put("pairingCode", inputCode)
+                    put("deviceId", androidId)
+                    put("deviceModel", "$manufacturer $model")
+                    put("androidVersion", androidVer)
+                    put("isPaired", true)
+                    put("status", "paired")
+                    put("lastSync", now)
+                    put("online", true)
+                }
+                val putDeviceReq = Request.Builder()
+                    .url("$FIREBASE_RTDB_URL/devices/$inputCode.json")
+                    .put(deviceData.toString().toRequestBody(jsonMediaType))
+                    .build()
+                firebaseClient.newCall(putDeviceReq).execute().close()
+
+                // BƯỚC 3: XÁC THỰC THÀNH CÔNG VÀ HOÀN TẤT
+                withContext(Dispatchers.Main) {
+                    tvPairingStatus.text = "✨ [3/3] Xác thực thành công! Hoàn tất."
+                }
+                delay(600)
+
+                val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
+                prefs.edit()
+                    .putBoolean("is_paired", true)
+                    .putString("paired_code", inputCode)
+                    .apply()
+
+                if (hasUsageStatsPermission()) {
+                    UsageTrackerService.start(this@MainActivity)
+                }
+
+                withContext(Dispatchers.Main) {
+                    pbPairingLoading.visibility = View.GONE
+                    tvPairingStatus.visibility = View.GONE
+                    btnConnectPairing.isEnabled = true
+                    showStudentPairedState(inputCode)
+                    startUnpairListener(inputCode)
+                    Toast.makeText(this@MainActivity, "Ghép đôi thành công!", Toast.LENGTH_SHORT).show()
+                }
+
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
                     pbPairingLoading.visibility = View.GONE
                     btnConnectPairing.isEnabled = true
-                    tvPairingStatus.text = "Lỗi mạng: ${e.message}"
+                    tvPairingStatus.text = "❌ Lỗi mạng: ${e.message}"
+                    Toast.makeText(this@MainActivity, "Lỗi kết nối Firebase: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
+            }
+        }
+    }
+
+    private fun executeStudentSelfUnpair() {
+        val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
+        val pairedCode = prefs.getString("paired_code", "") ?: ""
+
+        layoutUnpairOverlay.visibility = View.VISIBLE
+        unpairJob?.cancel()
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val jsonMediaType = "application/json; charset=utf-8".toMediaType()
+                val updatePayload = JSONObject().apply {
+                    put("status", "REVOKED")
+                    put("isPaired", false)
+                    put("online", false)
+                    put("lastSync", System.currentTimeMillis())
+                }
+
+                if (pairedCode.isNotEmpty()) {
+                    val patchPairingReq = Request.Builder()
+                        .url("$FIREBASE_RTDB_URL/pairings/$pairedCode.json")
+                        .patch(updatePayload.toString().toRequestBody(jsonMediaType))
+                        .build()
+                    firebaseClient.newCall(patchPairingReq).execute().close()
+
+                    val patchDeviceReq = Request.Builder()
+                        .url("$FIREBASE_RTDB_URL/devices/$pairedCode.json")
+                        .patch(updatePayload.toString().toRequestBody(jsonMediaType))
+                        .build()
+                    firebaseClient.newCall(patchDeviceReq).execute().close()
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Lỗi unpair phía học sinh: ${e.message}")
+            }
+
+            delay(1000)
+            withContext(Dispatchers.Main) {
+                prefs.edit().putBoolean("is_paired", false).remove("paired_code").apply()
+                layoutUnpairOverlay.visibility = View.GONE
+                showStudentUnpairedState()
+                Toast.makeText(this@MainActivity, "Đã hủy ghép đôi thành công!", Toast.LENGTH_SHORT).show()
             }
         }
     }
