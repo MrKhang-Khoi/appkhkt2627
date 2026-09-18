@@ -14,21 +14,23 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_gravity="center_vertical"
             android:orientation="vertical"
-            android:paddingLeft="16dp"
-            android:paddingRight="16dp"
-            android:paddingTop="12dp"
-            android:paddingBottom="20dp">
+            android:gravity="center_horizontal"
+            android:paddingLeft="20dp"
+            android:paddingRight="20dp"
+            android:paddingTop="20dp"
+            android:paddingBottom="24dp">
 
             <!-- ========================================================== -->
-            <!-- 1. TOP HEADER BAR: GLOWING SHIELD LOGO + APP TITLE         -->
+            <!-- 1. TOP HEADER BAR: CĂN GIỮA HOÀN HẢO CÂN XỨNG             -->
             <!-- ========================================================== -->
             <LinearLayout
-                android:layout_width="match_parent"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginBottom="16dp">
+                android:gravity="center"
+                android:layout_marginBottom="20dp">
 
                 <ImageView
                     android:layout_width="28dp"
@@ -47,16 +49,16 @@
             </LinearLayout>
 
             <!-- ========================================================== -->
-            <!-- 2. SEGMENTED CONTROL: 2 TABS [ PHỤ HUYNH ] | [ HỌC SINH ]  -->
+            <!-- 2. SEGMENTED CONTROL: 2 TABS CÂN XỨNG CHUẨN M3            -->
             <!-- ========================================================== -->
             <LinearLayout
                 android:id="@+id/layoutSegmentedControl"
                 android:layout_width="match_parent"
-                android:layout_height="48dp"
+                android:layout_height="50dp"
                 android:background="@drawable/bg_tab_container"
                 android:orientation="horizontal"
                 android:padding="4dp"
-                android:layout_marginBottom="16dp">
+                android:layout_marginBottom="22dp">
 
                 <!-- TAB 1: PHỤ HUYNH -->
                 <TextView
@@ -97,6 +99,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
+                android:gravity="center_horizontal"
                 android:visibility="gone">
 
                 <!-- SCREEN 1: PARENT SECURITY PIN GATE -->
@@ -107,7 +110,7 @@
                     android:background="@drawable/bg_glass_card"
                     android:orientation="vertical"
                     android:gravity="center_horizontal"
-                    android:padding="22dp"
+                    android:padding="24dp"
                     android:visibility="visible">
 
                     <TextView
@@ -115,11 +118,19 @@
                         android:layout_height="wrap_content"
                         android:text="Parent Security PIN"
                         android:textColor="#F8FAFC"
-                        android:textSize="18sp"
+                        android:textSize="19sp"
                         android:textStyle="bold"
+                        android:layout_marginBottom="6dp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Nhập mã PIN 4 số để vào bảng điều khiển"
+                        android:textColor="#94A3B8"
+                        android:textSize="12sp"
                         android:layout_marginBottom="24dp" />
 
-                    <!-- 4 CHẤM PIN VÀNG PHÁT SÁNG CHUẨN SCREEN 1 -->
+                    <!-- 4 CHẤM PIN VÀNG PHÁT SÁNG CÂN XỨNG -->
                     <LinearLayout
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
@@ -129,29 +140,29 @@
 
                         <View
                             android:id="@+id/pinDot1"
-                            android:layout_width="14dp"
-                            android:layout_height="14dp"
+                            android:layout_width="16dp"
+                            android:layout_height="16dp"
                             android:layout_margin="10dp"
                             android:background="@drawable/bg_pin_dot_empty" />
 
                         <View
                             android:id="@+id/pinDot2"
-                            android:layout_width="14dp"
-                            android:layout_height="14dp"
+                            android:layout_width="16dp"
+                            android:layout_height="16dp"
                             android:layout_margin="10dp"
                             android:background="@drawable/bg_pin_dot_empty" />
 
                         <View
                             android:id="@+id/pinDot3"
-                            android:layout_width="14dp"
-                            android:layout_height="14dp"
+                            android:layout_width="16dp"
+                            android:layout_height="16dp"
                             android:layout_margin="10dp"
                             android:background="@drawable/bg_pin_dot_empty" />
 
                         <View
                             android:id="@+id/pinDot4"
-                            android:layout_width="14dp"
-                            android:layout_height="14dp"
+                            android:layout_width="16dp"
+                            android:layout_height="16dp"
                             android:layout_margin="10dp"
                             android:background="@drawable/bg_pin_dot_empty" />
                     </LinearLayout>
@@ -165,16 +176,16 @@
                         android:textSize="12sp"
                         android:textStyle="bold"
                         android:visibility="gone"
-                        android:layout_marginBottom="10dp" />
+                        android:layout_marginBottom="12dp" />
 
-                    <!-- BÀN PHÍM CẢM ỨNG TRÒN TO CHUẨN SCREEN 1 (3x4) -->
+                    <!-- BÀN PHÍM CẢM ỨNG CÂN ĐỐI (3x4) -->
                     <LinearLayout
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:orientation="vertical"
                         android:gravity="center">
 
-                        <!-- Hàng 1: 1 (viền cyan), 2, 3 -->
+                        <!-- Hàng 1: 1, 2, 3 -->
                         <LinearLayout
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
@@ -380,14 +391,14 @@
                         android:layout_marginTop="16dp" />
                 </LinearLayout>
 
-                <!-- SCREEN 2: PARENT HUB (KHI ĐÃ NHẬP ĐÚNG PIN) -->
+                <!-- SCREEN 2: PARENT HUB -->
                 <LinearLayout
                     android:id="@+id/layoutParentHub"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:background="@drawable/bg_glass_card"
                     android:orientation="vertical"
-                    android:padding="20dp"
+                    android:padding="22dp"
                     android:visibility="gone">
 
                     <TextView
@@ -395,12 +406,12 @@
                         android:layout_height="wrap_content"
                         android:text="Parent Hub"
                         android:textColor="#F8FAFC"
-                        android:textSize="18sp"
+                        android:textSize="19sp"
                         android:textStyle="bold"
                         android:layout_gravity="center_horizontal"
-                        android:layout_marginBottom="16dp" />
+                        android:layout_marginBottom="18dp" />
 
-                    <!-- THẺ VÀNG KIM MÃ GIA ĐÌNH CHUẨN SCREEN 2 -->
+                    <!-- THẺ VÀNG KIM MÃ GIA ĐÌNH -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -408,7 +419,7 @@
                         android:orientation="horizontal"
                         android:gravity="center_vertical"
                         android:padding="16dp"
-                        android:layout_marginBottom="14dp">
+                        android:layout_marginBottom="16dp">
 
                         <TextView
                             android:layout_width="wrap_content"
@@ -444,13 +455,13 @@
                         </LinearLayout>
                     </LinearLayout>
 
-                    <!-- NÚT SAO CHÉP VÀ ĐỔI MÃ PHỤ TRỢ -->
+                    <!-- NÚT SAO CHÉP VÀ ĐỔI MÃ -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="horizontal"
                         android:gravity="center"
-                        android:layout_marginBottom="16dp">
+                        android:layout_marginBottom="18dp">
 
                         <TextView
                             android:id="@+id/btnParentCopyCode"
@@ -462,8 +473,8 @@
                             android:textSize="12sp"
                             android:textStyle="bold"
                             android:gravity="center"
-                            android:paddingLeft="14dp"
-                            android:paddingRight="14dp"
+                            android:paddingLeft="16dp"
+                            android:paddingRight="16dp"
                             android:layout_marginEnd="10dp"
                             android:clickable="true"
                             android:focusable="true" />
@@ -477,13 +488,13 @@
                             android:textColor="#94A3B8"
                             android:textSize="12sp"
                             android:gravity="center"
-                            android:paddingLeft="14dp"
-                            android:paddingRight="14dp"
+                            android:paddingLeft="16dp"
+                            android:paddingRight="16dp"
                             android:clickable="true"
                             android:focusable="true" />
                     </LinearLayout>
 
-                    <!-- THẺ TRẠNG THÁI THIẾT BỊ CON (PAIRED CHILD) -->
+                    <!-- THẺ TRẠNG THÁI THIẾT BỊ CON -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -493,7 +504,6 @@
                         android:padding="14dp"
                         android:layout_marginBottom="24dp">
 
-                        <!-- AVATAR ICON CÓ CHẤM XANH -->
                         <FrameLayout
                             android:layout_width="38dp"
                             android:layout_height="38dp"
@@ -592,34 +602,53 @@
             </LinearLayout>
 
             <!-- ========================================================== -->
-            <!-- 4. TAB 2: HỌC SINH (SCREEN 3 CHUẨN MOCKUP 100%)            -->
+            <!-- 4. TAB 2: HỌC SINH (SCREEN 3 - CÂN ĐỐI, BỎ CHỮ VÔ LÝ)      -->
             <!-- ========================================================== -->
             <LinearLayout
                 android:id="@+id/layoutTabStudentContent"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
+                android:gravity="center_horizontal"
                 android:visibility="visible">
 
-                <!-- CARD "STUDENT" CHUẨN SCREEN 3 -->
+                <!-- TRẠNG THÁI 1: CHƯA GHÉP ĐÔI - THẺ STUDENT DUY NHẤT -->
                 <LinearLayout
                     android:id="@+id/layoutStudentCard"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:background="@drawable/bg_glass_card"
                     android:orientation="vertical"
-                    android:padding="22dp"
-                    android:layout_marginBottom="28dp">
+                    android:padding="24dp"
+                    android:visibility="visible">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🎒"
+                        android:textSize="32sp"
+                        android:layout_gravity="center_horizontal"
+                        android:layout_marginBottom="6dp" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="Student"
                         android:textColor="#F8FAFC"
-                        android:textSize="18sp"
+                        android:textSize="20sp"
                         android:textStyle="bold"
                         android:layout_gravity="center_horizontal"
-                        android:layout_marginBottom="16dp" />
+                        android:layout_marginBottom="4dp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Nhập mã gia đình do Phụ huynh cung cấp để kết nối"
+                        android:textColor="#94A3B8"
+                        android:textSize="12sp"
+                        android:gravity="center"
+                        android:layout_gravity="center_horizontal"
+                        android:layout_marginBottom="22dp" />
 
                     <TextView
                         android:layout_width="wrap_content"
@@ -633,15 +662,15 @@
                     <EditText
                         android:id="@+id/etPairingCodeInput"
                         android:layout_width="match_parent"
-                        android:layout_height="52dp"
+                        android:layout_height="56dp"
                         android:background="@drawable/bg_input_field"
                         android:textColor="#F8FAFC"
                         android:textColorHint="#475569"
                         android:hint="CVA-XXXX"
                         android:gravity="center"
-                        android:textSize="18sp"
+                        android:textSize="20sp"
                         android:textStyle="bold"
-                        android:letterSpacing="0.1"
+                        android:letterSpacing="0.12"
                         android:textAllCaps="true"
                         android:inputType="textCapCharacters|textNoSuggestions"
                         android:layout_marginBottom="18dp"
@@ -652,7 +681,7 @@
                     <TextView
                         android:id="@+id/btnConnectPairing"
                         android:layout_width="match_parent"
-                        android:layout_height="52dp"
+                        android:layout_height="54dp"
                         android:background="@drawable/bg_pill_button"
                         android:text="🔗 KẾT NỐI"
                         android:textColor="#FFFFFF"
@@ -668,7 +697,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_gravity="center"
-                        android:layout_marginTop="12dp"
+                        android:layout_marginTop="14dp"
                         android:visibility="gone" />
 
                     <TextView
@@ -683,14 +712,23 @@
                         android:visibility="gone" />
                 </LinearLayout>
 
-                <!-- TEXT TRẠNG THÁI "Xin chào ............, ĐÃ GHÉP ĐÔI" (SCREEN 3) -->
+                <!-- TRẠNG THÁI 2: CHỈ HIỆN KHI ĐÃ GHÉP ĐÔI THÀNH CÔNG -->
                 <LinearLayout
-                    android:id="@+id/layoutStudentGreetingGroup"
+                    android:id="@+id/layoutStudentPairedState"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:background="@drawable/bg_glass_card"
                     android:orientation="vertical"
                     android:gravity="center_horizontal"
-                    android:layout_marginBottom="24dp">
+                    android:padding="28dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🛡️"
+                        android:textSize="36sp"
+                        android:layout_marginBottom="12dp" />
 
                     <TextView
                         android:id="@+id/tvGreeting"
@@ -706,9 +744,45 @@
                         android:layout_height="wrap_content"
                         android:text="ĐÃ GHÉP ĐÔI"
                         android:textColor="#F8FAFC"
-                        android:textSize="20sp"
+                        android:textSize="22sp"
                         android:textStyle="bold"
-                        android:layout_marginTop="4dp" />
+                        android:layout_marginTop="4dp"
+                        android:layout_marginBottom="18dp" />
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_device_card"
+                        android:paddingLeft="18dp"
+                        android:paddingRight="18dp"
+                        android:paddingTop="8dp"
+                        android:paddingBottom="8dp"
+                        android:gravity="center">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Mã kết nối: "
+                            android:textColor="#94A3B8"
+                            android:textSize="13sp" />
+
+                        <TextView
+                            android:id="@+id/tvPairedCodeDisplay"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="CVA-8A20"
+                            android:textColor="#FBBF24"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="● Đang đồng hành an toàn cùng Phụ huynh"
+                        android:textColor="#10B981"
+                        android:textSize="12sp"
+                        android:layout_marginTop="14dp" />
                 </LinearLayout>
 
             </LinearLayout>
@@ -735,7 +809,7 @@
             android:background="@drawable/bg_glass_card"
             android:orientation="vertical"
             android:gravity="center_horizontal"
-            android:padding="22dp">
+            android:padding="24dp">
 
             <TextView
                 android:layout_width="wrap_content"

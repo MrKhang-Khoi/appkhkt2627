@@ -36,22 +36,26 @@
     body {
       background: var(--bg);
       background-image: 
-        radial-gradient(circle at 50% -15%, rgba(37, 99, 235, 0.22), transparent 65%),
-        radial-gradient(circle at 10% 85%, rgba(16, 185, 129, 0.08), transparent 45%);
+        radial-gradient(circle at 50% 12%, rgba(37, 99, 235, 0.22), transparent 55%),
+        radial-gradient(circle at 50% 88%, rgba(16, 185, 129, 0.08), transparent 50%);
       color: var(--text);
       min-height: 100vh;
       display: flex;
       flex-direction: column;
+      justify-content: center;
       align-items: center;
-      padding: 16px 14px 40px;
+      padding: 24px 18px;
+      box-sizing: border-box;
+      overflow-x: hidden;
     }
 
     .app-shell {
       width: 100%;
-      max-width: 440px;
+      max-width: 390px;
       display: flex;
       flex-direction: column;
       gap: 16px;
+      margin: 0 auto;
     }
 
     /* TOP BAR */
@@ -59,7 +63,8 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 4px 6px;
+      padding: 2px 4px;
+      width: 100%;
     }
 
     .brand-group {
@@ -224,15 +229,15 @@
       width: 16px;
       height: 16px;
       border-radius: 50%;
-      border: 2px solid #475569;
-      background: transparent;
+      border: 1.5px solid #475569;
+      background: #1e293b;
       transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     .pin-dot.filled {
       border-color: var(--warning);
       background: var(--warning);
-      box-shadow: 0 0 12px var(--glow-gold);
+      box-shadow: 0 0 14px rgba(245, 158, 11, 0.65);
       transform: scale(1.15);
     }
 
@@ -262,6 +267,12 @@
       transition: all 0.15s ease;
       outline: none;
       user-select: none;
+    }
+
+    .num-key.key-accent {
+      border: 2px solid #38bdf8;
+      color: #38bdf8;
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
     }
 
     .num-key:active {
@@ -565,7 +576,7 @@
 
           <!-- BÀN PHÍM CẢM ỨNG TRÒN TO CHUẨN M3 (>= 60PX) -->
           <div class="numpad">
-            <button type="button" class="num-key" onclick="handleNumPress('1')">1</button>
+            <button type="button" class="num-key key-accent" onclick="handleNumPress('1')">1</button>
             <button type="button" class="num-key" onclick="handleNumPress('2')">2</button>
             <button type="button" class="num-key" onclick="handleNumPress('3')">3</button>
             <button type="button" class="num-key" onclick="handleNumPress('4')">4</button>
@@ -650,40 +661,42 @@
     </main>
 
     <!-- ============================================================== -->
-    <!-- TAB 2: HỌC SINH VIEW (CHUẨN SCREEN 3 TRONG HÌNH)               -->
+    <!-- TAB 2: HỌC SINH VIEW (CHUẨN SCREEN 3 - TỐI GIẢN CÂN ĐỐI)      -->
     <!-- ============================================================== -->
     <main class="tab-view" id="viewStudent">
       <section class="glass-card">
-        <div style="padding: 6px 0;">
-          <h2 style="font-size: 1.25rem; font-weight: 800; color: #fff; text-align: center; margin-bottom: 16px;">Student</h2>
+        <div style="padding: 10px 0; text-align: center;">
+          <div style="font-size: 2.6rem; margin-bottom: 8px;">🎒</div>
+          <h2 style="font-size: 1.3rem; font-weight: 800; color: #fff; margin-bottom: 4px;">Student</h2>
+          <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 22px;">
+            Nhập mã gia đình do Phụ huynh cung cấp để kết nối
+          </p>
           
-          <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px;">Enter code</div>
+          <div style="text-align: left; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin-bottom: 8px;">Enter code</div>
           
-          <div style="margin-bottom: 16px;">
-            <input type="text" id="studentWebCodeInput" placeholder="CVA-XXXX" style="width: 100%; height: 52px; background: #0b1220; border: 1.2px solid #22334f; border-radius: 14px; text-align: center; color: #fff; font-size: 1.15rem; font-weight: 800; letter-spacing: 0.1em; outline: none; text-transform: uppercase;">
+          <div style="margin-bottom: 18px;">
+            <input type="text" id="studentWebCodeInput" placeholder="CVA-XXXX" style="width: 100%; height: 56px; background: #0b1220; border: 1.5px solid #2563eb; border-radius: 14px; text-align: center; color: #fff; font-size: 1.25rem; font-weight: 800; letter-spacing: 0.15em; outline: none; text-transform: uppercase; box-shadow: 0 0 16px rgba(37, 99, 235, 0.15);">
           </div>
 
-          <button type="button" class="btn-pill" id="btnStudentWebConnect" style="background: linear-gradient(90deg, #0284c7 0%, #2563eb 100%);">
+          <button type="button" class="btn-pill" id="btnStudentWebConnect" style="background: linear-gradient(90deg, #0284c7 0%, #2563eb 100%); min-height: 52px; font-size: 0.95rem; font-weight: 800; letter-spacing: 0.04em;">
             <span>🔗</span> KẾT NỐI
           </button>
 
-          <!-- KHỐI LỜI CHÀO CHUẨN SCREEN 3 -->
-          <div style="text-align: center; margin-top: 28px; margin-bottom: 16px;">
-            <div style="font-size: 0.95rem; color: #94a3b8;">Xin chào ............,</div>
-            <div style="font-size: 1.35rem; font-weight: 800; color: #fff; margin-top: 4px;">ĐÃ GHÉP ĐÔI</div>
-          </div>
-
-          <div style="margin-top: 20px;">
-            <a href="./apk/CVA-SmartGuardian-v1.0.apk" download class="btn-pill" style="text-decoration: none; background: #1e293b; border: 1px solid #334155; font-size: 0.82rem;">
-              <span>⬇️</span> Tải / Cập Nhật App Android (v1.0.4)
-            </a>
-          </div>
-
-          <div style="margin-top: 12px; font-size: 0.72rem; color: var(--text-muted); text-align: center;">
-            Phiên bản v1.0.4 đã ký số Keystore • Tự động đồng bộ thời gian thực
+          <div style="margin-top: 14px; font-size: 0.75rem; color: #64748b;">
+            Mã ghép đôi gồm 4 ký tự do Phụ huynh cấp
           </div>
         </div>
       </section>
+
+      <!-- KHỐI TẢI / CẬP NHẬT TÁCH RỜI CÂN ĐỐI BÊN DƯỚI -->
+      <div style="text-align: center; margin-top: 4px;">
+        <a href="./apk/CVA-SmartGuardian-v1.0.apk" download class="btn-pill" style="text-decoration: none; background: rgba(30, 41, 59, 0.75); border: 1px solid rgba(255, 255, 255, 0.1); font-size: 0.82rem; min-height: 46px; color: #94a3b8;">
+          <span>⬇️</span> Tải / Cập Nhật App Android (v1.0.6)
+        </a>
+        <div style="margin-top: 8px; font-size: 0.72rem; color: #64748b;">
+          Phiên bản v1.0.6 đã ký số Keystore • Tự động đồng bộ thời gian thực
+        </div>
+      </div>
     </main>
 
   </div>
@@ -868,8 +881,25 @@
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('tab') === 'student') {
       tabBtnStudent.click();
+    } else {
+      tabBtnParent.click();
     }
-    if (urlParams.get('unlocked') === 'true' || isParentUnlocked) {
+
+    if (urlParams.get('unlocked') === 'true') {
+      cardPinGate.style.display = 'none';
+      cardParentHub.style.display = 'block';
+      emptyDeviceCard.style.display = 'none';
+      activeDeviceRow.style.display = 'flex';
+      btnTriggerUnpair.style.display = 'flex';
+      const nameEl = document.getElementById('childDeviceName');
+      if (nameEl) nameEl.textContent = 'Xiaomi HyperOS';
+      const osEl = document.getElementById('childDeviceOs');
+      if (osEl) osEl.textContent = 'Android 16';
+      if (childDeviceState) childDeviceState.innerHTML = '● Đang hoạt động thời gian thực';
+    } else if (urlParams.get('tab') === 'parent') {
+      cardPinGate.style.display = 'block';
+      cardParentHub.style.display = 'none';
+    } else if (isParentUnlocked) {
       cardPinGate.style.display = 'none';
       cardParentHub.style.display = 'block';
       checkDevicePairingStatus();

@@ -78,15 +78,16 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnParentTriggerUnpair: TextView
     private lateinit var btnLockParentTab: TextView
 
-    // 4. Tab Học Sinh: Screen 3 (Student Card & Greeting)
+    // 4. Tab Học Sinh: Screen 3 (Student Card & Paired State)
     private lateinit var layoutStudentCard: LinearLayout
     private lateinit var etPairingCodeInput: EditText
     private lateinit var btnConnectPairing: TextView
     private lateinit var pbPairingLoading: ProgressBar
     private lateinit var tvPairingStatus: TextView
-    private lateinit var layoutStudentGreetingGroup: LinearLayout
+    private lateinit var layoutStudentPairedState: LinearLayout
     private lateinit var tvGreeting: TextView
     private lateinit var tvCompanionBadge: TextView
+    private lateinit var tvPairedCodeDisplay: TextView
 
     // 5. Modals & Overlays
     private lateinit var layoutPinConfirmModal: FrameLayout
@@ -205,9 +206,10 @@ class MainActivity : AppCompatActivity() {
         btnConnectPairing = findViewById(R.id.btnConnectPairing)
         pbPairingLoading = findViewById(R.id.pbPairingLoading)
         tvPairingStatus = findViewById(R.id.tvPairingStatus)
-        layoutStudentGreetingGroup = findViewById(R.id.layoutStudentGreetingGroup)
+        layoutStudentPairedState = findViewById(R.id.layoutStudentPairedState)
         tvGreeting = findViewById(R.id.tvGreeting)
         tvCompanionBadge = findViewById(R.id.tvCompanionBadge)
+        tvPairedCodeDisplay = findViewById(R.id.tvPairedCodeDisplay)
 
         // Modals & Overlays
         layoutPinConfirmModal = findViewById(R.id.layoutPinConfirmModal)
@@ -514,28 +516,22 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // HIỂN THỊ CHUẨN SCREEN 3: CẢ CARD STUDENT VÀ KHỐI GREETING ĐỀU HIỆN TRỰC QUAN
+    // HIỂN THỊ CHUẨN SCREEN 3: KHI CHƯA GHÉP ĐÔI CHỈ HIỆN THẺ NHẬP MÃ (KHÔNG HIỆN 'Xin chào ... ĐÃ GHÉP ĐÔI')
     private fun showStudentPairedState(code: String) {
-        layoutStudentCard.visibility = View.VISIBLE
-        etPairingCodeInput.setText(code)
-        etPairingCodeInput.isEnabled = false
-        btnConnectPairing.text = "🔗 KẾT NỐI"
-
-        layoutStudentGreetingGroup.visibility = View.VISIBLE
+        layoutStudentCard.visibility = View.GONE
+        layoutStudentPairedState.visibility = View.VISIBLE
         tvGreeting.text = "Xin chào ............ ,"
         tvCompanionBadge.text = "ĐÃ GHÉP ĐÔI"
+        tvPairedCodeDisplay.text = code
     }
 
     private fun showStudentUnpairedState() {
         layoutStudentCard.visibility = View.VISIBLE
+        layoutStudentPairedState.visibility = View.GONE
         etPairingCodeInput.setText("")
         etPairingCodeInput.hint = "CVA-XXXX"
         etPairingCodeInput.isEnabled = true
         btnConnectPairing.text = "🔗 KẾT NỐI"
-
-        layoutStudentGreetingGroup.visibility = View.VISIBLE
-        tvGreeting.text = "Xin chào ............ ,"
-        tvCompanionBadge.text = "CHƯA GHÉP ĐÔI"
         tvPairingStatus.visibility = View.GONE
     }
 
