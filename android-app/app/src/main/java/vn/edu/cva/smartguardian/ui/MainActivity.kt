@@ -374,9 +374,20 @@ class MainActivity : AppCompatActivity() {
                             val json = JSONObject(bodyStr)
                             val model = json.optString("deviceModel", "Xiaomi HyperOS")
                             val isPaired = json.optBoolean("isPaired", false)
+                            val lastSync = json.optLong("lastSync", 0L)
+                            val now = System.currentTimeMillis()
+                            val diffSec = if (lastSync > 0) (now - lastSync) / 1000 else 999999L
+                            val isOnline = diffSec <= 45
+
                             withContext(Dispatchers.Main) {
                                 if (isPaired) {
-                                    tvParentChildSubtitle.text = "Paired child • $model"
+                                    if (isOnline) {
+                                        tvParentChildSubtitle.text = "🟢 Trực tuyến • $model"
+                                    } else {
+                                        val minAgo = diffSec / 60
+                                        val timeText = if (minAgo < 1) "vừa ngắt mạng" else "mất mạng ${minAgo}m trước"
+                                        tvParentChildSubtitle.text = "🔴 Ngoại tuyến ($timeText) • $model"
+                                    }
                                 } else {
                                     tvParentChildSubtitle.text = "Chờ học sinh kết nối..."
                                 }
@@ -591,25 +602,50 @@ class MainActivity : AppCompatActivity() {
 
     private fun showChildCompanionDialog() {
         val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
-        val studyMs = prefs.getLong("study_time_ms", 9900000L) // ~2h45m
-        val gameMs = prefs.getLong("game_time_ms", 2400000L) // ~40m
-        val socialMs = prefs.getLong("social_time_ms", 1500000L) // ~25m
-        val balanceScore = prefs.getInt("balance_score", 88)
+        val studyMs = prefs.getLong("study_time_ms", 0L)
+        val gameMs = prefs.getLong("game_time_ms", 0L)
+        val socialMs = prefs.getLong("social_time_ms", 0L)
+        val balanceScore = prefs.getInt("balance_score", -1)
+        val lastUpdate = prefs.getLong("last_updated_at", 0L)
+        val now = System.currentTimeMillis()
+        val isRecent = lastUpdate > 0 && (now - lastUpdate) <= 45000L
 
         val studyMinutes = (studyMs / 60000).toInt()
         val gameMinutes = (gameMs / 60000).toInt()
         val socialMinutes = (socialMs / 60000).toInt()
+        val totalMinutes = studyMinutes + gameMinutes + socialMinutes
+
+        val statusLine = if (isRecent) {
+            "🟢 Trạng thái: Trực tuyến (Đang hoạt động thời gian thực)"
+        } else {
+            val minAgo = if (lastUpdate > 0) (now - lastUpdate) / 60000 else 0
+            "🔴 Trạng thái: Ngoại tuyến (Đã ngắt mạng $minAgo phút trước)"
+        }
+
+        val balanceLine = if (balanceScore >= 0) {
+            "🎯 Điểm Cân Bằng Số: $balanceScore/100"
+        } else {
+            "🎯 Điểm Cân Bằng Số: --/100 (Chờ đồng bộ)"
+        }
+
+        val usageLines = if (totalMinutes > 0) {
+            """
+            • 📚 Ứng dụng Học tập: ${studyMinutes / 60}h ${studyMinutes % 60}m (${studyMinutes * 100 / totalMinutes}%)
+            • 🎮 Game & Giải trí: ${gameMinutes}m (${gameMinutes * 100 / totalMinutes}%)
+            • 💬 Mạng xã hội: ${socialMinutes}m (${socialMinutes * 100 / totalMinutes}%)
+            """.trimIndent()
+        } else {
+            "• Chưa có dữ liệu thời lượng hôm nay (Chờ máy con gửi bản ghi)"
+        }
 
         val msg = """
             📱 Thiết bị: ${tvParentChildSubtitle.text}
-            🟢 Trạng thái: Đang kết nối thời gian thực
+            $statusLine
             
-            🎯 Điểm Cân Bằng Số: $balanceScore/100 (🟢 Lành Mạnh)
+            $balanceLine
             
             📊 THỜI LƯỢNG HÔM NAY:
-            • 📚 Ứng dụng Học tập: ${studyMinutes / 60}h ${studyMinutes % 60}m (68%)
-            • 🎮 Game & Giải trí: ${gameMinutes}m (17%)
-            • 💬 Mạng xã hội: ${socialMinutes}m (10%)
+            $usageLines
             
             🛡️ BẢO VỆ TỪ XA:
             • Tường lửa Lọc Web: [Đang Bật] (Cloudflare Family)

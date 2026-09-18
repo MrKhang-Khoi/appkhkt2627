@@ -630,11 +630,11 @@
             <div style="display: flex; align-items: center; gap: 12px;">
               <div style="width: 38px; height: 38px; border-radius: 50%; background: #1e293b; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; position: relative;">
                 👤
-                <span style="position: absolute; bottom: 0; right: 0; width: 8px; height: 8px; border-radius: 50%; background: #10b981;"></span>
+                <span id="childDeviceDot" style="position: absolute; bottom: 0; right: 0; width: 8px; height: 8px; border-radius: 50%; background: #94a3b8; transition: background 0.3s ease;"></span>
               </div>
               <div>
                 <div style="font-size: 0.92rem; font-weight: 700; color: #fff;" id="childDeviceName">Xiaomi HyperOS</div>
-                <div style="font-size: 0.75rem; color: #94a3b8;" id="childDeviceState">● Đang hoạt động thời gian thực</div>
+                <div style="font-size: 0.75rem; color: #94a3b8;" id="childDeviceState">● Đang kiểm tra tín hiệu mạng...</div>
               </div>
             </div>
             <span style="font-size: 1.1rem; color: #64748b;">›</span>
@@ -767,11 +767,21 @@
             📱
           </div>
           <div>
-            <h3 style="font-size: 1.05rem; font-weight: 800; color: #fff; margin: 0;" id="dashChildName">Xiaomi HyperOS</h3>
-            <span style="font-size: 0.72rem; color: #10b981; font-weight: 700;">● Đang hoạt động thời gian thực</span>
+            <h3 style="font-size: 1.05rem; font-weight: 800; color: #fff; margin: 0;" id="dashChildName">Thiết bị học sinh</h3>
+            <span style="font-size: 0.72rem; color: #94a3b8; font-weight: 700;" id="dashChildStatus">● Đang kiểm tra tín hiệu mạng...</span>
           </div>
         </div>
         <button type="button" id="btnCloseChildDashboard" style="background: transparent; border: none; color: #94a3b8; font-size: 1.4rem; cursor: pointer; padding: 4px;">✕</button>
+      </div>
+
+      <!-- CẢNH BÁO NGOẠI TUYẾN KHI MÁY TẮT INTERNET -->
+      <div id="dashOfflineNotice" style="display: none; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 12px; padding: 10px 14px; margin-bottom: 14px;">
+        <div style="display: flex; align-items: center; gap: 8px; font-size: 0.8rem; font-weight: 700; color: #fca5a5;">
+          <span>⚠️</span> <span>Thiết bị đang Ngoại tuyến (Đã ngắt mạng)</span>
+        </div>
+        <div style="font-size: 0.72rem; color: #cbd5e1; margin-top: 4px; line-height: 1.4;" id="dashOfflineNoticeDetail">
+          Không nhận được nhịp tim (Heartbeat) từ máy học sinh. Số liệu bên dưới là bản ghi gần nhất trước khi tắt mạng.
+        </div>
       </div>
 
       <!-- 1. CHỈ SỐ CÂN BẰNG SỐ (DIGITAL BALANCE SCORE) -->
@@ -779,11 +789,11 @@
         <div style="display: flex; align-items: center; justify-content: space-between;">
           <div>
             <div style="font-size: 0.72rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;">Điểm Cân Bằng Số</div>
-            <div style="font-size: 1.6rem; font-weight: 900; color: #38bdf8; margin-top: 2px;" id="dashBalanceScore">88<span style="font-size: 0.9rem; color: #94a3b8;">/100</span></div>
+            <div style="font-size: 1.6rem; font-weight: 900; color: #38bdf8; margin-top: 2px;" id="dashBalanceScore">--<span style="font-size: 0.9rem; color: #94a3b8;">/100</span></div>
           </div>
           <div style="text-align: right;">
-            <span style="display: inline-block; background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; color: #10b981; padding: 4px 10px; border-radius: 9999px; font-size: 0.75rem; font-weight: 700;">🟢 Lành Mạnh</span>
-            <div style="font-size: 0.7rem; color: #64748b; margin-top: 4px;">Đạt chuẩn an toàn số CVA</div>
+            <span style="display: inline-block; background: rgba(148, 163, 184, 0.15); border: 1px solid #94a3b8; color: #94a3b8; padding: 4px 10px; border-radius: 9999px; font-size: 0.75rem; font-weight: 700;" id="dashBalanceBadge">Chờ dữ liệu</span>
+            <div style="font-size: 0.7rem; color: #64748b; margin-top: 4px;" id="dashBalanceSub">Chờ đồng bộ từ máy con</div>
           </div>
         </div>
       </div>
@@ -801,7 +811,7 @@
               <span style="font-size: 1rem;">📚</span>
               <span style="font-size: 0.8rem; color: #f8fafc; font-weight: 600;">Ứng dụng Học Tập</span>
             </div>
-            <span style="font-size: 0.85rem; font-weight: 800; color: #38bdf8;" id="dashStudyTime">2h 45m (68%)</span>
+            <span style="font-size: 0.85rem; font-weight: 800; color: #38bdf8;" id="dashStudyTime">--</span>
           </div>
 
           <!-- GAME / GIẢI TRÍ -->
@@ -810,7 +820,7 @@
               <span style="font-size: 1rem;">🎮</span>
               <span style="font-size: 0.8rem; color: #f8fafc; font-weight: 600;">Game & Trò Chơi</span>
             </div>
-            <span style="font-size: 0.85rem; font-weight: 800; color: #fbbf24;" id="dashGameTime">40m (17%)</span>
+            <span style="font-size: 0.85rem; font-weight: 800; color: #fbbf24;" id="dashGameTime">--</span>
           </div>
 
           <!-- MẠNG XÃ HỘI -->
@@ -819,7 +829,7 @@
               <span style="font-size: 1rem;">💬</span>
               <span style="font-size: 0.8rem; color: #f8fafc; font-weight: 600;">Mạng Xã Hội</span>
             </div>
-            <span style="font-size: 0.85rem; font-weight: 800; color: #f87171;" id="dashSocialTime">25m (10%)</span>
+            <span style="font-size: 0.85rem; font-weight: 800; color: #f87171;" id="dashSocialTime">--</span>
           </div>
         </div>
       </div>
@@ -951,8 +961,8 @@
       }
       return code;
     }
-
-    let currentFamilyCode = localStorage.getItem('cva_family_code') || 'CVA-8A20';
+    const urlParams = new URLSearchParams(window.location.search);
+    let currentFamilyCode = urlParams.get('code') || localStorage.getItem('cva_family_code') || 'CVA-A646';
     localStorage.setItem('cva_family_code', currentFamilyCode);
 
     let isParentUnlocked = sessionStorage.getItem('cva_parent_unlocked') === 'true';
@@ -1188,15 +1198,118 @@
       });
     }
 
+    // HÀM TÍNH TOÁN TRẠNG THÁI KẾT NỐI THẬT QUA NHỊP TIM (HEARTBEAT ENGINE)
+    function calculateDeviceOnlineStatus(deviceData, pairingData) {
+      const now = Date.now();
+      const lastContact = (deviceData && (deviceData.lastSync || deviceData.lastHeartbeat)) ||
+                          (pairingData && (pairingData.lastSync || pairingData.lastHeartbeat)) || 0;
+
+      if (!lastContact) {
+        return { isOnline: false, diffSeconds: 999999, text: 'Chưa có tín hiệu mạng', color: '#ef4444' };
+      }
+
+      const diffSeconds = Math.max(0, Math.floor((now - lastContact) / 1000));
+      // Ngưỡng Heartbeat: 45 giây. 
+      // Thiết bị học sinh gửi heartbeat mỗi 15 giây.
+      // Nếu tắt mạng (ngắt Wi-Fi / 4G), sau 45s không có ping mới -> Chắc chắn NGOẠI TUYẾN!
+      if (diffSeconds <= 45) {
+        return { isOnline: true, diffSeconds, text: 'Đang hoạt động thời gian thực', color: '#10b981' };
+      }
+
+      let timeText = '';
+      if (diffSeconds < 60) {
+        timeText = 'Vừa ngắt kết nối';
+      } else if (diffSeconds < 3600) {
+        timeText = `Mất kết nối ${Math.floor(diffSeconds / 60)} phút trước`;
+      } else {
+        timeText = `Mất kết nối ${Math.floor(diffSeconds / 3600)} giờ trước`;
+      }
+      return { isOnline: false, diffSeconds, text: `Ngoại tuyến (${timeText})`, color: '#ef4444' };
+    }
+
+    function updateChildDashboardLive(deviceData, status) {
+      if (!deviceData) return;
+      const dashChildName = document.getElementById('dashChildName');
+      const dashChildStatus = document.getElementById('dashChildStatus');
+      const dashOfflineNotice = document.getElementById('dashOfflineNotice');
+      const dashOfflineNoticeDetail = document.getElementById('dashOfflineNoticeDetail');
+      const dashBalanceScore = document.getElementById('dashBalanceScore');
+      const dashBalanceBadge = document.getElementById('dashBalanceBadge');
+      const dashBalanceSub = document.getElementById('dashBalanceSub');
+      const dashStudyTime = document.getElementById('dashStudyTime');
+      const dashGameTime = document.getElementById('dashGameTime');
+      const dashSocialTime = document.getElementById('dashSocialTime');
+
+      if (dashChildName) dashChildName.textContent = deviceData.deviceModel || 'Điện thoại học sinh';
+
+      if (dashChildStatus) {
+        if (status.isOnline) {
+          dashChildStatus.innerHTML = `<span style="color: #10b981; font-weight: 700;">● ${status.text}</span>`;
+        } else {
+          dashChildStatus.innerHTML = `<span style="color: #ef4444; font-weight: 700;">● ${status.text}</span>`;
+        }
+      }
+
+      if (dashOfflineNotice) {
+        dashOfflineNotice.style.display = status.isOnline ? 'none' : 'block';
+        if (dashOfflineNoticeDetail && !status.isOnline) {
+          dashOfflineNoticeDetail.textContent = `Thiết bị học sinh hiện không có kết nối internet (${status.text}). Toàn bộ lệnh can thiệp và số liệu sẽ được cập nhật đồng bộ ngay khi máy kết nối mạng trở lại.`;
+        }
+      }
+
+      if (deviceData.usage) {
+        const u = deviceData.usage;
+        const score = typeof u.balanceScore === 'number' ? u.balanceScore : 88;
+        if (dashBalanceScore) dashBalanceScore.innerHTML = `${score}<span style="font-size: 0.9rem; color: #94a3b8;">/100</span>`;
+        
+        if (dashBalanceBadge) {
+          if (score >= 80) {
+            dashBalanceBadge.textContent = '🟢 Lành Mạnh';
+            dashBalanceBadge.style.color = '#10b981';
+            dashBalanceBadge.style.borderColor = '#10b981';
+            dashBalanceBadge.style.background = 'rgba(16, 185, 129, 0.15)';
+          } else if (score >= 50) {
+            dashBalanceBadge.textContent = '🟡 Cân Bằng';
+            dashBalanceBadge.style.color = '#f59e0b';
+            dashBalanceBadge.style.borderColor = '#f59e0b';
+            dashBalanceBadge.style.background = 'rgba(245, 158, 11, 0.15)';
+          } else {
+            dashBalanceBadge.textContent = '🔴 Cần Chú Ý';
+            dashBalanceBadge.style.color = '#ef4444';
+            dashBalanceBadge.style.borderColor = '#ef4444';
+            dashBalanceBadge.style.background = 'rgba(239, 68, 68, 0.15)';
+          }
+        }
+        if (dashBalanceSub) dashBalanceSub.textContent = 'Đạt chuẩn an toàn số CVA';
+
+        const studyM = Number(u.studyTimeMinutes) || 0;
+        const gameM = Number(u.gameTimeMinutes) || 0;
+        const socialM = Number(u.socialTimeMinutes) || 0;
+        const totalM = studyM + gameM + socialM || 1;
+
+        if (dashStudyTime) dashStudyTime.textContent = `${Math.floor(studyM / 60)}h ${studyM % 60}m (${Math.round(studyM * 100 / totalM)}%)`;
+        if (dashGameTime) dashGameTime.textContent = `${gameM}m (${Math.round(gameM * 100 / totalM)}%)`;
+        if (dashSocialTime) dashSocialTime.textContent = `${socialM}m (${Math.round(socialM * 100 / totalM)}%)`;
+      } else {
+        // Tuyệt đối không hiển thị số liệu giả nếu chưa có dữ liệu đo đạc
+        if (dashBalanceScore) dashBalanceScore.innerHTML = `--<span style="font-size: 0.9rem; color: #94a3b8;">/100</span>`;
+        if (dashBalanceBadge) {
+          dashBalanceBadge.textContent = '⚪ Chờ đồng bộ';
+          dashBalanceBadge.style.color = '#94a3b8';
+          dashBalanceBadge.style.borderColor = '#94a3b8';
+          dashBalanceBadge.style.background = 'rgba(148, 163, 184, 0.15)';
+        }
+        if (dashBalanceSub) dashBalanceSub.textContent = 'Chưa có bản ghi sử dụng hôm nay';
+        if (dashStudyTime) dashStudyTime.textContent = '--';
+        if (dashGameTime) dashGameTime.textContent = '--';
+        if (dashSocialTime) dashSocialTime.textContent = '--';
+      }
+    }
+
     // 5. BẢNG GIÁM SÁT & ĐỒNG HÀNH THỜI GIAN THỰC (KHI PHỤ HUYNH BẤM VÀO THIẾT BỊ CON)
     const childDashboardModal = document.getElementById('childDashboardModal');
     const btnCloseChildDashboard = document.getElementById('btnCloseChildDashboard');
     const btnCloseChildDashboardBottom = document.getElementById('btnCloseChildDashboardBottom');
-    const dashChildName = document.getElementById('dashChildName');
-    const dashBalanceScore = document.getElementById('dashBalanceScore');
-    const dashStudyTime = document.getElementById('dashStudyTime');
-    const dashGameTime = document.getElementById('dashGameTime');
-    const dashSocialTime = document.getElementById('dashSocialTime');
     const btnToggleFocusMode = document.getElementById('btnToggleFocusMode');
     const focusModeDesc = document.getElementById('focusModeDesc');
     const btnSendReminder = document.getElementById('btnSendReminder');
@@ -1212,13 +1325,8 @@
           const res = await fetch(`${FIREBASE_BASE}/devices/${currentFamilyCode}.json`, { cache: 'no-cache' });
           const data = await res.json();
           if (data) {
-            if (dashChildName) dashChildName.textContent = data.deviceModel || 'Điện thoại học sinh';
-            if (data.usage) {
-              if (dashBalanceScore) dashBalanceScore.innerHTML = `${data.usage.balanceScore || 88}<span style="font-size: 0.9rem; color: #94a3b8;">/100</span>`;
-              if (dashStudyTime) dashStudyTime.textContent = `${Math.floor((data.usage.studyTimeMinutes || 165) / 60)}h ${(data.usage.studyTimeMinutes || 165) % 60}m (68%)`;
-              if (dashGameTime) dashGameTime.textContent = `${data.usage.gameTimeMinutes || 40}m (17%)`;
-              if (dashSocialTime) dashSocialTime.textContent = `${data.usage.socialTimeMinutes || 25}m (10%)`;
-            }
+            const status = calculateDeviceOnlineStatus(data, null);
+            updateChildDashboardLive(data, status);
           }
         } catch (_e) {}
       });
@@ -1296,7 +1404,19 @@
 
           if (childDeviceName) childDeviceName.textContent = model;
           if (childDeviceOs) childDeviceOs.textContent = os;
-          if (childDeviceState) childDeviceState.innerHTML = '<span style="color: #10b981; font-weight: bold;">●</span> Đang hoạt động thời gian thực';
+
+          // TÍNH TOÁN HEARTBEAT THỰC SỰ
+          const status = calculateDeviceOnlineStatus(deviceData, pairingData);
+          const childDeviceDot = document.getElementById('childDeviceDot');
+          if (childDeviceDot) childDeviceDot.style.background = status.color;
+          if (childDeviceState) {
+            childDeviceState.innerHTML = `<span style="color: ${status.color}; font-weight: bold;">●</span> ${status.text}`;
+          }
+
+          // Cập nhật modal con nếu đang mở
+          if (childDashboardModal && childDashboardModal.classList.contains('active')) {
+            updateChildDashboardLive(deviceData || pairingData, status);
+          }
 
           // Đồng bộ giao diện học sinh nếu đang mở cùng tab
           const savedStudentCode = localStorage.getItem('cva_student_paired_code');
@@ -1410,7 +1530,6 @@
     }
 
     // 9. KHỞI TẠO BAN ĐẦU THEO THAM SỐ URL HOẶC SESSION
-    const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('tab') === 'student') {
       tabBtnStudent.click();
     } else {
@@ -1428,21 +1547,13 @@
       if (studentPairedCard) studentPairedCard.style.display = 'none';
     }
 
-    if (urlParams.get('unlocked') === 'true') {
-      if (cardPinGate) cardPinGate.style.display = 'none';
-      if (cardParentHub) cardParentHub.style.display = 'block';
-      if (emptyDeviceCard) emptyDeviceCard.style.display = 'none';
-      if (activeDeviceRow) activeDeviceRow.style.display = 'flex';
-      if (btnTriggerUnpair) btnTriggerUnpair.style.display = 'flex';
-      if (childDeviceName) childDeviceName.textContent = 'Xiaomi HyperOS';
-      if (childDeviceState) childDeviceState.innerHTML = '<span style="color: #10b981; font-weight: bold;">●</span> Đang hoạt động thời gian thực';
-    } else if (urlParams.get('tab') === 'parent') {
-      if (cardPinGate) cardPinGate.style.display = 'block';
-      if (cardParentHub) cardParentHub.style.display = 'none';
-    } else if (isParentUnlocked) {
+    if (urlParams.get('unlocked') === 'true' || isParentUnlocked) {
       if (cardPinGate) cardPinGate.style.display = 'none';
       if (cardParentHub) cardParentHub.style.display = 'block';
       checkDevicePairingStatus();
+    } else if (urlParams.get('tab') === 'parent') {
+      if (cardPinGate) cardPinGate.style.display = 'block';
+      if (cardParentHub) cardParentHub.style.display = 'none';
     }
 
     checkCloudStatus();

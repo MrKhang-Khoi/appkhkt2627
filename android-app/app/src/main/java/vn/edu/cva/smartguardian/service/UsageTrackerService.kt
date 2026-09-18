@@ -76,8 +76,6 @@ class UsageTrackerService : Service() {
                 ) ?: emptyList()
             }
 
-            if (statsCollection.isEmpty()) return
-
             var studyTimeMs = 0L
             var gameTimeMs = 0L
             var socialTimeMs = 0L
@@ -130,11 +128,12 @@ class UsageTrackerService : Service() {
                 .putLong("last_updated_at", System.currentTimeMillis())
                 .apply()
 
-            // Đồng bộ trực tiếp thống kê lên Firebase để Parent Hub theo dõi thời gian thực (Alibaba OCR Resource & Concurrency Optimization)
+            // Đồng bộ trực tiếp nhịp tim & thống kê lên Firebase để Parent Hub theo dõi thời gian thực
             val pairedCode = prefs.getString("paired_code", "") ?: ""
             if (pairedCode.isNotEmpty()) {
                 syncScope.launch {
                     try {
+                        val now = System.currentTimeMillis()
                         val mediaType = "application/json; charset=utf-8".toMediaType()
                         val usageJson = JSONObject().apply {
                             put("studyTimeMinutes", (studyTimeMs / 60000).toInt())
@@ -143,11 +142,21 @@ class UsageTrackerService : Service() {
                             put("utilityTimeMinutes", (utilityTimeMs / 60000).toInt())
                             put("totalScreenTimeMinutes", (totalScreenTimeMs / 60000).toInt())
                             put("balanceScore", balanceScore)
-                            put("lastSync", System.currentTimeMillis())
+                            put("lastSync", now)
+                            put("lastHeartbeat", now)
                         }
+
+                        // Cập nhật đồng thời nhánh device: online = true, lastSync = now, kèm usage
+                        val devicePatch = JSONObject().apply {
+                            put("online", true)
+                            put("lastSync", now)
+                            put("lastHeartbeat", now)
+                            put("usage", usageJson)
+                        }
+
                         val req = okhttp3.Request.Builder()
-                            .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$pairedCode/usage.json")
-                            .put(usageJson.toString().toRequestBody(mediaType))
+                            .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$pairedCode.json")
+                            .patch(devicePatch.toString().toRequestBody(mediaType))
                             .build()
                         sharedHttpClient.newCall(req).execute().use { _ ->
                             // Auto-close response stream & return connection to OkHttp pool
@@ -231,7 +240,7 @@ class UsageTrackerService : Service() {
         serviceScope.launch {
             while (isActive) {
                 collectAndSave(this@UsageTrackerService)
-                delay(30_000) // Cập nhật mỗi 30 giây
+                delay(15_000) // Nhịp tim kiểm tra 15 giây
             }
         }
     }

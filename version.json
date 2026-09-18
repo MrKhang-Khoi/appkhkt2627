@@ -3,16 +3,16 @@
     "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.0.apk",
     "minSupportedVersion": 1,
     "releaseDate": "2026-09-18",
-    "sha256": "9E5727228C5459757D3A1B9784F104C608D91CE8F81EEEE9C6892842C90D55F3",
-    "versionName": "1.0.8",
-    "versionCode": 9,
-    "latestVersionName": "1.0.8",
-    "latestVersionCode": 9,
+    "sha256": "484B58B0EE4DE56777F17E41DA5C7396CD8E969F28B5548D6DF6AAC30CA51A4C",
+    "versionName": "1.0.9",
+    "versionCode": 10,
+    "latestVersionName": "1.0.9",
+    "latestVersionCode": 10,
     "changelog": [
-        "Bảo vệ kỷ luật số: Màn hình Học sinh không được tự hủy ghép đôi, chỉ Phụ huynh có quyền quản lý",
-        "Kích hoạt Bảng Giám Sát & Đồng Hành Thời Gian Thực khi Phụ huynh bấm vào thiết bị con",
-        "Đồng bộ thống kê thời lượng học tập, giải trí và Điểm Cân Bằng Số lên Firebase Cloud",
-        "Hỗ trợ chế độ Khóa Giờ Học (Focus Lock) và gửi tin nhắn nhắc nhở từ xa"
+        "Khắc phục triệt để lỗi logic: Nhận diện Trực tuyến/Ngoại tuyến theo nhịp tim (Heartbeat 45s) thật từ máy con",
+        "Khi tắt mạng (ngắt Wi-Fi/4G), hệ thống tự động báo Đỏ/Xám: Ngoại tuyến (Đã ngắt mạng) kèm số phút trôi qua",
+        "Xóa bỏ 100% số liệu giả (88/100, 2h45m), hiển thị đúng trạng thái chờ dữ liệu khi máy chưa đồng bộ",
+        "Tối ưu đa luồng Coroutine và OkHttp Connection Pool theo chuẩn Alibaba Open-Code-Review"
     ],
     "fileSize": "5.28 MB"
 }
