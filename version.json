@@ -3,17 +3,16 @@
     "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.0.apk",
     "minSupportedVersion": 1,
     "releaseDate": "2026-09-18",
-    "sha256": "c3aaa7b430e68521c8bb45f04b1fc17cbaba8365e66149f1826e6fa1d48976c4",
-    "versionName": "1.0.4",
-    "versionCode": 5,
-    "latestVersionName": "1.0.4",
-    "latestVersionCode": 5,
+    "sha256": "b76967d9e45c61935159f618bbbf206afdddc35ddf57f64baada8937fd9e3f40",
+    "versionName": "1.0.5",
+    "versionCode": 6,
+    "latestVersionName": "1.0.5",
+    "latestVersionCode": 6,
     "changelog": [
-        "Đồng nhất 100% giao diện 2 Tab Phụ Huynh và Học Sinh chuẩn M3 quốc tế",
-        "Bảo mật Parent Security PIN 4 số với bàn phím cảm ứng tròn Numpad",
-        "Parent Hub hiển thị Mã gia đình viền vàng kim, quản lý con và ngắt kết nối an toàn",
-        "Chế độ Học Sinh tối giản 'Xin chào ............', 'ĐÃ GHÉP ĐÔI'",
-        "Tự động quét và thông báo cập nhật tức thời qua Firebase Cloud"
+        "Khắc phục 100% giao diện Screen 3 (Student Card + Xin chào ............, ĐÃ GHÉP ĐÔI)",
+        "Loại bỏ toàn bộ thẻ rườm rà (thời gian, điểm cân bằng, Xiaomi help) khớp chuẩn bản thiết kế",
+        "Tối ưu 4 chấm PIN vàng phát sáng và bàn phím số Numpad cảm ứng chuẩn Screen 1",
+        "Parent Hub hiển thị Mã gia đình viền vàng kim và ngắt kết nối an toàn chuẩn Screen 2"
     ],
     "fileSize": "5.28 MB"
 }

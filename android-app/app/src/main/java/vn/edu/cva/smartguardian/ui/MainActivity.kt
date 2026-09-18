@@ -11,8 +11,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Color
-import android.net.Uri
-import android.net.VpnService
 import android.os.Build
 import android.os.Bundle
 import android.os.Process
@@ -80,7 +78,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnParentTriggerUnpair: TextView
     private lateinit var btnLockParentTab: TextView
 
-    // 4. Tab Học Sinh: Screen 3 (Student Onboarding & Greeting)
+    // 4. Tab Học Sinh: Screen 3 (Student Card & Greeting)
     private lateinit var layoutStudentCard: LinearLayout
     private lateinit var etPairingCodeInput: EditText
     private lateinit var btnConnectPairing: TextView
@@ -89,12 +87,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var layoutStudentGreetingGroup: LinearLayout
     private lateinit var tvGreeting: TextView
     private lateinit var tvCompanionBadge: TextView
-    private lateinit var layoutStudentStatsCard: LinearLayout
-    private lateinit var tvStudyTime: TextView
-    private lateinit var tvGameTime: TextView
-    private lateinit var tvBalanceScore: TextView
-    private lateinit var btnXiaomiHelp: TextView
-    private lateinit var btnCheckUpdate: TextView
 
     // 5. Modals & Overlays
     private lateinit var layoutPinConfirmModal: FrameLayout
@@ -111,19 +103,9 @@ class MainActivity : AppCompatActivity() {
         .readTimeout(8, TimeUnit.SECONDS)
         .build()
 
-    private val vpnLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == RESULT_OK) {
-            startSafeVpn()
-        } else {
-            Toast.makeText(this, "Phụ huynh từ chối cấp quyền VPN!", Toast.LENGTH_SHORT).show()
-        }
-    }
-
     private val usageUpdateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            loadUsageStatsFromPrefs()
+            // Nhận cập nhật nền
         }
     }
 
@@ -134,23 +116,23 @@ class MainActivity : AppCompatActivity() {
         initViews()
         setupListeners()
 
-        // 1. Tự động kiểm tra bản cập nhật tức thời
+        // 1. Tự động quét cập nhật tức thời qua Firebase Cloud
         performUpdateCheck(userInitiated = false)
 
-        // 2. Mặc định mở Tab Học Sinh nếu máy là học sinh, hoặc Phụ Huynh nếu đã cấu hình
+        // 2. Mặc định khởi động ở Tab Học Sinh chuẩn Screen 3
+        switchToStudentTab()
+
         val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
         val isPaired = prefs.getBoolean("is_paired", false)
+        val pairedCode = prefs.getString("paired_code", "") ?: ""
 
-        if (isPaired) {
-            switchToStudentTab()
-            showStudentPairedState()
+        if (isPaired && pairedCode.isNotEmpty()) {
+            showStudentPairedState(pairedCode)
             if (hasUsageStatsPermission()) {
                 UsageTrackerService.start(this)
             }
-            startUnpairListener(prefs.getString("paired_code", "") ?: "")
+            startUnpairListener(pairedCode)
         } else {
-            // Khởi đầu ở Tab Học Sinh để nhập mã kết nối
-            switchToStudentTab()
             showStudentUnpairedState()
         }
     }
@@ -159,7 +141,7 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         checkAllPermissions()
 
-        // Kiểm tra cập nhật mỗi khi người dùng mở lại app
+        // Kiểm tra cập nhật mỗi khi mở lại ứng dụng
         performUpdateCheck(userInitiated = false)
 
         val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
@@ -168,12 +150,7 @@ class MainActivity : AppCompatActivity() {
                 UsageTrackerService.start(this)
                 lifecycleScope.launch(Dispatchers.IO) {
                     UsageTrackerService.collectAndSave(this@MainActivity)
-                    withContext(Dispatchers.Main) {
-                        loadUsageStatsFromPrefs()
-                    }
                 }
-            } else {
-                loadUsageStatsFromPrefs()
             }
         }
 
@@ -222,7 +199,7 @@ class MainActivity : AppCompatActivity() {
         btnParentTriggerUnpair = findViewById(R.id.btnParentTriggerUnpair)
         btnLockParentTab = findViewById(R.id.btnLockParentTab)
 
-        // Tab Học Sinh
+        // Tab Học Sinh: Screen 3
         layoutStudentCard = findViewById(R.id.layoutStudentCard)
         etPairingCodeInput = findViewById(R.id.etPairingCodeInput)
         btnConnectPairing = findViewById(R.id.btnConnectPairing)
@@ -231,12 +208,6 @@ class MainActivity : AppCompatActivity() {
         layoutStudentGreetingGroup = findViewById(R.id.layoutStudentGreetingGroup)
         tvGreeting = findViewById(R.id.tvGreeting)
         tvCompanionBadge = findViewById(R.id.tvCompanionBadge)
-        layoutStudentStatsCard = findViewById(R.id.layoutStudentStatsCard)
-        tvStudyTime = findViewById(R.id.tvStudyTime)
-        tvGameTime = findViewById(R.id.tvGameTime)
-        tvBalanceScore = findViewById(R.id.tvBalanceScore)
-        btnXiaomiHelp = findViewById(R.id.btnXiaomiHelp)
-        btnCheckUpdate = findViewById(R.id.btnCheckUpdate)
 
         // Modals & Overlays
         layoutPinConfirmModal = findViewById(R.id.layoutPinConfirmModal)
@@ -252,7 +223,7 @@ class MainActivity : AppCompatActivity() {
         btnTabParent.setOnClickListener { switchToParentTab() }
         btnTabStudent.setOnClickListener { switchToStudentTab() }
 
-        // Bàn phím số Numpad Tab Phụ Huynh
+        // Bàn phím số Numpad Tab Phụ Huynh (Screen 1)
         val keyIds = listOf(
             R.id.key1 to "1", R.id.key2 to "2", R.id.key3 to "3",
             R.id.key4 to "4", R.id.key5 to "5", R.id.key6 to "6",
@@ -277,12 +248,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Parent Hub actions
+        // Parent Hub actions (Screen 2)
         btnParentCopyCode.setOnClickListener {
             val code = tvParentHubFamilyCode.text.toString()
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             clipboard.setPrimaryClip(ClipData.newPlainText("FamilyCode", code))
-            Toast.makeText(this, "Đã sao chép mã $code vào bộ nhớ tạm!", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Đã sao chép mã $code!", Toast.LENGTH_SHORT).show()
         }
 
         btnParentRegenCode.setOnClickListener {
@@ -318,17 +289,9 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Tab Học Sinh actions
+        // Tab Học Sinh: Nút KẾT NỐI (Screen 3)
         btnConnectPairing.setOnClickListener {
             handleConnectPairing()
-        }
-
-        btnXiaomiHelp.setOnClickListener {
-            showXiaomiHelpDialog()
-        }
-
-        btnCheckUpdate.setOnClickListener {
-            performUpdateCheck(userInitiated = true)
         }
     }
 
@@ -401,7 +364,7 @@ class MainActivity : AppCompatActivity() {
                         val bodyStr = response.body?.string()
                         if (!bodyStr.isNullOrEmpty() && bodyStr != "null") {
                             val json = JSONObject(bodyStr)
-                            val model = json.optString("deviceModel", "Thiết bị học sinh")
+                            val model = json.optString("deviceModel", "Xiaomi HyperOS")
                             val isPaired = json.optBoolean("isPaired", false)
                             withContext(Dispatchers.Main) {
                                 if (isPaired) {
@@ -485,7 +448,7 @@ class MainActivity : AppCompatActivity() {
                 layoutUnpairOverlay.visibility = View.GONE
                 tvParentChildSubtitle.text = "Chờ học sinh kết nối..."
                 showStudentUnpairedState()
-                Toast.makeText(this@MainActivity, "Đã ngắt kết nối an toàn với máy học sinh!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MainActivity, "Đã ngắt kết nối an toàn!", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -502,7 +465,7 @@ class MainActivity : AppCompatActivity() {
 
         pbPairingLoading.visibility = View.VISIBLE
         tvPairingStatus.visibility = View.VISIBLE
-        tvPairingStatus.text = "Đang kiểm tra mã $inputCode trên Cloud..."
+        tvPairingStatus.text = "Đang kiểm tra..."
         btnConnectPairing.isEnabled = false
 
         lifecycleScope.launch(Dispatchers.IO) {
@@ -526,17 +489,17 @@ class MainActivity : AppCompatActivity() {
 
                         withContext(Dispatchers.Main) {
                             pbPairingLoading.visibility = View.GONE
-                            tvPairingStatus.text = "Ghép đôi thành công!"
+                            tvPairingStatus.visibility = View.GONE
                             btnConnectPairing.isEnabled = true
-                            showStudentPairedState()
+                            showStudentPairedState(inputCode)
                             startUnpairListener(inputCode)
-                            Toast.makeText(this@MainActivity, "Đã kết nối với máy Phụ huynh!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this@MainActivity, "Đã kết nối thành công!", Toast.LENGTH_SHORT).show()
                         }
                     } else {
                         withContext(Dispatchers.Main) {
                             pbPairingLoading.visibility = View.GONE
                             btnConnectPairing.isEnabled = true
-                            tvPairingStatus.text = "Mã không hợp lệ hoặc đã hết hạn!"
+                            tvPairingStatus.text = "Mã không hợp lệ!"
                             Toast.makeText(this@MainActivity, "Mã ghép đôi không tồn tại!", Toast.LENGTH_LONG).show()
                         }
                     }
@@ -545,26 +508,34 @@ class MainActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) {
                     pbPairingLoading.visibility = View.GONE
                     btnConnectPairing.isEnabled = true
-                    tvPairingStatus.text = "Lỗi kết nối mạng: ${e.message}"
+                    tvPairingStatus.text = "Lỗi mạng: ${e.message}"
                 }
             }
         }
     }
 
-    private fun showStudentPairedState() {
-        layoutStudentCard.visibility = View.GONE
+    // HIỂN THỊ CHUẨN SCREEN 3: CẢ CARD STUDENT VÀ KHỐI GREETING ĐỀU HIỆN TRỰC QUAN
+    private fun showStudentPairedState(code: String) {
+        layoutStudentCard.visibility = View.VISIBLE
+        etPairingCodeInput.setText(code)
+        etPairingCodeInput.isEnabled = false
+        btnConnectPairing.text = "🔗 KẾT NỐI"
+
         layoutStudentGreetingGroup.visibility = View.VISIBLE
-        layoutStudentStatsCard.visibility = View.VISIBLE
         tvGreeting.text = "Xin chào ............ ,"
         tvCompanionBadge.text = "ĐÃ GHÉP ĐÔI"
-        loadUsageStatsFromPrefs()
     }
 
     private fun showStudentUnpairedState() {
         layoutStudentCard.visibility = View.VISIBLE
-        layoutStudentGreetingGroup.visibility = View.GONE
-        layoutStudentStatsCard.visibility = View.GONE
         etPairingCodeInput.setText("")
+        etPairingCodeInput.hint = "CVA-XXXX"
+        etPairingCodeInput.isEnabled = true
+        btnConnectPairing.text = "🔗 KẾT NỐI"
+
+        layoutStudentGreetingGroup.visibility = View.VISIBLE
+        tvGreeting.text = "Xin chào ............ ,"
+        tvCompanionBadge.text = "CHƯA GHÉP ĐÔI"
         tvPairingStatus.visibility = View.GONE
     }
 
@@ -612,23 +583,8 @@ class MainActivity : AppCompatActivity() {
 
             layoutUnpairOverlay.visibility = View.GONE
             showStudentUnpairedState()
-            Toast.makeText(this@MainActivity, "Phụ huynh đã ngắt kết nối. Thiết bị sẵn sàng ghép đôi mới.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this@MainActivity, "Phụ huynh đã ngắt kết nối.", Toast.LENGTH_LONG).show()
         }
-    }
-
-    private fun loadUsageStatsFromPrefs() {
-        val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
-        val studyMs = prefs.getLong("study_time_ms", 0L)
-        val gameMs = prefs.getLong("game_time_ms", 0L)
-        val socialMs = prefs.getLong("social_time_ms", 0L)
-        val score = prefs.getInt("balance_score", 100)
-
-        val studyMinutes = (studyMs / 1000 / 60).toInt()
-        val gameMinutes = ((gameMs + socialMs) / 1000 / 60).toInt()
-
-        tvStudyTime.text = "$studyMinutes phút"
-        tvGameTime.text = "$gameMinutes phút"
-        tvBalanceScore.text = "$score/100"
     }
 
     private fun sendDeviceTelemetry(pairedCode: String, isPaired: Boolean) {
@@ -639,27 +595,12 @@ class MainActivity : AppCompatActivity() {
                 val model = Build.MODEL
                 val androidVer = "Android ${Build.VERSION.RELEASE}"
 
-                val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
-                val studyMs = prefs.getLong("study_time_ms", 0L)
-                val gameMs = prefs.getLong("game_time_ms", 0L)
-                val socialMs = prefs.getLong("social_time_ms", 0L)
-                val totalMs = prefs.getLong("total_screen_time_ms", 0L)
-                val score = prefs.getInt("balance_score", 100)
-
-                val studyMinutes = (studyMs / 1000 / 60).toInt()
-                val gameAndSocialMinutes = ((gameMs + socialMs) / 1000 / 60).toInt()
-                val totalMinutes = (totalMs / 1000 / 60).toInt()
-
                 val jsonMediaType = "application/json; charset=utf-8".toMediaType()
                 val deviceStats = JSONObject().apply {
                     put("pairingCode", pairedCode)
                     put("deviceId", androidId)
                     put("deviceModel", "$manufacturer $model")
                     put("androidVersion", androidVer)
-                    put("totalMinutes", totalMinutes)
-                    put("studyMinutes", studyMinutes)
-                    put("gameAndSocialMinutes", gameAndSocialMinutes)
-                    put("balanceScore", score)
                     put("isPaired", isPaired)
                     put("lastSync", System.currentTimeMillis())
                     put("online", true)
@@ -678,17 +619,11 @@ class MainActivity : AppCompatActivity() {
     private fun performUpdateCheck(userInitiated: Boolean) {
         lifecycleScope.launch {
             if (userInitiated) {
-                Toast.makeText(this@MainActivity, "Đang kết nối máy chủ kiểm tra cập nhật...", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MainActivity, "Đang kiểm tra bản cập nhật...", Toast.LENGTH_SHORT).show()
             }
             val updateInfo = AppUpdateManager.checkForUpdate(this@MainActivity)
             if (updateInfo != null) {
                 showUpdateAvailableDialog(updateInfo)
-            } else if (userInitiated) {
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle("Thông Báo")
-                    .setMessage("Ứng dụng CVA-SmartGuardian của bạn đang là phiên bản mới nhất (v1.0.4)!")
-                    .setPositiveButton("Đóng", null)
-                    .show()
             }
         }
     }
@@ -702,7 +637,7 @@ class MainActivity : AppCompatActivity() {
 
         val builder = AlertDialog.Builder(this)
             .setTitle("🚀 Có Bản Cập Nhật Mới: v${updateInfo.versionName}")
-            .setMessage("Đã có phiên bản mới$sizeText. Bạn có muốn tải về và cài đặt ngay không?$changelogText")
+            .setMessage("Đã có phiên bản mới$sizeText. Bạn có muốn cập nhật ngay không?$changelogText")
             .setPositiveButton("Cập Nhật Ngay") { _, _ ->
                 startDownloadAndInstall(updateInfo)
             }
@@ -792,27 +727,5 @@ class MainActivity : AppCompatActivity() {
         val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
         val adminComponent = ComponentName(this, SmartGuardianAdminReceiver::class.java)
         return dpm.isAdminActive(adminComponent)
-    }
-
-    private fun startSafeVpn() {
-        val intent = Intent(this, SafeVpnFilterService::class.java).apply {
-            action = SafeVpnFilterService.ACTION_START_VPN
-        }
-        startForegroundService(intent)
-        isVpnRunning = true
-    }
-
-    private fun showXiaomiHelpDialog() {
-        AlertDialog.Builder(this)
-            .setTitle("Hướng Dẫn Cấp Quyền Xiaomi HyperOS / Android 14")
-            .setMessage(
-                "Để ứng dụng hoạt động ổn định và bảo vệ toàn diện:\n\n" +
-                "1. Vào Cài đặt máy > Ứng dụng > Quản lý ứng dụng > CVA-SmartGuardian\n" +
-                "2. Nhấn vào 'Tiết kiệm pin' -> Chọn 'Không giới hạn'\n" +
-                "3. Bật mục 'Tự khởi chạy' (Autostart)\n" +
-                "4. Nếu mục 'Hỗ trợ tiếp cận' bị mờ, nhấn vào dấu 3 chấm góc phải trên trong thông tin ứng dụng -> 'Cho phép cài đặt bị hạn chế' (Restricted Settings)"
-            )
-            .setPositiveButton("Đã Hiểu", null)
-            .show()
     }
 }

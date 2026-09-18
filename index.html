@@ -865,7 +865,11 @@
       }
     }
 
-    if (isParentUnlocked) {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('tab') === 'student') {
+      tabBtnStudent.click();
+    }
+    if (urlParams.get('unlocked') === 'true' || isParentUnlocked) {
       cardPinGate.style.display = 'none';
       cardParentHub.style.display = 'block';
       checkDevicePairingStatus();
