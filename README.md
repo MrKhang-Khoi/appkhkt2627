@@ -10,11 +10,11 @@
 * **Trang Web Trực Quan & Test Lab 2 Màn Hình (GitHub Pages)**:  
   👉 **[https://mrkhang-khoi.github.io/appkhkt2627/](https://mrkhang-khoi.github.io/appkhkt2627/)**
 * **Tải Bản Cài Đặt Android APK Trực Tiếp (v1.0 - 6.5 MB)**:  
-  📥 **[Tải CVA-SmartGuardian-v1.0.apk](https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/CVA-SmartGuardian-v1.0.apk)**
+  📥 **[Tải CVA-SmartGuardian-v1.0.apk](https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.0.apk)**
 
 ### 📱 Quét Mã QR Tải Nhanh Trên Điện Thoại:
 <p align="center">
-  <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/CVA-SmartGuardian-v1.0.apk" alt="QR Code Tải APK" width="200"/>
+  <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.0.apk" alt="QR Code Tải APK" width="200"/>
   <br/>
   <em>(Dùng Zalo, Camera hoặc Trình duyệt để quét mã tải APK trực tiếp)</em>
 </p>
