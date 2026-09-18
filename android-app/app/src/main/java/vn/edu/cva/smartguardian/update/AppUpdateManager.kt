@@ -116,8 +116,9 @@ object AppUpdateManager {
 
     private fun fetchVersionJson(url: String): JSONObject? {
         return try {
+            val cacheBusterUrl = if (url.contains("?")) "$url&t=${System.currentTimeMillis()}" else "$url?t=${System.currentTimeMillis()}"
             val request = Request.Builder()
-                .url(url)
+                .url(cacheBusterUrl)
                 .header("Cache-Control", "no-cache")
                 .build()
             httpClient.newCall(request).execute().use { response ->

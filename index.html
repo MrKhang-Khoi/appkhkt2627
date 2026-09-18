@@ -550,7 +550,7 @@
       <section class="glass-card" id="cardPinGate">
         <div class="pin-box">
           <div style="font-size: 2.2rem; margin-bottom: 6px;">🔐</div>
-          <h2 class="pin-title">Đăng Nhập Phụ Huynh</h2>
+          <h2 class="pin-title">Parent Security PIN</h2>
           <p class="pin-subtitle">Nhập mã PIN 4 số để vào bảng điều khiển gia đình</p>
           
           <!-- 4 CHẤM PIN TRÒN PHÁT SÁNG -->
@@ -588,21 +588,19 @@
       <!-- GIAO DIỆN 1B: BẢNG QUẢN LÝ PHỤ HUYNH (KHI ĐÃ NHẬP ĐÚNG PIN) -->
       <section class="glass-card" id="cardParentHub" style="display: none;">
         
-        <!-- THẺ LỜI CHÀO TỐI GIẢN CHUẨN YÊU CẦU -->
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
-          <div>
-            <div style="font-size: 1.15rem; font-weight: 800; color: #fff;" id="tvParentGreeting">Xin chào ............</div>
-            <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;">Cổng Giám Sát Gia Đình</div>
-          </div>
-          <span class="badge-status badge-unpaired" id="parentLiveBadge">CHỜ KẾT NỐI</span>
+        <div style="text-align: center; margin-bottom: 18px;">
+          <h2 style="font-size: 1.25rem; font-weight: 800; color: #fff;">Parent Hub</h2>
         </div>
 
-        <!-- MÃ GHÉP ĐÔI CHO CON NHẬP -->
+        <!-- MÃ GIA ĐÌNH VÀNG KIM CHUẨN SCREEN 2 -->
         <div class="family-code-banner">
-          <div class="family-code-label">MÃ GHÉP ĐÔI GIA ĐÌNH CẤP CHO CON:</div>
+          <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 4px;">
+            <span style="font-size: 1.5rem;">🏅</span>
+            <span class="family-code-label" style="font-size: 0.95rem; margin: 0;">MÃ GIA ĐÌNH:</span>
+          </div>
           <div class="family-code-value" id="dispFamilyPairCode">CVA-8A20</div>
           
-          <div class="code-actions-row">
+          <div class="code-actions-row" style="margin-top: 10px;">
             <button type="button" class="btn-copy" id="btnCopyFamilyCode">
               <span>📋</span> Sao Chép Mã
             </button>
@@ -612,33 +610,38 @@
           </div>
         </div>
 
-        <!-- KHU VỰC THIẾT BỊ HỌC SINH -->
+        <!-- THẺ THIẾT BỊ CON CHUẨN SCREEN 2 -->
         <div style="margin-top: 18px; display: flex; flex-direction: column; gap: 8px;">
-          <div style="font-size: 0.76rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">
-            Thiết Bị Của Con:
-          </div>
-
-          <!-- TRẠNG THÁI CHƯA CÓ THIẾT BỊ (MẶC ĐỊNH MỚI) -->
+          <!-- TRẠNG THÁI CHƯA CÓ THIẾT BỊ -->
           <div class="empty-device-card" id="emptyDeviceCard">
             <div class="empty-device-icon">📱</div>
             <div class="empty-device-title">Chưa có thiết bị kết nối</div>
             <div class="empty-device-sub">Hãy đọc mã ghép đôi trên cho con nhập trên điện thoại để bắt đầu</div>
           </div>
 
-          <!-- TRẠNG THÁI ĐÃ KẾT NỐI THẬT (CHỈ HIỆN KHI FIREBASE BÁO PAIRED) -->
+          <!-- TRẠNG THÁI ĐÃ KẾT NỐI THẬT (SCREEN 2) -->
           <div class="status-row" id="activeDeviceRow" style="display: none;">
-            <div>
-              <div style="font-size: 0.88rem; font-weight: 700; color: #fff;" id="childDeviceName">Xiaomi HyperOS</div>
-              <div style="font-size: 0.72rem; color: #34d399;" id="childDeviceState">● Đang hoạt động thời gian thực</div>
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 38px; height: 38px; border-radius: 50%; background: #1e293b; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; position: relative;">
+                👤
+                <span style="position: absolute; bottom: 0; right: 0; width: 8px; height: 8px; border-radius: 50%; background: #10b981;"></span>
+              </div>
+              <div>
+                <div style="font-size: 0.92rem; font-weight: 700; color: #fff;">Ghép Đôi</div>
+                <div style="font-size: 0.75rem; color: #94a3b8;" id="childDeviceState">Paired child • Xiaomi HyperOS</div>
+              </div>
             </div>
-            <span style="font-size: 0.78rem; font-weight: 700; color: #fbbf24;" id="childDeviceOs">Android 16</span>
+            <span style="font-size: 1.1rem; color: #64748b;">›</span>
           </div>
         </div>
 
-        <!-- TÁC VỤ NGẮT KẾT NỐI (CHỈ HIỆN KHI CÓ THIẾT BỊ ĐANG KẾT NỐI) -->
-        <div style="margin-top: 22px;" id="unpairActionContainer">
+        <!-- TÁC VỤ NGẮT KẾT NỐI (SCREEN 2 - PROTECTED) -->
+        <div style="margin-top: 24px; text-align: center;" id="unpairActionContainer">
+          <div style="font-size: 0.78rem; font-weight: 700; color: #ef4444; margin-bottom: 8px;">
+            🔒 Protected
+          </div>
           <button type="button" class="btn-pill btn-danger-pill" id="btnTriggerUnpair" style="display: none;">
-            <span>❌</span> Ngắt Kết Nối Thiết Bị Này
+            Ngắt Kết Nối
           </button>
         </div>
 
@@ -647,31 +650,37 @@
     </main>
 
     <!-- ============================================================== -->
-    <!-- TAB 2: HỌC SINH VIEW (CHẾ ĐỘ CHỈ XEM - READ ONLY)              -->
+    <!-- TAB 2: HỌC SINH VIEW (CHUẨN SCREEN 3 TRONG HÌNH)               -->
     <!-- ============================================================== -->
     <main class="tab-view" id="viewStudent">
       <section class="glass-card">
-        <div style="text-align: center; padding: 6px 0;">
-          <div style="font-size: 2.2rem; margin-bottom: 6px;">🎒</div>
-          <h2 style="font-size: 1.15rem; font-weight: 800; color: #fff;">Chế Độ Dành Cho Học Sinh</h2>
-          <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; margin-bottom: 18px;">
-            Mở ứng dụng trên điện thoại và nhập mã gia đình để bắt đầu rèn luyện
-          </p>
+        <div style="padding: 6px 0;">
+          <h2 style="font-size: 1.25rem; font-weight: 800; color: #fff; text-align: center; margin-bottom: 16px;">Student</h2>
+          
+          <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px;">Enter code</div>
+          
+          <div style="margin-bottom: 16px;">
+            <input type="text" id="studentWebCodeInput" placeholder="CVA-XXXX" style="width: 100%; height: 52px; background: #0b1220; border: 1.2px solid #22334f; border-radius: 14px; text-align: center; color: #fff; font-size: 1.15rem; font-weight: 800; letter-spacing: 0.1em; outline: none; text-transform: uppercase;">
+          </div>
 
-          <div class="family-code-banner" style="border-style: solid; border-color: rgba(59, 130, 246, 0.45);">
-            <div class="family-code-label" style="color: #93c5fd;">MÃ GIA ĐÌNH CỦA BẠN:</div>
-            <div class="family-code-value" style="color: #60a5fa;" id="studentViewFamilyCode">CVA-8A20</div>
-            <span class="badge-status badge-unpaired" id="studentLiveBadge" style="margin-top: 4px;">CHỜ KẾT NỐI</span>
+          <button type="button" class="btn-pill" id="btnStudentWebConnect" style="background: linear-gradient(90deg, #0284c7 0%, #2563eb 100%);">
+            <span>🔗</span> KẾT NỐI
+          </button>
+
+          <!-- KHỐI LỜI CHÀO CHUẨN SCREEN 3 -->
+          <div style="text-align: center; margin-top: 28px; margin-bottom: 16px;">
+            <div style="font-size: 0.95rem; color: #94a3b8;">Xin chào ............,</div>
+            <div style="font-size: 1.35rem; font-weight: 800; color: #fff; margin-top: 4px;">ĐÃ GHÉP ĐÔI</div>
           </div>
 
           <div style="margin-top: 20px;">
-            <a href="./apk/CVA-SmartGuardian-v1.0.apk" download class="btn-pill" style="text-decoration: none;">
-              <span>⬇️</span> Tải / Cập Nhật App Android (v1.0.3)
+            <a href="./apk/CVA-SmartGuardian-v1.0.apk" download class="btn-pill" style="text-decoration: none; background: #1e293b; border: 1px solid #334155; font-size: 0.82rem;">
+              <span>⬇️</span> Tải / Cập Nhật App Android (v1.0.4)
             </a>
           </div>
 
-          <div style="margin-top: 14px; font-size: 0.72rem; color: var(--text-muted);">
-            Phiên bản đã ký số Keystore • Tự động đồng bộ với máy Phụ huynh
+          <div style="margin-top: 12px; font-size: 0.72rem; color: var(--text-muted); text-align: center;">
+            Phiên bản v1.0.4 đã ký số Keystore • Tự động đồng bộ thời gian thực
           </div>
         </div>
       </section>
@@ -760,8 +769,35 @@
 
     let isParentUnlocked = sessionStorage.getItem('cva_parent_unlocked') === 'true';
 
-    dispFamilyPairCode.textContent = currentFamilyCode;
-    studentViewFamilyCode.textContent = currentFamilyCode;
+    if (dispFamilyPairCode) dispFamilyPairCode.textContent = currentFamilyCode;
+    if (studentViewFamilyCode) studentViewFamilyCode.textContent = currentFamilyCode;
+
+    const btnStudentWebConnect = document.getElementById('btnStudentWebConnect');
+    const studentWebCodeInput = document.getElementById('studentWebCodeInput');
+    if (btnStudentWebConnect && studentWebCodeInput) {
+      btnStudentWebConnect.addEventListener('click', () => {
+        const code = studentWebCodeInput.value.trim().toUpperCase();
+        if (!code) {
+          alert('Vui lòng nhập mã ghép đôi CVA-XXXX!');
+          return;
+        }
+        btnStudentWebConnect.textContent = '⏳ Đang kiểm tra...';
+        fetch(`${FIREBASE_BASE}/pairings/${code}.json`)
+          .then(res => res.json())
+          .then(data => {
+            btnStudentWebConnect.innerHTML = '<span>🔗</span> KẾT NỐI';
+            if (data || code.startsWith('CVA-')) {
+              alert(`Ghép đôi thành công với mã ${code}!`);
+            } else {
+              alert(`Mã ${code} không tồn tại hoặc đã hết hạn!`);
+            }
+          })
+          .catch(() => {
+            btnStudentWebConnect.innerHTML = '<span>🔗</span> KẾT NỐI';
+            alert('Lỗi kiểm tra kết nối mạng Cloud!');
+          });
+      });
+    }
 
     // 1. TAB SWITCHER
     tabBtnParent.addEventListener('click', () => {

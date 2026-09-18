@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -7,180 +8,440 @@
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@color/background"
-        android:fillViewport="true">
+        android:fillViewport="true"
+        android:scrollbars="none">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical">
+            android:orientation="vertical"
+            android:padding="20dp">
 
-            <!-- ============================================================== -->
-            <!-- MÀN HÌNH 1: ONBOARDING GHÉP ĐÔI (CHỈ HIỆN KHI CHƯA GHÉP ĐÔI) -->
-            <!-- ============================================================== -->
+            <!-- ========================================================== -->
+            <!-- 1. TOP HEADER BAR: LOGO + APP TITLE + DISCREET CLOUD BADGE -->
+            <!-- ========================================================== -->
             <LinearLayout
-                android:id="@+id/layoutOnboarding"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:orientation="vertical"
-                android:gravity="center"
-                android:padding="24dp"
-                android:visibility="visible">
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="18dp">
 
-                <!-- LOGO & BRAND -->
                 <ImageView
-                    android:layout_width="64dp"
-                    android:layout_height="64dp"
+                    android:layout_width="34dp"
+                    android:layout_height="34dp"
                     android:src="@drawable/ic_launcher"
-                    android:contentDescription="Logo"
-                    android:layout_marginBottom="12dp" />
+                    android:contentDescription="Logo" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="CVA-SmartGuardian"
-                    android:textColor="@color/text_main"
-                    android:textSize="22sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="HỆ SINH THÁI ĐỒNG HÀNH SỐ"
-                    android:textColor="@color/accent_gold"
-                    android:textSize="11sp"
+                    android:textColor="#F8FAFC"
+                    android:textSize="18sp"
                     android:textStyle="bold"
-                    android:letterSpacing="0.08"
-                    android:layout_marginTop="4dp"
-                    android:layout_marginBottom="28dp" />
+                    android:layout_marginStart="10dp" />
 
-                <!-- KHUNG NHẬP MÃ GHÉP ĐÔI TỐI GIẢN CHUẨN M3 -->
-                <com.google.android.material.card.MaterialCardView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    app:cardCornerRadius="20dp"
-                    app:cardBackgroundColor="@color/surface"
-                    app:strokeColor="@color/surface_border"
-                    app:strokeWidth="1dp"
-                    app:cardElevation="0dp"
-                    android:layout_marginBottom="20dp">
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1" />
 
-                    <LinearLayout
-                        android:layout_width="match_parent"
+                <!-- CLOUD ICON BADGE VỚI CHẤM XANH TRỰC TUYẾN -->
+                <FrameLayout
+                    android:id="@+id/btnHeaderCloudBadge"
+                    android:layout_width="38dp"
+                    android:layout_height="38dp"
+                    android:background="@drawable/bg_cloud_badge"
+                    android:clickable="true"
+                    android:focusable="true">
+
+                    <TextView
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:padding="20dp">
+                        android:layout_gravity="center"
+                        android:text="☁️"
+                        android:textSize="15sp" />
 
-                        <EditText
-                            android:id="@+id/etPairingCodeInput"
-                            android:layout_width="match_parent"
-                            android:layout_height="56dp"
-                            android:background="@drawable/bg_code_field"
-                            android:textColor="#FBBF24"
-                            android:textColorHint="#64748B"
-                            android:textSize="20sp"
-                            android:textStyle="bold"
-                            android:gravity="center"
-                            android:hint="CVA-XXXX"
-                            android:textAllCaps="true"
-                            android:inputType="textCapCharacters|textNoSuggestions"
-                            android:letterSpacing="0.12"
-                            android:paddingLeft="16dp"
-                            android:paddingRight="16dp"
-                            android:layout_marginBottom="16dp" />
+                    <View
+                        android:layout_width="8dp"
+                        android:layout_height="8dp"
+                        android:layout_gravity="top|end"
+                        android:layout_marginTop="5dp"
+                        android:layout_marginEnd="5dp"
+                        android:background="@drawable/bg_pin_dot_filled" />
+                </FrameLayout>
+            </LinearLayout>
 
-                        <!-- NÚT KẾT NỐI -->
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btnConnectPairing"
-                            android:layout_width="match_parent"
-                            android:layout_height="52dp"
-                            android:text="🔗 KẾT NỐI"
-                            android:textColor="@color/on_primary"
-                            app:backgroundTint="@color/primary"
-                            app:cornerRadius="26dp"
-                            android:textSize="15sp"
-                            android:textStyle="bold" />
+            <!-- ========================================================== -->
+            <!-- 2. SEGMENTED CONTROL: 2 TABS [ PHỤ HUYNH ] | [ HỌC SINH ]  -->
+            <!-- ========================================================== -->
+            <LinearLayout
+                android:id="@+id/layoutSegmentedControl"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:background="@drawable/bg_tab_container"
+                android:orientation="horizontal"
+                android:padding="4dp"
+                android:layout_marginBottom="20dp">
 
-                        <!-- VÒNG LOADING XOAY -->
-                        <ProgressBar
-                            android:id="@+id/pbPairingLoading"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_gravity="center"
-                            android:layout_marginTop="14dp"
-                            android:visibility="gone" />
-
-                        <TextView
-                            android:id="@+id/tvPairingStatus"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_gravity="center"
-                            android:textColor="#34D399"
-                            android:textSize="12sp"
-                            android:textStyle="bold"
-                            android:layout_marginTop="8dp"
-                            android:visibility="gone" />
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
-
-                <!-- THÔNG TIN MÃ THIẾT BỊ MÁY NÀY (ẨN) -->
+                <!-- TAB 1: PHỤ HUYNH -->
                 <TextView
-                    android:id="@+id/tvMyDevicePin"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:visibility="gone" />
+                    android:id="@+id/btnTabParent"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_tab_active"
+                    android:text="👨‍👩‍👧 Phụ Huynh"
+                    android:textColor="#FFFFFF"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:gravity="center"
+                    android:clickable="true"
+                    android:focusable="true" />
 
-                <!-- ICON NHỎ TRỢ GIÚP XIAOMI / ANDROID 14 -->
+                <!-- TAB 2: HỌC SINH -->
                 <TextView
-                    android:id="@+id/btnXiaomiHelp"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="ℹ️ Trợ giúp cấp quyền Xiaomi HyperOS / Android 14"
-                    android:textColor="#93C5FD"
-                    android:textSize="11sp"
-                    android:background="@drawable/bg_help_pill"
-                    android:paddingLeft="16dp"
-                    android:paddingRight="16dp"
-                    android:paddingTop="8dp"
-                    android:paddingBottom="8dp"
+                    android:id="@+id/btnTabStudent"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_tab_inactive"
+                    android:text="🎒 Học Sinh"
+                    android:textColor="#94A3B8"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:gravity="center"
                     android:clickable="true"
                     android:focusable="true" />
             </LinearLayout>
 
-            <!-- ============================================================== -->
-            <!-- MÀN HÌNH 2: DASHBOARD CHÍNH (CHỈ HIỆN KHI ĐÃ GHÉP ĐÔI)        -->
-            <!-- ============================================================== -->
+            <!-- ========================================================== -->
+            <!-- 3. VIEW TAB 1: PHỤ HUYNH                                  -->
+            <!-- ========================================================== -->
             <LinearLayout
-                android:id="@+id/layoutDashboard"
+                android:id="@+id/layoutTabParentContent"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:padding="20dp"
-                android:visibility="gone">
+                android:visibility="visible">
 
-                <!-- THẺ LỜI CHÀO & HUY HIỆU ĐỒNG HÀNH -->
-                <com.google.android.material.card.MaterialCardView
+                <!-- SCREEN 1: PARENT SECURITY PIN GATE -->
+                <LinearLayout
+                    android:id="@+id/layoutParentPinGate"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    app:cardCornerRadius="18dp"
-                    app:cardBackgroundColor="@color/surface"
-                    app:strokeColor="@color/surface_border"
-                    app:strokeWidth="1dp"
-                    app:cardElevation="0dp"
-                    android:layout_marginBottom="16dp">
+                    android:background="@drawable/bg_glass_card"
+                    android:orientation="vertical"
+                    android:gravity="center_horizontal"
+                    android:padding="24dp"
+                    android:visibility="visible">
 
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Parent Security PIN"
+                        android:textColor="#F8FAFC"
+                        android:textSize="18sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="22dp" />
+
+                    <!-- 4 CHẤM PIN TRÒN PHÁT SÁNG VÀNG KIM -->
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center"
+                        android:layout_marginBottom="26dp">
+
+                        <View
+                            android:id="@+id/pinDot1"
+                            android:layout_width="16dp"
+                            android:layout_height="16dp"
+                            android:layout_margin="10dp"
+                            android:background="@drawable/bg_pin_dot_empty" />
+
+                        <View
+                            android:id="@+id/pinDot2"
+                            android:layout_width="16dp"
+                            android:layout_height="16dp"
+                            android:layout_margin="10dp"
+                            android:background="@drawable/bg_pin_dot_empty" />
+
+                        <View
+                            android:id="@+id/pinDot3"
+                            android:layout_width="16dp"
+                            android:layout_height="16dp"
+                            android:layout_margin="10dp"
+                            android:background="@drawable/bg_pin_dot_empty" />
+
+                        <View
+                            android:id="@+id/pinDot4"
+                            android:layout_width="16dp"
+                            android:layout_height="16dp"
+                            android:layout_margin="10dp"
+                            android:background="@drawable/bg_pin_dot_empty" />
+                    </LinearLayout>
+
+                    <!-- THÔNG BÁO LỖI PIN NẾU CÓ -->
+                    <TextView
+                        android:id="@+id/tvParentPinError"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="#EF4444"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:visibility="gone"
+                        android:layout_marginBottom="12dp" />
+
+                    <!-- BÀN PHÍM CẢM ỨNG TRÒN TO CHUẨN M3 (3x4) -->
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:gravity="center">
+
+                        <!-- Hàng 1: 1, 2, 3 -->
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:id="@+id/key1"
+                                android:layout_width="66dp"
+                                android:layout_height="66dp"
+                                android:layout_margin="8dp"
+                                android:background="@drawable/bg_numpad_key"
+                                android:text="1"
+                                android:textColor="#F8FAFC"
+                                android:textSize="22sp"
+                                android:textStyle="bold"
+                                android:gravity="center"
+                                android:clickable="true"
+                                android:focusable="true" />
+
+                            <TextView
+                                android:id="@+id/key2"
+                                android:layout_width="66dp"
+                                android:layout_height="66dp"
+                                android:layout_margin="8dp"
+                                android:background="@drawable/bg_numpad_key"
+                                android:text="2"
+                                android:textColor="#F8FAFC"
+                                android:textSize="22sp"
+                                android:textStyle="bold"
+                                android:gravity="center"
+                                android:clickable="true"
+                                android:focusable="true" />
+
+                            <TextView
+                                android:id="@+id/key3"
+                                android:layout_width="66dp"
+                                android:layout_height="66dp"
+                                android:layout_margin="8dp"
+                                android:background="@drawable/bg_numpad_key"
+                                android:text="3"
+                                android:textColor="#F8FAFC"
+                                android:textSize="22sp"
+                                android:textStyle="bold"
+                                android:gravity="center"
+                                android:clickable="true"
+                                android:focusable="true" />
+                        </LinearLayout>
+
+                        <!-- Hàng 2: 4, 5, 6 -->
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:id="@+id/key4"
+                                android:layout_width="66dp"
+                                android:layout_height="66dp"
+                                android:layout_margin="8dp"
+                                android:background="@drawable/bg_numpad_key"
+                                android:text="4"
+                                android:textColor="#F8FAFC"
+                                android:textSize="22sp"
+                                android:textStyle="bold"
+                                android:gravity="center"
+                                android:clickable="true"
+                                android:focusable="true" />
+
+                            <TextView
+                                android:id="@+id/key5"
+                                android:layout_width="66dp"
+                                android:layout_height="66dp"
+                                android:layout_margin="8dp"
+                                android:background="@drawable/bg_numpad_key"
+                                android:text="5"
+                                android:textColor="#F8FAFC"
+                                android:textSize="22sp"
+                                android:textStyle="bold"
+                                android:gravity="center"
+                                android:clickable="true"
+                                android:focusable="true" />
+
+                            <TextView
+                                android:id="@+id/key6"
+                                android:layout_width="66dp"
+                                android:layout_height="66dp"
+                                android:layout_margin="8dp"
+                                android:background="@drawable/bg_numpad_key"
+                                android:text="6"
+                                android:textColor="#F8FAFC"
+                                android:textSize="22sp"
+                                android:textStyle="bold"
+                                android:gravity="center"
+                                android:clickable="true"
+                                android:focusable="true" />
+                        </LinearLayout>
+
+                        <!-- Hàng 3: 7, 8, 9 -->
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:id="@+id/key7"
+                                android:layout_width="66dp"
+                                android:layout_height="66dp"
+                                android:layout_margin="8dp"
+                                android:background="@drawable/bg_numpad_key"
+                                android:text="7"
+                                android:textColor="#F8FAFC"
+                                android:textSize="22sp"
+                                android:textStyle="bold"
+                                android:gravity="center"
+                                android:clickable="true"
+                                android:focusable="true" />
+
+                            <TextView
+                                android:id="@+id/key8"
+                                android:layout_width="66dp"
+                                android:layout_height="66dp"
+                                android:layout_margin="8dp"
+                                android:background="@drawable/bg_numpad_key"
+                                android:text="8"
+                                android:textColor="#F8FAFC"
+                                android:textSize="22sp"
+                                android:textStyle="bold"
+                                android:gravity="center"
+                                android:clickable="true"
+                                android:focusable="true" />
+
+                            <TextView
+                                android:id="@+id/key9"
+                                android:layout_width="66dp"
+                                android:layout_height="66dp"
+                                android:layout_margin="8dp"
+                                android:background="@drawable/bg_numpad_key"
+                                android:text="9"
+                                android:textColor="#F8FAFC"
+                                android:textSize="22sp"
+                                android:textStyle="bold"
+                                android:gravity="center"
+                                android:clickable="true"
+                                android:focusable="true" />
+                        </LinearLayout>
+
+                        <!-- Hàng 4: Clear, 0, Backspace -->
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:id="@+id/keyClear"
+                                android:layout_width="66dp"
+                                android:layout_height="66dp"
+                                android:layout_margin="8dp"
+                                android:background="@drawable/bg_numpad_key"
+                                android:text="Clear"
+                                android:textColor="#38BDF8"
+                                android:textSize="13sp"
+                                android:textStyle="bold"
+                                android:gravity="center"
+                                android:clickable="true"
+                                android:focusable="true" />
+
+                            <TextView
+                                android:id="@+id/key0"
+                                android:layout_width="66dp"
+                                android:layout_height="66dp"
+                                android:layout_margin="8dp"
+                                android:background="@drawable/bg_numpad_key"
+                                android:text="0"
+                                android:textColor="#F8FAFC"
+                                android:textSize="22sp"
+                                android:textStyle="bold"
+                                android:gravity="center"
+                                android:clickable="true"
+                                android:focusable="true" />
+
+                            <TextView
+                                android:id="@+id/keyBackspace"
+                                android:layout_width="66dp"
+                                android:layout_height="66dp"
+                                android:layout_margin="8dp"
+                                android:background="@drawable/bg_numpad_key"
+                                android:text="⌫"
+                                android:textColor="#38BDF8"
+                                android:textSize="18sp"
+                                android:textStyle="bold"
+                                android:gravity="center"
+                                android:clickable="true"
+                                android:focusable="true" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Mã PIN bảo mật mặc định: 1234"
+                        android:textColor="#64748B"
+                        android:textSize="11sp"
+                        android:layout_marginTop="16dp" />
+                </LinearLayout>
+
+                <!-- SCREEN 2: PARENT HUB (KHI ĐÃ NHẬP ĐÚNG PIN) -->
+                <LinearLayout
+                    android:id="@+id/layoutParentHub"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_glass_card"
+                    android:orientation="vertical"
+                    android:padding="20dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Parent Hub"
+                        android:textColor="#F8FAFC"
+                        android:textSize="18sp"
+                        android:textStyle="bold"
+                        android:layout_gravity="center_horizontal"
+                        android:layout_marginBottom="16dp" />
+
+                    <!-- THẺ VÀNG KIM MÃ GIA ĐÌNH CHUẨN SCREEN 2 -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:background="@drawable/bg_gold_card"
                         android:orientation="horizontal"
                         android:gravity="center_vertical"
-                        android:padding="16dp">
+                        android:padding="16dp"
+                        android:layout_marginBottom="14dp">
 
-                        <ImageView
-                            android:layout_width="44dp"
-                            android:layout_height="44dp"
-                            android:src="@drawable/ic_launcher"
-                            android:contentDescription="Logo"
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🏅"
+                            android:textSize="32sp"
                             android:layout_marginEnd="14dp" />
 
                         <LinearLayout
@@ -190,468 +451,528 @@
                             android:orientation="vertical">
 
                             <TextView
-                                android:id="@+id/tvGreeting"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Xin chào ............"
-                                android:textColor="@color/text_main"
-                                android:textSize="16sp"
+                                android:text="MÃ GIA ĐÌNH:"
+                                android:textColor="#FCD34D"
+                                android:textSize="12sp"
+                                android:textStyle="bold"
+                                android:letterSpacing="0.06" />
+
+                            <TextView
+                                android:id="@+id/tvParentHubFamilyCode"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="CVA-8A20"
+                                android:textColor="#FBBF24"
+                                android:textSize="24sp"
+                                android:textStyle="bold"
+                                android:letterSpacing="0.08" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- NÚT SAO CHÉP VÀ ĐỔI MÃ PHỤ TRỢ -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center"
+                        android:layout_marginBottom="16dp">
+
+                        <TextView
+                            android:id="@+id/btnParentCopyCode"
+                            android:layout_width="wrap_content"
+                            android:layout_height="38dp"
+                            android:background="@drawable/bg_device_card"
+                            android:text="📋 Sao Chép Mã"
+                            android:textColor="#93C5FD"
+                            android:textSize="12sp"
+                            android:textStyle="bold"
+                            android:gravity="center"
+                            android:paddingLeft="14dp"
+                            android:paddingRight="14dp"
+                            android:layout_marginEnd="10dp"
+                            android:clickable="true"
+                            android:focusable="true" />
+
+                        <TextView
+                            android:id="@+id/btnParentRegenCode"
+                            android:layout_width="wrap_content"
+                            android:layout_height="38dp"
+                            android:background="@drawable/bg_device_card"
+                            android:text="🔄 Đổi Mã Mới"
+                            android:textColor="#94A3B8"
+                            android:textSize="12sp"
+                            android:gravity="center"
+                            android:paddingLeft="14dp"
+                            android:paddingRight="14dp"
+                            android:clickable="true"
+                            android:focusable="true" />
+                    </LinearLayout>
+
+                    <!-- THẺ TRẠNG THÁI THIẾT BỊ CON (PAIRED CHILD) -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_device_card"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:padding="14dp"
+                        android:layout_marginBottom="24dp">
+
+                        <!-- AVATAR ICON CÓ CHẤM XANH -->
+                        <FrameLayout
+                            android:layout_width="38dp"
+                            android:layout_height="38dp"
+                            android:background="@drawable/bg_tab_container"
+                            android:layout_marginEnd="12dp">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_gravity="center"
+                                android:text="👤"
+                                android:textSize="16sp" />
+
+                            <View
+                                android:id="@+id/dotParentChildOnline"
+                                android:layout_width="8dp"
+                                android:layout_height="8dp"
+                                android:layout_gravity="bottom|end"
+                                android:background="@drawable/bg_pin_dot_filled" />
+                        </FrameLayout>
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Ghép Đôi"
+                                android:textColor="#F8FAFC"
+                                android:textSize="14sp"
                                 android:textStyle="bold" />
 
                             <TextView
-                                android:id="@+id/tvCompanionBadge"
+                                android:id="@+id/tvParentChildSubtitle"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Cổng Rèn Luyện Tự Chủ Số"
-                                android:textColor="@color/text_muted"
-                                android:textSize="11sp"
-                                android:layout_marginTop="2dp" />
+                                android:text="Paired child • Xiaomi 25069PTEBG"
+                                android:textColor="#94A3B8"
+                                android:textSize="11sp" />
                         </LinearLayout>
 
                         <TextView
-                            android:id="@+id/tvLiveStatusBadge"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="ĐÃ GHÉP ĐÔI"
-                            android:textColor="@color/success"
-                            android:textSize="11sp"
-                            android:textStyle="bold"
-                            android:background="#132B1E"
-                            android:paddingLeft="10dp"
-                            android:paddingRight="10dp"
-                            android:paddingTop="6dp"
-                            android:paddingBottom="6dp" />
+                            android:text="›"
+                            android:textColor="#64748B"
+                            android:textSize="20sp" />
                     </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
 
-            <!-- SÂN KHẤU TỰ CHỦ SỐ (DIGITAL WELLBEING STAGE) -->
+                    <!-- KHU VỰC HÀNH ĐỘNG BẢO VỆ: NGẮT KẾT NỐI -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:gravity="center_horizontal">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🔒 Protected"
+                            android:textColor="#EF4444"
+                            android:textSize="12sp"
+                            android:textStyle="bold"
+                            android:layout_marginBottom="8dp" />
+
+                        <TextView
+                            android:id="@+id/btnParentTriggerUnpair"
+                            android:layout_width="match_parent"
+                            android:layout_height="48dp"
+                            android:background="@drawable/bg_danger_pill"
+                            android:text="Ngắt Kết Nối"
+                            android:textColor="#EF4444"
+                            android:textSize="14sp"
+                            android:textStyle="bold"
+                            android:gravity="center"
+                            android:clickable="true"
+                            android:focusable="true" />
+                    </LinearLayout>
+
+                    <!-- NÚT KHÓA LẠI TAB PHỤ HUYNH -->
+                    <TextView
+                        android:id="@+id/btnLockParentTab"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🔒 Khóa Bảng Điều Khiển"
+                        android:textColor="#64748B"
+                        android:textSize="11sp"
+                        android:layout_gravity="center_horizontal"
+                        android:layout_marginTop="16dp"
+                        android:clickable="true"
+                        android:focusable="true" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- ========================================================== -->
+            <!-- 4. VIEW TAB 2: HỌC SINH (SCREEN 3)                         -->
+            <!-- ========================================================== -->
             <LinearLayout
+                android:id="@+id/layoutTabStudentContent"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:background="@color/surface"
-                android:padding="20dp"
-                android:layout_marginBottom="16dp">
+                android:visibility="gone">
 
+                <!-- CARD "STUDENT" CHUẨN SCREEN 3 -->
                 <LinearLayout
+                    android:id="@+id/layoutStudentCard"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:layout_marginBottom="16dp">
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="📊 NHẬT KÝ RÈN LUYỆN TỰ CHỦ HÔM NAY"
-                        android:textColor="@color/accent_gold"
-                        android:textSize="13sp"
-                        android:textStyle="bold" />
+                    android:background="@drawable/bg_glass_card"
+                    android:orientation="vertical"
+                    android:padding="22dp"
+                    android:layout_marginBottom="24dp">
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="🟢 Đã đồng bộ Cloud"
-                        android:textColor="@color/success"
-                        android:textSize="11sp"
-                        android:textStyle="bold" />
+                        android:text="Student"
+                        android:textColor="#F8FAFC"
+                        android:textSize="18sp"
+                        android:textStyle="bold"
+                        android:layout_gravity="center_horizontal"
+                        android:layout_marginBottom="16dp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Enter code"
+                        android:textColor="#94A3B8"
+                        android:textSize="12sp"
+                        android:layout_marginBottom="8dp" />
+
+                    <!-- Ô NHẬP CVA-XXXX -->
+                    <EditText
+                        android:id="@+id/etPairingCodeInput"
+                        android:layout_width="match_parent"
+                        android:layout_height="54dp"
+                        android:background="@drawable/bg_input_field"
+                        android:textColor="#F8FAFC"
+                        android:textColorHint="#475569"
+                        android:hint="CVA-XXXX"
+                        android:gravity="center"
+                        android:textSize="18sp"
+                        android:textStyle="bold"
+                        android:letterSpacing="0.1"
+                        android:textAllCaps="true"
+                        android:inputType="textCapCharacters|textNoSuggestions"
+                        android:layout_marginBottom="18dp"
+                        android:paddingLeft="16dp"
+                        android:paddingRight="16dp" />
+
+                    <!-- NÚT KẾT NỐI CYAN PHÁT SÁNG -->
+                    <TextView
+                        android:id="@+id/btnConnectPairing"
+                        android:layout_width="match_parent"
+                        android:layout_height="52dp"
+                        android:background="@drawable/bg_pill_button"
+                        android:text="🔗 KẾT NỐI"
+                        android:textColor="#FFFFFF"
+                        android:textSize="15sp"
+                        android:textStyle="bold"
+                        android:gravity="center"
+                        android:clickable="true"
+                        android:focusable="true" />
+
+                    <!-- VÒNG LOADING XOAY -->
+                    <ProgressBar
+                        android:id="@+id/pbPairingLoading"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:layout_marginTop="12dp"
+                        android:visibility="gone" />
+
+                    <TextView
+                        android:id="@+id/tvPairingStatus"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:textColor="#34D399"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:layout_marginTop="8dp"
+                        android:visibility="gone" />
                 </LinearLayout>
 
-                <!-- LƯỚI 3 THẺ: HỌC TẬP - GIẢI TRÍ - TỰ CHỦ -->
+                <!-- TEXT TRẠNG THÁI "Xin chào ............, ĐÃ GHÉP ĐÔI" -->
                 <LinearLayout
+                    android:id="@+id/layoutStudentGreetingGroup"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:layout_marginBottom="16dp">
+                    android:orientation="vertical"
+                    android:gravity="center_horizontal"
+                    android:layout_marginBottom="24dp">
 
-                    <!-- 1. HỌC TẬP -->
-                    <LinearLayout
-                        android:layout_width="0dp"
+                    <TextView
+                        android:id="@+id/tvGreeting"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical"
-                        android:gravity="center"
-                        android:background="#14281E"
-                        android:padding="12dp"
-                        android:layout_marginEnd="6dp">
+                        android:text="Xin chào ............ ,"
+                        android:textColor="#94A3B8"
+                        android:textSize="15sp" />
 
-                        <TextView
-                            android:id="@+id/tvStudyTime"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="0p"
-                            android:textColor="#34D399"
-                            android:textSize="22sp"
-                            android:textStyle="bold" />
+                    <TextView
+                        android:id="@+id/tvCompanionBadge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="ĐÃ GHÉP ĐÔI"
+                        android:textColor="#F8FAFC"
+                        android:textSize="20sp"
+                        android:textStyle="bold"
+                        android:layout_marginTop="4dp" />
+                </LinearLayout>
 
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="📚 Học tập"
-                            android:textColor="#A7F3D0"
-                            android:textSize="11sp"
-                            android:textStyle="bold"
-                            android:layout_marginTop="2dp" />
+                <!-- THẺ THỐNG KÊ RÈN LUYỆN (HIỆN KHI ĐÃ GHÉP ĐÔI) -->
+                <LinearLayout
+                    android:id="@+id/layoutStudentStatsCard"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_glass_card"
+                    android:orientation="vertical"
+                    android:padding="18dp"
+                    android:layout_marginBottom="16dp"
+                    android:visibility="gone">
 
-                        <TextView
-                            android:layout_width="wrap_content"
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginBottom="12dp">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:text="Azota, K12..."
-                            android:textColor="#6EE7B7"
-                            android:textSize="9sp" />
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Học tập"
+                                android:textColor="#94A3B8"
+                                android:textSize="12sp" />
+                            <TextView
+                                android:id="@+id/tvStudyTime"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="0 phút"
+                                android:textColor="#38BDF8"
+                                android:textSize="16sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Giải trí"
+                                android:textColor="#94A3B8"
+                                android:textSize="12sp" />
+                            <TextView
+                                android:id="@+id/tvGameTime"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="0 phút"
+                                android:textColor="#F59E0B"
+                                android:textSize="16sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
                     </LinearLayout>
 
-                    <!-- 2. GIẢI TRÍ & MXH -->
                     <LinearLayout
-                        android:layout_width="0dp"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical"
-                        android:gravity="center"
-                        android:background="#2E1619"
-                        android:padding="12dp"
-                        android:layout_marginStart="3dp"
-                        android:layout_marginEnd="3dp">
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
 
                         <TextView
-                            android:id="@+id/tvGameTime"
-                            android:layout_width="wrap_content"
+                            android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:text="0p"
-                            android:textColor="#F87171"
-                            android:textSize="22sp"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="🎮 Giải trí"
-                            android:textColor="#FECACA"
-                            android:textSize="11sp"
-                            android:textStyle="bold"
-                            android:layout_marginTop="2dp" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Game, YouTube..."
-                            android:textColor="#FCA5A5"
-                            android:textSize="9sp" />
-                    </LinearLayout>
-
-                    <!-- 3. ĐIỂM CÂN BẰNG TỰ CHỦ -->
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical"
-                        android:gravity="center"
-                        android:background="#262215"
-                        android:padding="12dp"
-                        android:layout_marginStart="6dp">
+                            android:layout_weight="1"
+                            android:text="Điểm cân bằng:"
+                            android:textColor="#94A3B8"
+                            android:textSize="13sp" />
 
                         <TextView
                             android:id="@+id/tvBalanceScore"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="100"
-                            android:textColor="@color/accent_gold"
-                            android:textSize="22sp"
+                            android:text="100/100"
+                            android:textColor="#10B981"
+                            android:textSize="15sp"
                             android:textStyle="bold" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="⚖️ Tự Chủ"
-                            android:textColor="#FDE68A"
-                            android:textSize="11sp"
-                            android:textStyle="bold"
-                            android:layout_marginTop="2dp" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Điểm Rèn Luyện"
-                            android:textColor="#FCD34D"
-                            android:textSize="9sp" />
                     </LinearLayout>
                 </LinearLayout>
 
-                <!-- HẠN MỨC & TỔNG THỜI GIAN -->
+                <!-- NÚT TRỢ GIÚP XIAOMI + NÚT CẬP NHẬT -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:background="#161F30"
-                    android:padding="12dp">
+                    android:orientation="vertical"
+                    android:gravity="center_horizontal">
 
                     <TextView
+                        android:id="@+id/btnXiaomiHelp"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="⏳"
-                        android:textSize="18sp"
-                        android:layout_marginEnd="10dp" />
-
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:id="@+id/tvGameLimitSummary"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Hạn mức giải trí hôm nay: Còn 45 phút"
-                            android:textColor="@color/text_main"
-                            android:textSize="12sp"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:id="@+id/tvTotalScreenTime"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Tổng thời gian sáng màn hình: 0 giờ 0 phút"
-                            android:textColor="@color/text_muted"
-                            android:textSize="11sp"
-                            android:layout_marginTop="2dp" />
-                    </LinearLayout>
-
-                    <Button
-                        android:id="@+id/btnSyncNow"
-                        android:layout_width="wrap_content"
-                        android:layout_height="36dp"
-                        android:text="⚡ Đồng Bộ"
-                        android:textColor="@color/on_primary"
-                        android:backgroundTint="@color/primary"
+                        android:text="ℹ️ Trợ giúp quyền Xiaomi HyperOS / Android 14"
+                        android:textColor="#93C5FD"
                         android:textSize="11sp"
-                        android:textStyle="bold" />
+                        android:background="@drawable/bg_device_card"
+                        android:paddingLeft="14dp"
+                        android:paddingRight="14dp"
+                        android:paddingTop="6dp"
+                        android:paddingBottom="6dp"
+                        android:layout_marginBottom="12dp"
+                        android:clickable="true"
+                        android:focusable="true" />
+
+                    <TextView
+                        android:id="@+id/btnCheckUpdate"
+                        android:layout_width="match_parent"
+                        android:layout_height="44dp"
+                        android:background="@drawable/bg_device_card"
+                        android:text="🔄 Kiểm Tra Bản Cập Nhật"
+                        android:textColor="#34D399"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:gravity="center"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:layout_marginBottom="16dp" />
                 </LinearLayout>
             </LinearLayout>
-
-            <!-- KHỐI THIẾT LẬP QUYỀN (CHỈ HIỆN KHI CẦN) -->
-            <LinearLayout
-                android:id="@+id/cardSetupPermissions"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:layout_marginBottom="16dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="CÁC BƯỚC THIẾT LẬP BẢO VỆ (CHỈ CẦN LÀM 1 LẦN)"
-                    android:textColor="@color/accent_gold"
-                    android:textSize="12sp"
-                    android:textStyle="bold"
-                    android:layout_marginBottom="10dp" />
-
-                <!-- MỤC 1: USAGE ACCESS -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:background="@color/surface"
-                    android:padding="12dp"
-                    android:layout_marginBottom="8dp">
-
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="1. Đo lường ứng dụng (Usage Access)"
-                            android:textColor="@color/text_main"
-                            android:textSize="13sp"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Đo thời gian học tập &amp; giải trí chuẩn Google"
-                            android:textColor="@color/text_muted"
-                            android:textSize="11sp" />
-                    </LinearLayout>
-
-                    <Button
-                        android:id="@+id/btnPermissionUsage"
-                        android:layout_width="wrap_content"
-                        android:layout_height="38dp"
-                        android:text="Cấp Quyền"
-                        android:textColor="@color/on_primary"
-                        android:backgroundTint="@color/primary"
-                        android:textSize="11sp" />
-                </LinearLayout>
-
-                <!-- MỤC 2: ACCESSIBILITY -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:background="@color/surface"
-                    android:padding="12dp"
-                    android:layout_marginBottom="8dp">
-
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="2. Trợ năng chặn Web xấu (Accessibility)"
-                            android:textColor="@color/text_main"
-                            android:textSize="13sp"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Tự động phát hiện &amp; chặn web khiêu dâm, cờ bạc"
-                            android:textColor="@color/text_muted"
-                            android:textSize="11sp" />
-                    </LinearLayout>
-
-                    <Button
-                        android:id="@+id/btnPermissionAccessibility"
-                        android:layout_width="wrap_content"
-                        android:layout_height="38dp"
-                        android:text="Cấp Quyền"
-                        android:textColor="@color/on_primary"
-                        android:backgroundTint="@color/primary"
-                        android:textSize="11sp" />
-                </LinearLayout>
-
-                <!-- MỤC 3: VPN FILTER -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:background="@color/surface"
-                    android:padding="12dp"
-                    android:layout_marginBottom="8dp">
-
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="3. Tường lửa DNS An toàn (VPN Safe)"
-                            android:textColor="@color/text_main"
-                            android:textSize="13sp"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Lọc tên miền độc hại trên toàn bộ máy"
-                            android:textColor="@color/text_muted"
-                            android:textSize="11sp" />
-                    </LinearLayout>
-
-                    <Button
-                        android:id="@+id/btnToggleVpn"
-                        android:layout_width="wrap_content"
-                        android:layout_height="38dp"
-                        android:text="Bật Lá Chắn"
-                        android:textColor="@color/on_primary"
-                        android:backgroundTint="@color/primary"
-                        android:textSize="11sp" />
-                </LinearLayout>
-
-                <!-- MỤC 4: DEVICE ADMIN -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:background="@color/surface"
-                    android:padding="12dp"
-                    android:layout_marginBottom="8dp">
-
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="4. Chống gỡ cài đặt (Device Admin)"
-                            android:textColor="@color/text_main"
-                            android:textSize="13sp"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Bảo vệ ứng dụng không bị học sinh tự ý gỡ"
-                            android:textColor="@color/text_muted"
-                            android:textSize="11sp" />
-                    </LinearLayout>
-
-                    <Button
-                        android:id="@+id/btnPermissionAdmin"
-                        android:layout_width="wrap_content"
-                        android:layout_height="38dp"
-                        android:text="Kích Hoạt"
-                        android:textColor="@color/on_primary"
-                        android:backgroundTint="@color/primary"
-                        android:textSize="11sp" />
-                </LinearLayout>
-            </LinearLayout>
-
-            <!-- ICON NHỎ TRỢ GIÚP XIAOMI TRONG DASHBOARD -->
-            <TextView
-                android:id="@+id/btnDashboardXiaomiHelp"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:text="ℹ️ Hướng dẫn cấp quyền Xiaomi HyperOS / Android 14"
-                android:textColor="#93C5FD"
-                android:textSize="11sp"
-                android:background="#1E293B"
-                android:paddingLeft="14dp"
-                android:paddingRight="14dp"
-                android:paddingTop="6dp"
-                android:paddingBottom="6dp"
-                android:clickable="true"
-                android:focusable="true"
-                android:layout_marginBottom="12dp" />
-
-            <!-- NÚT KIỂM TRA BẢN CẬP NHẬT -->
-            <Button
-                android:id="@+id/btnCheckUpdate"
-                android:layout_width="match_parent"
-                android:layout_height="46dp"
-                android:text="🔄 Kiểm Tra Bản Cập Nhật"
-                android:textColor="@color/on_primary"
-                android:backgroundTint="#047857"
-                android:textSize="12sp"
-                android:textStyle="bold"
-                android:layout_marginBottom="20dp" />
 
         </LinearLayout>
-    </LinearLayout>
     </ScrollView>
 
-    <!-- OVERLAY LOADING KHI PHỤ HUYNH NGẮT KẾT NỐI -->
+    <!-- ============================================================== -->
+    <!-- MODAL CONFIRM NHẬP PIN KHI PHỤ HUYNH BẤM NGẮT KẾT NỐI          -->
+    <!-- ============================================================== -->
+    <FrameLayout
+        android:id="@+id/layoutPinConfirmModal"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#D907090E"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="300dp"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:background="@drawable/bg_glass_card"
+            android:orientation="vertical"
+            android:gravity="center_horizontal"
+            android:padding="22dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⚠️"
+                android:textSize="32sp"
+                android:layout_marginBottom="8dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Xác Nhận Ngắt Kết Nối"
+                android:textColor="#F8FAFC"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="6dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Nhập mã PIN Phụ huynh để xác nhận:"
+                android:textColor="#94A3B8"
+                android:textSize="12sp"
+                android:gravity="center"
+                android:layout_marginBottom="14dp" />
+
+            <EditText
+                android:id="@+id/etModalPinConfirm"
+                android:layout_width="140dp"
+                android:layout_height="46dp"
+                android:background="@drawable/bg_input_field"
+                android:textColor="#F8FAFC"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:gravity="center"
+                android:inputType="numberPassword"
+                android:maxLength="4"
+                android:layout_marginBottom="10dp" />
+
+            <TextView
+                android:id="@+id/tvModalPinError"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#EF4444"
+                android:textSize="11sp"
+                android:visibility="gone"
+                android:layout_marginBottom="10dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/btnModalCancelUnpair"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_device_card"
+                    android:text="Hủy"
+                    android:textColor="#94A3B8"
+                    android:textSize="13sp"
+                    android:gravity="center"
+                    android:layout_marginEnd="6dp"
+                    android:clickable="true"
+                    android:focusable="true" />
+
+                <TextView
+                    android:id="@+id/btnModalConfirmUnpair"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_danger_pill"
+                    android:text="Ngắt Ngay"
+                    android:textColor="#EF4444"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:gravity="center"
+                    android:layout_marginStart="6dp"
+                    android:clickable="true"
+                    android:focusable="true" />
+            </LinearLayout>
+        </LinearLayout>
+    </FrameLayout>
+
+    <!-- ============================================================== -->
+    <!-- OVERLAY LOADING KHI PHỤ HUYNH HOẶC THIẾT BỊ ĐANG NGẮT KẾT NỐI   -->
+    <!-- ============================================================== -->
     <FrameLayout
         android:id="@+id/layoutUnpairOverlay"
         android:layout_width="match_parent"
@@ -661,52 +982,39 @@
         android:focusable="true"
         android:visibility="gone">
 
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
+        <LinearLayout
+            android:layout_width="280dp"
             android:layout_height="wrap_content"
             android:layout_gravity="center"
-            android:layout_margin="32dp"
-            app:cardCornerRadius="24dp"
-            app:cardBackgroundColor="@color/surface"
-            app:strokeColor="@color/surface_border"
-            app:strokeWidth="1dp"
-            app:cardElevation="12dp">
+            android:background="@drawable/bg_glass_card"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="28dp">
 
-            <LinearLayout
-                android:layout_width="match_parent"
+            <ProgressBar
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:indeterminateTint="#EF4444"
+                android:layout_marginBottom="16dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
+                android:text="Thông Báo Từ Phụ Huynh"
+                android:textColor="#EF4444"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
                 android:gravity="center"
-                android:padding="28dp">
-
-                <ProgressBar
-                    android:id="@+id/pbUnpairProgress"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:indeterminate="true"
-                    android:indeterminateTint="@color/primary"
-                    android:layout_marginBottom="18dp" />
-
-                <TextView
-                    android:id="@+id/tvUnpairTitle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Thông Báo Từ Phụ Huynh"
-                    android:textColor="@color/text_main"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    android:layout_marginBottom="8dp" />
-
-                <TextView
-                    android:id="@+id/tvUnpairMsg"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Phụ huynh đã ngắt kết nối thiết bị này.\nĐang hoàn tất đăng xuất và làm mới dữ liệu..."
-                    android:textColor="@color/text_muted"
-                    android:textSize="13sp"
-                    android:gravity="center"
-                    android:lineSpacingExtra="4dp" />
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
+                android:text="Phụ huynh đã ngắt kết nối thiết bị này.\nĐang hoàn tất đăng xuất và làm mới dữ liệu..."
+                android:textColor="#CBD5E1"
+                android:textSize="12sp"
+                android:lineSpacingExtra="3dp" />
+        </LinearLayout>
     </FrameLayout>
+
 </FrameLayout>
