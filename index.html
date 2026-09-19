@@ -1980,7 +1980,15 @@
         return svg;
       }
 
-      function switchCategoryTab(catName) {
+      window.currentCategoryTab = 'social';
+      window.userHasChosenTab = false;
+
+      function switchCategoryTab(catName, isUserAction) {
+        if (isUserAction) {
+          window.userHasChosenTab = true;
+        }
+        window.currentCategoryTab = catName;
+
         const tabs = [
           { name: 'social', btn: document.getElementById('btnPillSocial'), pane: document.getElementById('panelSocialDetail') },
           { name: 'study', btn: document.getElementById('btnPillStudy'), pane: document.getElementById('panelStudyDetail') },
@@ -2007,20 +2015,20 @@
 
         if (btnSocial && !btnSocial.dataset.bound) {
           btnSocial.dataset.bound = 'true';
-          btnSocial.addEventListener('click', () => switchCategoryTab('social'));
+          btnSocial.addEventListener('click', () => switchCategoryTab('social', true));
         }
         if (btnStudy && !btnStudy.dataset.bound) {
           btnStudy.dataset.bound = 'true';
-          btnStudy.addEventListener('click', () => switchCategoryTab('study'));
+          btnStudy.addEventListener('click', () => switchCategoryTab('study', true));
         }
         if (btnGame && !btnGame.dataset.bound) {
           btnGame.dataset.bound = 'true';
-          btnGame.addEventListener('click', () => switchCategoryTab('game'));
+          btnGame.addEventListener('click', () => switchCategoryTab('game', true));
         }
         const btnWeb = document.getElementById('btnPillWeb');
         if (btnWeb && !btnWeb.dataset.bound) {
           btnWeb.dataset.bound = 'true';
-          btnWeb.addEventListener('click', () => switchCategoryTab('web'));
+          btnWeb.addEventListener('click', () => switchCategoryTab('web', true));
         }
       }
 
@@ -2965,16 +2973,20 @@
       renderGameAppBreakdown(deviceData);
       renderWebBrowsingBreakdown(deviceData);
 
-      // Tự động kích hoạt tab phù hợp với ứng dụng con đang mở
-      const currentCat = (deviceData.active_app && deviceData.active_app.category) ? deviceData.active_app.category.toLowerCase() : '';
-      const curPkg = (deviceData.active_app && deviceData.active_app.packageName) ? deviceData.active_app.packageName.toLowerCase() : '';
-      if (currentCat === 'study' || curPkg.includes('azota') || curPkg.includes('k12') || curPkg.includes('duolingo') || curPkg.includes('classroom')) {
-        switchCategoryTab('study');
-      } else if (currentCat === 'game' || curPkg.includes('game') || curPkg.includes('freefire') || curPkg.includes('roblox') || curPkg.includes('minecraft')) {
-        switchCategoryTab('game');
-      } else {
-        // Mặc định hiển thị tab Mạng Xã Hội chuẩn theo bản phác thảo
-        switchCategoryTab('social');
+      // Tự động kích hoạt tab phù hợp chỉ khi người dùng chưa chủ động chọn tab khác
+      if (!window.userHasChosenTab) {
+        const currentCat = (deviceData.active_app && deviceData.active_app.category) ? deviceData.active_app.category.toLowerCase() : '';
+        const curPkg = (deviceData.active_app && deviceData.active_app.packageName) ? deviceData.active_app.packageName.toLowerCase() : '';
+        if (currentCat === 'study' || curPkg.includes('azota') || curPkg.includes('k12') || curPkg.includes('duolingo') || curPkg.includes('classroom')) {
+          switchCategoryTab('study', false);
+        } else if (currentCat === 'game' || curPkg.includes('game') || curPkg.includes('freefire') || curPkg.includes('roblox') || curPkg.includes('minecraft')) {
+          switchCategoryTab('game', false);
+        } else {
+          switchCategoryTab('social', false);
+        }
+      } else if (window.currentCategoryTab) {
+        // Giữ vững tab người dùng đang xem (ví dụ: Duyệt Web)
+        switchCategoryTab(window.currentCategoryTab, false);
       }
 
       // Cập nhật dữ liệu Tin nhắn & Phản hồi của con
@@ -3231,11 +3243,13 @@
 
     if (btnCloseChildDashboard) {
       btnCloseChildDashboard.addEventListener('click', () => {
+        window.userHasChosenTab = false;
         if (childDashboardModal) childDashboardModal.classList.remove('active');
       });
     }
     if (btnCloseChildDashboardBottom) {
       btnCloseChildDashboardBottom.addEventListener('click', () => {
+        window.userHasChosenTab = false;
         if (childDashboardModal) childDashboardModal.classList.remove('active');
       });
     }
