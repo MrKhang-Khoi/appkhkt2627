@@ -28,6 +28,8 @@ class GuardianAccessibilityService : AccessibilityService() {
     private var lastHeartbeatTimestamp: Long = 0L
     private var lastActivePackage: String = ""
     private var lastActiveUploadTimestamp: Long = 0L
+    private var currentForegroundPackage: String = ""
+    private var currentForegroundStartTime: Long = 0L
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
@@ -55,9 +57,6 @@ class GuardianAccessibilityService : AccessibilityService() {
 
     private fun handleWindowStateChanged(packageName: String) {
         val now = System.currentTimeMillis()
-        if (packageName == lastActivePackage && now - lastActiveUploadTimestamp < 10_000L) {
-            return
-        }
 
         // Bỏ qua nếu là chính app CVA-SmartGuardian hoặc bàn phím gõ chữ
         if (packageName == applicationContext.packageName ||
@@ -69,8 +68,26 @@ class GuardianAccessibilityService : AccessibilityService() {
             return
         }
 
+        // Nếu chuyển sang ứng dụng khác: Kết toán và tích lũy thời gian của ứng dụng trước đó
+        if (currentForegroundPackage.isNotEmpty() && currentForegroundPackage != packageName && currentForegroundStartTime > 0L) {
+            val elapsed = now - currentForegroundStartTime
+            if (elapsed >= 1500L) {
+                UsageTrackerService.recordAppSession(applicationContext, currentForegroundPackage, elapsed)
+            }
+            currentForegroundStartTime = now
+        }
+
         // Bắt sự kiện màn hình khóa (Lockscreen / Keyguard) của Android
         if (packageName == "com.android.systemui" || packageName.contains("keyguard")) {
+            if (currentForegroundPackage.isNotEmpty() && currentForegroundStartTime > 0L) {
+                val elapsed = now - currentForegroundStartTime
+                if (elapsed >= 1500L) {
+                    UsageTrackerService.recordAppSession(applicationContext, currentForegroundPackage, elapsed)
+                }
+            }
+            currentForegroundPackage = ""
+            currentForegroundStartTime = 0L
+
             val pm = getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
             val isInteractive = pm?.isInteractive ?: true
             if (!isInteractive || lastActivePackage != "SCREEN_OFF") {
@@ -90,6 +107,15 @@ class GuardianAccessibilityService : AccessibilityService() {
 
         val isHome = isDefaultLauncher(packageName)
         if (isHome) {
+            if (currentForegroundPackage.isNotEmpty() && currentForegroundStartTime > 0L) {
+                val elapsed = now - currentForegroundStartTime
+                if (elapsed >= 1500L) {
+                    UsageTrackerService.recordAppSession(applicationContext, currentForegroundPackage, elapsed)
+                }
+            }
+            currentForegroundPackage = ""
+            currentForegroundStartTime = 0L
+
             if (lastActivePackage != "HOME") {
                 lastActivePackage = "HOME"
                 lastActiveUploadTimestamp = now
@@ -102,6 +128,16 @@ class GuardianAccessibilityService : AccessibilityService() {
                     isForeground = false
                 )
             }
+            return
+        }
+
+        // Ghi nhận phiên ứng dụng tiền cảnh mới
+        if (currentForegroundPackage != packageName) {
+            currentForegroundPackage = packageName
+            currentForegroundStartTime = now
+        }
+
+        if (packageName == lastActivePackage && now - lastActiveUploadTimestamp < 10_000L) {
             return
         }
 

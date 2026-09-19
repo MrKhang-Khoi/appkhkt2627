@@ -53,14 +53,21 @@ object AppClassifier {
         "com.king.candycrushsaga" to AppMetadata("com.king.candycrushsaga", "Candy Crush Saga", AppCategory.GAME),
 
         // 3. NHÓM MẠNG XÃ HỘI & GIẢI TRÍ
+        "com.google.android.youtube" to AppMetadata("com.google.android.youtube", "YouTube", AppCategory.SOCIAL),
+        "com.google.android.youtube.tv" to AppMetadata("com.google.android.youtube.tv", "YouTube TV", AppCategory.SOCIAL),
+        "com.google.android.apps.youtube.music" to AppMetadata("com.google.android.apps.youtube.music", "YouTube Music", AppCategory.SOCIAL),
         "com.zhiliaoapp.musically" to AppMetadata("com.zhiliaoapp.musically", "TikTok", AppCategory.SOCIAL),
         "com.ss.android.ugc.trill" to AppMetadata("com.ss.android.ugc.trill", "TikTok", AppCategory.SOCIAL),
+        "com.zhiliaoapp.musically.go" to AppMetadata("com.zhiliaoapp.musically.go", "TikTok Lite", AppCategory.SOCIAL),
         "com.facebook.katana" to AppMetadata("com.facebook.katana", "Facebook", AppCategory.SOCIAL),
+        "com.facebook.lite" to AppMetadata("com.facebook.lite", "Facebook Lite", AppCategory.SOCIAL),
         "com.facebook.orca" to AppMetadata("com.facebook.orca", "Messenger", AppCategory.SOCIAL),
+        "com.facebook.mlite" to AppMetadata("com.facebook.mlite", "Messenger Lite", AppCategory.SOCIAL),
         "com.instagram.android" to AppMetadata("com.instagram.android", "Instagram", AppCategory.SOCIAL),
-        "com.google.android.youtube" to AppMetadata("com.google.android.youtube", "YouTube", AppCategory.SOCIAL),
         "com.zing.zalo" to AppMetadata("com.zing.zalo", "Zalo", AppCategory.SOCIAL),
-        "org.telegram.messenger" to AppMetadata("org.telegram.messenger", "Telegram", AppCategory.SOCIAL)
+        "org.telegram.messenger" to AppMetadata("org.telegram.messenger", "Telegram", AppCategory.SOCIAL),
+        "com.twitter.android" to AppMetadata("com.twitter.android", "X (Twitter)", AppCategory.SOCIAL),
+        "com.threads.android" to AppMetadata("com.threads.android", "Threads", AppCategory.SOCIAL)
     )
 
     fun classify(

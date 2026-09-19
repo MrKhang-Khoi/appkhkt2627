@@ -219,8 +219,46 @@ class UsageTrackerService : Service() {
             }
         }
 
+        fun recordAppSession(context: Context, packageName: String, durationMs: Long) {
+            if (durationMs < 1000L) return
+            val isSystemOrSelf = packageName == context.packageName ||
+                    packageName == "com.android.systemui" ||
+                    packageName.contains("inputmethod") ||
+                    packageName.contains("keyboard") ||
+                    packageName.contains("launcher") ||
+                    packageName == "SCREEN_OFF" ||
+                    packageName == "HOME"
+            if (isSystemOrSelf) return
+
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val todayStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US).format(java.util.Date())
+            val appKey = "session_${todayStr}_$packageName"
+            val curMs = prefs.getLong(appKey, 0L)
+            val newMs = curMs + durationMs
+
+            var appInfo: android.content.pm.ApplicationInfo? = null
+            val appLabel = try {
+                appInfo = context.packageManager.getApplicationInfo(packageName, 0)
+                context.packageManager.getApplicationLabel(appInfo).toString()
+            } catch (e: Exception) {
+                packageName
+            }
+            val metadata = AppClassifier.classify(packageName, appLabel, appInfo)
+
+            prefs.edit()
+                .putLong(appKey, newMs)
+                .putString("app_name_$packageName", metadata.appName.ifEmpty { appLabel })
+                .putString("app_cat_$packageName", metadata.category.name)
+                .putString("app_cat_label_$packageName", metadata.category.displayName)
+                .putLong("app_last_used_$packageName", System.currentTimeMillis())
+                .apply()
+
+            // Đồng bộ ngay thống kê lên Firebase
+            collectAndSave(context)
+        }
+
         fun collectAndSave(context: Context) {
-            val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager ?: return
+            val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
 
             val calendar = Calendar.getInstance()
             val endTime = calendar.timeInMillis
@@ -230,11 +268,11 @@ class UsageTrackerService : Service() {
             calendar.set(Calendar.MILLISECOND, 0)
             val startTime = calendar.timeInMillis
 
-            val statsMap = usageStatsManager.queryAndAggregateUsageStats(startTime, endTime)
+            val statsMap = usageStatsManager?.queryAndAggregateUsageStats(startTime, endTime)
             val statsCollection = if (!statsMap.isNullOrEmpty()) {
                 statsMap.values
             } else {
-                usageStatsManager.queryUsageStats(
+                usageStatsManager?.queryUsageStats(
                     UsageStatsManager.INTERVAL_DAILY,
                     startTime,
                     endTime
@@ -300,6 +338,56 @@ class UsageTrackerService : Service() {
                 }
             }
 
+            // Hợp nhất dữ liệu phiên tích lũy từ Accessibility (Dual-Tracking Engine)
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val todayStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US).format(java.util.Date())
+            val allPrefs = prefs.all
+            for ((key, value) in allPrefs) {
+                if (key.startsWith("session_${todayStr}_") && value is Long && value > 0L) {
+                    val pkg = key.removePrefix("session_${todayStr}_")
+                    val existingIndex = appList.indexOfFirst { it.packageName == pkg }
+                    val appName = prefs.getString("app_name_$pkg", pkg) ?: pkg
+                    val catName = prefs.getString("app_cat_$pkg", "OTHER") ?: "OTHER"
+                    val catLabel = prefs.getString("app_cat_label_$pkg", "Khác") ?: "Khác"
+                    val lastUsed = prefs.getLong("app_last_used_$pkg", System.currentTimeMillis())
+
+                    if (existingIndex >= 0) {
+                        val old = appList[existingIndex]
+                        if (value > old.totalTimeMs) {
+                            val diff = value - old.totalTimeMs
+                            when (old.category) {
+                                "STUDY" -> studyTimeMs += diff
+                                "GAME" -> gameTimeMs += diff
+                                "SOCIAL" -> socialTimeMs += diff
+                                else -> utilityTimeMs += diff
+                            }
+                            appList[existingIndex] = old.copy(
+                                totalTimeMs = value,
+                                durationMinutes = (value / 60000L).toInt().coerceAtLeast(1)
+                            )
+                        }
+                    } else {
+                        appList.add(
+                            AppHistoryRecord(
+                                packageName = pkg,
+                                appName = appName,
+                                category = catName,
+                                categoryLabel = catLabel,
+                                totalTimeMs = value,
+                                durationMinutes = (value / 60000L).toInt().coerceAtLeast(1),
+                                lastTimeUsed = lastUsed
+                            )
+                        )
+                        when (catName) {
+                            "STUDY" -> studyTimeMs += value
+                            "GAME" -> gameTimeMs += value
+                            "SOCIAL" -> socialTimeMs += value
+                            else -> utilityTimeMs += value
+                        }
+                    }
+                }
+            }
+
             appList.sortByDescending { it.totalTimeMs }
             val topApps = appList.take(15)
             val appHistoryJsonArray = org.json.JSONArray().apply {
@@ -329,7 +417,6 @@ class UsageTrackerService : Service() {
             }
 
             // Lưu vào SharedPreferences
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             prefs.edit()
                 .putLong("study_time_ms", studyTimeMs)
                 .putLong("game_time_ms", gameTimeMs)
