@@ -1621,9 +1621,16 @@
     }
 
     if (btnRegenCode) {
-      btnRegenCode.addEventListener('click', () => {
-        if (confirm('Bạn có muốn đổi sang một Mã Ghép Đôi Gia Đình mới không?')) {
-          currentFamilyCode = generateNewPairCode();
+      btnRegenCode.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const entered = prompt('Nhập Mã Gia Đình bạn muốn quản lý (hoặc để trống để tạo mã ngẫu nhiên):', currentFamilyCode);
+        if (entered !== null) {
+          const trimmed = entered.trim().toUpperCase();
+          if (trimmed.length > 0) {
+            currentFamilyCode = trimmed.startsWith('CVA-') ? trimmed : `CVA-${trimmed}`;
+          } else {
+            currentFamilyCode = generateNewPairCode();
+          }
           localStorage.setItem('cva_family_code', currentFamilyCode);
           if (dispFamilyPairCode) dispFamilyPairCode.textContent = currentFamilyCode;
           if (studentViewFamilyCode) studentViewFamilyCode.textContent = currentFamilyCode;
@@ -3145,10 +3152,34 @@
         const famDevData = (famDevRes && famDevRes.ok) ? await famDevRes.json() : null;
         const actData = (actRes && actRes.ok) ? await actRes.json() : null;
         const histData = (histRes && histRes.ok) ? await histRes.json() : null;
-        const targetData = devData || famDevData || {};
 
-        if (actData) targetData.active_app = actData;
-        if (histData) targetData.app_history = histData;
+        // Luôn ưu tiên nguồn dữ liệu có nhịp tim (lastHeartbeat) mới nhất
+        const devHb = Number(devData?.lastHeartbeat || 0);
+        const famHb = Number(famDevData?.lastHeartbeat || 0);
+        const targetData = (devHb >= famHb) ? { ...famDevData, ...devData } : { ...devData, ...famDevData };
+
+        // Chọn trạng thái active_app có mốc thời gian mới nhất, tránh bị đè bởi bản ghi cũ
+        const devAppTime = Number(devData?.active_app?.timestamp || 0);
+        const actAppTime = Number(actData?.timestamp || 0);
+        if (actData && actAppTime >= devAppTime) {
+          targetData.active_app = actData;
+        } else if (devData?.active_app) {
+          targetData.active_app = devData.active_app;
+        }
+
+        if (histData && Object.keys(histData).length > 0) {
+          targetData.app_history = histData;
+        } else if (devData?.app_history) {
+          targetData.app_history = devData.app_history;
+        }
+
+        // Tự động đồng bộ mã gia đình nếu thiết bị này đã liên kết với mã mới (ví dụ: CVA-4646)
+        if (devData?.familyCode && devData.familyCode !== currentFamilyCode) {
+          currentFamilyCode = devData.familyCode;
+          localStorage.setItem('cva_family_code', currentFamilyCode);
+          if (dispFamilyPairCode) dispFamilyPairCode.textContent = currentFamilyCode;
+          if (studentViewFamilyCode) studentViewFamilyCode.textContent = currentFamilyCode;
+        }
 
         if (targetData && (targetData.deviceId || targetData.deviceModel || targetData.isPaired || targetData.lastHeartbeat || targetData.active_app)) {
           const status = calculateDeviceOnlineStatus(targetData, null);
@@ -3398,15 +3429,17 @@
     // 6. KIỂM TRA TRẠNG THÁI ĐA THIẾT BỊ CON THỜI GIAN THỰC (MULTI-DEVICE REGISTRY)
     async function checkDevicePairingStatus() {
       try {
-        const [familyDevicesRes, pairingRes, deviceRes] = await Promise.all([
+        const [familyDevicesRes, pairingRes, deviceRes, allDevicesRes] = await Promise.all([
           fetch(`${FIREBASE_BASE}/families/${currentFamilyCode}/devices.json`, { cache: 'no-cache' }).catch(() => null),
           fetch(`${FIREBASE_BASE}/pairings/${currentFamilyCode}.json`, { cache: 'no-cache' }).catch(() => null),
-          fetch(`${FIREBASE_BASE}/devices/${currentFamilyCode}.json`, { cache: 'no-cache' }).catch(() => null)
+          fetch(`${FIREBASE_BASE}/devices/${currentFamilyCode}.json`, { cache: 'no-cache' }).catch(() => null),
+          fetch(`${FIREBASE_BASE}/devices.json`, { cache: 'no-cache' }).catch(() => null)
         ]);
 
         const familyDevices = (familyDevicesRes && familyDevicesRes.ok) ? await familyDevicesRes.json() : null;
         const pairingData = (pairingRes && pairingRes.ok) ? await pairingRes.json() : null;
         const deviceData = (deviceRes && deviceRes.ok) ? await deviceRes.json() : null;
+        const allDevices = (allDevicesRes && allDevicesRes.ok) ? await allDevicesRes.json() : null;
 
         let devicesList = [];
         if (familyDevices && typeof familyDevices === 'object') {
@@ -3434,6 +3467,21 @@
               isPaired: true
             });
           }
+        }
+
+        // Hợp nhất dữ liệu nhịp tim thời gian thực từ /devices/<id>.json
+        if (allDevices && typeof allDevices === 'object') {
+          devicesList = devicesList.map(dev => {
+            const live = allDevices[dev.deviceId];
+            if (live) {
+              const liveHb = Number(live.lastHeartbeat || 0);
+              const devHb = Number(dev.lastHeartbeat || 0);
+              if (liveHb >= devHb) {
+                return { ...dev, ...live, deviceId: dev.deviceId };
+              }
+            }
+            return dev;
+          });
         }
 
         const dynamicList = document.getElementById('dynamicDevicesList');
