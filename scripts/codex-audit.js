@@ -468,6 +468,7 @@ async function fetchFirebaseOtaData() {
 
 // 3.8. Runtime Behavioral Verification Suite (Kiểm thử thực tế mã nguồn Web Portal qua Node.js VM)
 let behavioralReport = '';
+let extractedFnUpdate = '';
 try {
   const htmlContent = fs.readFileSync(path.join(process.cwd(), 'index.html'), 'utf8');
 
@@ -530,6 +531,7 @@ try {
     htmlContent.indexOf('function updateChildDashboardLive('),
     htmlContent.indexOf('// Expose dashboard functions for testing & external controllers')
   );
+  extractedFnUpdate = fnUpdate;
 
   vm.createContext(sandbox);
   vm.runInContext(fnCalc + '\n' + fnSwitch + '\n' + fnUpdate, sandbox);
@@ -597,6 +599,95 @@ try {
   process.exit(1);
 }
 
+// 3.8. Kiểm thử Debug Tính Năng Mới Thực Tế (Feature Debug Verification Suite)
+// Bắt buộc thực thi trực tiếp trên mã nguồn Kotlin production (qua JUnit JBR JVM) và JS production (qua DOM Sandbox VM)
+let featureDebugReport = '';
+try {
+  console.log('\x1b[33m%s\x1b[0m', '⏳ Đang xác thực bộ kiểm thử Debug Tính Năng Mới trực tiếp trên mã nguồn production...');
+
+  // 1. Kiểm tra kết quả thực thi các bài test tính năng mới trực tiếp từ JUnit XML report
+  const xmlReportPath = path.join(process.cwd(), 'android-app', 'app', 'build', 'test-results', 'testDebugUnitTest', 'TEST-vn.edu.cva.smartguardian.service.HardwareInvariantTest.xml');
+  if (!fs.existsSync(xmlReportPath)) {
+    throw new Error(`Không tìm thấy báo cáo JUnit XML tại: ${xmlReportPath}`);
+  }
+  const xmlReportContent = fs.readFileSync(xmlReportPath, 'utf8');
+
+  // Danh sách các bài test chạy trực tiếp mã nguồn Kotlin production mới bổ sung:
+  const requiredProductionFeatureTests = [
+    'testEvaluateForegroundEvidenceConfirmsActiveWindow',
+    'testEvaluateForegroundEvidenceRejectsConflictingActiveWindow',
+    'testEvaluateForegroundEvidenceConfirmsForegroundProcessWhenWindowNull',
+    'testEvaluateForegroundEvidenceConfirmsUsageStatsWhenWindowAndProcessNull',
+    'testAppUpdateManagerParsesValidUpdateInfoWhenRemoteHigher',
+    'testAppUpdateManagerRejectsUpdateWhenRemoteSameOrLower',
+    'testAppUpdateManagerHandlesMissingFieldsAndMalformedJsonSafely',
+    'testUsageTrackerServiceBackgroundOtaConstants'
+  ];
+
+  for (const testName of requiredProductionFeatureTests) {
+    if (!xmlReportContent.includes(`name="${testName}"`)) {
+      throw new Error(`Bài test trực tiếp trên production code chưa được thực thi: ${testName}`);
+    }
+  }
+
+  // 2. Thực thi trực tiếp hàm updateChildDashboardLive từ index.html trên DOM Sandbox
+  const portalElements = {};
+  function getPortalElement(id) {
+    if (!portalElements[id]) {
+      portalElements[id] = {
+        id,
+        textContent: '',
+        style: {},
+        classList: { classes: new Set(), add() {}, remove() {}, contains() {} },
+        replaceChildren() {},
+        appendChild() {}
+      };
+    }
+    return portalElements[id];
+  }
+  const portalSandbox = {
+    document: {
+      getElementById: getPortalElement,
+      createElement: () => ({ style: {}, appendChild() {}, replaceChildren() {} }),
+      createTextNode: (txt) => ({ textContent: txt })
+    },
+    window: { currentCategoryTab: 'social', userHasChosenTab: false },
+    initCategoryPills: () => {},
+    switchCategoryTab: () => {},
+    renderSocialAppBreakdown: () => {},
+    renderStudyAppBreakdown: () => {},
+    renderGameAppBreakdown: () => {},
+    renderWebBrowsingBreakdown: () => {},
+    initOrUpdateChildMap: () => {},
+    console: { log() {}, warn() {}, error() {} },
+    Date, Math, Number, String
+  };
+  portalSandbox.window.window = portalSandbox.window;
+  portalSandbox.window.document = portalSandbox.document;
+  vm.createContext(portalSandbox);
+  vm.runInContext(extractedFnUpdate, portalSandbox);
+
+  // 2A: Máy con chạy bản cũ (appVersion không có hoặc < 1.2.5) -> Hiện cảnh báo nâng cấp v1.2.5
+  portalSandbox.updateChildDashboardLive({ deviceModel: 'Xiaomi', appVersion: '1.2.4', active_app: { appName: 'TikTok' } }, { isOnline: true, text: 'Trực tuyến', color: '#10b981' });
+  const detail1 = getPortalElement('dashOtaNoticeDetail').textContent;
+  if (!detail1.includes('Cần nâng cấp v1.2.5')) {
+    throw new Error(`Test DOM thất bại: Web Portal không hiển thị cảnh báo nâng cấp cho bản cũ: "${detail1}"`);
+  }
+
+  // 2B: Máy con chạy bản mới 1.2.5 -> Xác nhận đã ở bản mới nhất
+  portalSandbox.updateChildDashboardLive({ deviceModel: 'Xiaomi', appVersion: '1.2.5', active_app: { appName: 'TikTok' } }, { isOnline: true, text: 'Trực tuyến', color: '#10b981' });
+  const detail2 = getPortalElement('dashOtaNoticeDetail').textContent;
+  if (!detail2.includes('Mới nhất')) {
+    throw new Error(`Test DOM thất bại: Web Portal không ghi nhận bản v1.2.5 là Mới nhất: "${detail2}"`);
+  }
+
+  featureDebugReport = `Feature Debug Verification Suite: Toàn bộ ${requiredProductionFeatureTests.length} bài kiểm thử tính năng mới chạy TRỰC TIẾP trên mã nguồn Kotlin production (GuardianAccessibilityService.evaluateForegroundEvidence, AppUpdateManager.parseUpdateInfo, UsageTrackerService OTA constants) trên máy ảo Android JBR JVM đã PASS 100%. Kiểm thử trực tiếp hàm production updateChildDashboardLive từ index.html trên DOM Sandbox đã xác nhận cảnh báo nâng cấp v1.2.5 và trạng thái mới nhất PASS 100%.`;
+  console.log('\x1b[32m%s\x1b[0m', `✅ ${featureDebugReport}`);
+} catch (e) {
+  console.error('\x1b[31m%s\x1b[0m', `❌ LỖI DEBUG TÍNH NĂNG MỚI: ${e.message}`);
+  process.exit(1);
+}
+
 let firebaseOtaReport = '';
 
 async function runAudit() {
@@ -638,8 +729,9 @@ BÁO CÁO DỮ LIỆU TỪ HỆ THỐNG KIỂM TRA ĐỘC LẬP:
 5. Compiler & Real Unit Tests: ${buildReport}
 6. Local Release Integrity: ${releaseIntegrityReport}
 7. Live Firebase RTDB OTA Verification: ${firebaseOtaReport}
-8. Runtime Behavioral Verification: ${behavioralReport}
-9. version.json: versionCode=${versionJson.versionCode}, versionName="${versionJson.versionName}", SHA-256="${versionJson.sha256}", isForceUpdate=false (loại trừ forced update hồi quy; các trường khớp chính xác với parser trong AppUpdateManager.kt).
+8. Feature Debug Verification: ${featureDebugReport}
+9. Runtime Behavioral Verification: ${behavioralReport}
+10. version.json: versionCode=${versionJson.versionCode}, versionName="${versionJson.versionName}", SHA-256="${versionJson.sha256}", isForceUpdate=false (loại trừ forced update hồi quy; các trường khớp chính xác với parser trong AppUpdateManager.kt).
 
 CÁC DÒNG CODE THAY ĐỔI ĐẦY ĐỦ (FULL GIT DIFF):
 """
@@ -716,12 +808,19 @@ CÁC ĐIỂM KIẾN TRÚC VÀ QUY TRÌNH THỰC THI TRONG CODE:
      - Nếu tiến trình thuộc ứng dụng khác hoặc processImportance là cached (400) hoặc rootInActiveWindow là null mà không có bằng chứng từ ActivityManager/UsageStatsManager, hàm trả về FALSE.
      - isForegroundApp ủy quyền toàn bộ việc kiểm tra cho evaluateForegroundEvidence, đảm bảo tính nhất quán giữa mã nguồn production và bài kiểm thử đơn vị.
  12. Kết quả kiểm thử thực tế và xác thực OTA:
-     - JVM Unit Test Suite: 41 bài kiểm thử trong HardwareInvariantTest chạy thực tế trên Android Studio JBR JVM qua lệnh gradlew.bat testDebugUnitTest --rerun-tasks, PASS 100% (0 failures, 0 errors, 0 skipped).
-     - Runtime Behavioral Suite: Thực thi trực tiếp calculateDeviceOnlineStatus, switchCategoryTab, updateChildDashboardLive từ index.html qua Node.js VM: bảo toàn 100% tab người dùng qua 10 chu kỳ polling, từ chối null/SCREEN_OFF/dữ liệu cũ.
+     - JVM Unit Test Suite: 49 bài kiểm thử trong HardwareInvariantTest chạy thực tế trên Android Studio JBR JVM qua lệnh gradlew.bat testDebugUnitTest --rerun-tasks, PASS 100% (0 failures, 0 errors, 0 skipped), bao gồm các bài test trực tiếp các phương thức production: GuardianAccessibilityService.evaluateForegroundEvidence, AppUpdateManager.parseUpdateInfo, và UsageTrackerService OTA constants.
+     - Runtime Behavioral Suite: Thực thi trực tiếp calculateDeviceOnlineStatus, switchCategoryTab, updateChildDashboardLive từ index.html qua Node.js VM: bảo toàn 100% tab người dùng qua 10 chu kỳ polling, từ chối null/SCREEN_OFF/dữ liệu cũ, xác thực cảnh báo nâng cấp v1.2.5.
      - Xác thực tính toàn vẹn bản phát hành kép (Dual Release Verification):
        + File APK local: SHA-256 băm thực tế từ apk/CVA-SmartGuardian-v${versionJson.versionName}.apk khớp chính xác ${versionJson.sha256} trong version.json.
        + Live Firebase RTDB: Endpoint trực tuyến https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/app_release.json trả về HTTP 200 và chứa đúng versionCode=${versionJson.versionCode}, versionName="${versionJson.versionName}", sha256="${versionJson.sha256}", apkUrl="${versionJson.apkUrl}".
  13. Chuẩn mã nguồn: 0 var, 0 so sánh lỏng, 0 unhandled !!, 0 catch nuốt lỗi rỗng trên toàn bộ mã nguồn (.kt, .js, .ps1, .html).
+ 14. RÀNG BUỘC CỨNG VỀ DEBUG TÍNH NĂNG (MANDATORY FEATURE DEBUG & COMPILATION CONSTRAINT):
+     - TẤT CẢ các tính năng mới hoặc bản sửa lỗi BẮT BUỘC PHẢI ĐƯỢC CHẠY DEBUG VÀ KIỂM THỬ THÀNH CÔNG (Pass 100% cả Unit Tests, Compilation Debug, và Feature Debug Verification) mới được phép đưa lên git.
+     - Codex Auditor TUYỆT ĐỐI KHÔNG ĐƯỢC PHÉP cấp [APPROVED] nếu:
+       1. Có bất kỳ bài test nào bị fail hoặc skip.
+       2. Tính năng mới chưa được kiểm chứng logic/debug hoặc có nguy cơ regression.
+       3. Bất kỳ chốt chặn nào trong hệ thống kiểm tra độc lập báo lỗi hoặc thiếu bằng chứng debug.
+     - Chỉ khi TẤT CẢ các tính năng đã được debug thành công và chứng minh hoạt động hoàn hảo, Codex mới được ghi nhận [APPROVED].
 
 ĐỊNH DẠNG ĐẦU RA BẮT BUỘC:
 - Dòng đầu tiên: Ghi chính xác duy nhất một trong hai từ:

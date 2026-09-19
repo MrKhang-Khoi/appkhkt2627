@@ -50,3 +50,12 @@ Quy trình phát hành APK:
    - Bỏ qua Launcher và SystemUI trong thời điểm chuyển tiếp màn hình.
    - Cửa sổ truy vấn `UsageStatsManager` tối thiểu 60 giây kèm fallback `queryUsageStats`.
 2. Kiểm tra ngầm OTA: `UsageTrackerService` phải định kỳ kiểm tra bản cập nhật và đẩy Notification hệ thống khi có bản mới để người dùng biết và nâng cấp ngay.
+
+---
+
+## 4. RÀNG BUỘC CHO CODEX AUDITOR KHI REVIEW DIFF
+
+1. Khi thực hiện kiểm định diff bằng OpenAI Codex (`scripts/codex-audit.js`):
+   - Codex Auditor bắt buộc phải xác nhận **TẤT CẢ TÍNH NĂNG MỚI ĐÃ CHẠY DEBUG THÀNH CÔNG** trước khi đưa ra kết luận `[APPROVED]`.
+   - Nếu phát hiện code thay đổi mà không kèm theo bằng chứng debug thành công hoặc có lỗi kiểm thử, Codex Auditor bắt buộc phải trả về `[REJECTED]` để kích hoạt Vòng lặp Tự sửa lỗi (Self-Healing Loop).
+   - Git Pre-Commit Hook sẽ lập tức chặn đứng commit (Exit Code 1) nếu Codex đánh `[REJECTED]`.

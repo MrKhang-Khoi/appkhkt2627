@@ -1,16 +1,22 @@
 package vn.edu.cva.smartguardian.service
 
+import android.app.ActivityManager
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.SharedPreferences
 import okhttp3.Call
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import vn.edu.cva.smartguardian.update.AppUpdateManager
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
@@ -1244,6 +1250,166 @@ class HardwareInvariantTest {
                 commit()
             }
         }
+    }
+
+    @Test
+    fun testEvaluateForegroundEvidenceConfirmsActiveWindow() {
+        // When activeRootPkg exactly matches targetPkg, it must be recognized
+        val result = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = "com.ss.android.ugc.trill",
+            foregroundProcessPkg = null,
+            processImportance = null,
+            usageStatsLastResumedPkg = null,
+            targetPkg = "com.ss.android.ugc.trill"
+        )
+        assertTrue("Matching active window must resolve to true", result)
+    }
+
+    @Test
+    fun testEvaluateForegroundEvidenceRejectsConflictingActiveWindow() {
+        // When activeRootPkg belongs to another app (e.g. Facebook), it MUST reject TikTok
+        // even if stale UsageStats or background process points to TikTok
+        val result = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = "com.facebook.katana",
+            foregroundProcessPkg = "com.ss.android.ugc.trill",
+            processImportance = ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND,
+            usageStatsLastResumedPkg = "com.ss.android.ugc.trill",
+            targetPkg = "com.ss.android.ugc.trill"
+        )
+        assertFalse("Conflicting active window must strictly reject targetPkg", result)
+    }
+
+    @Test
+    fun testEvaluateForegroundEvidenceConfirmsForegroundProcessWhenWindowNull() {
+        // During Xiaomi HyperOS gesture transition, activeRootPkg might be null.
+        // ActivityManager IMPORTANCE_FOREGROUND (100) on targetPkg confirms foreground app!
+        val result = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = null,
+            foregroundProcessPkg = "vn.edu.azota",
+            processImportance = ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND,
+            usageStatsLastResumedPkg = null,
+            targetPkg = "vn.edu.azota"
+        )
+        assertTrue("Matching foreground process (100) when window is null must resolve to true", result)
+
+        // Also test named sub-process (e.g. "vn.edu.azota:main")
+        val subProcessResult = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = null,
+            foregroundProcessPkg = "vn.edu.azota:player",
+            processImportance = ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND,
+            usageStatsLastResumedPkg = null,
+            targetPkg = "vn.edu.azota"
+        )
+        assertTrue("Named sub-process of targetPkg must resolve to true", subProcessResult)
+
+        // Process with importance != 100 (e.g. cached 400) must be rejected
+        val cachedResult = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = null,
+            foregroundProcessPkg = "vn.edu.azota",
+            processImportance = 400,
+            usageStatsLastResumedPkg = null,
+            targetPkg = "vn.edu.azota"
+        )
+        assertFalse("Cached process (importance 400) must be rejected", cachedResult)
+    }
+
+    @Test
+    fun testEvaluateForegroundEvidenceConfirmsUsageStatsWhenWindowAndProcessNull() {
+        // Fallback to UsageStatsManager lastResumedPkg only when window is null/empty
+        val result = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = null,
+            foregroundProcessPkg = null,
+            processImportance = null,
+            usageStatsLastResumedPkg = "com.google.android.youtube",
+            targetPkg = "com.google.android.youtube"
+        )
+        assertTrue("UsageStats fallback when window is null must resolve to true", result)
+
+        // Empty targetPkg must immediately return false
+        val emptyResult = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = null,
+            foregroundProcessPkg = null,
+            processImportance = null,
+            usageStatsLastResumedPkg = "com.google.android.youtube",
+            targetPkg = ""
+        )
+        assertFalse("Empty targetPkg must immediately return false", emptyResult)
+    }
+
+    @Test
+    fun testAppUpdateManagerParsesValidUpdateInfoWhenRemoteHigher() {
+        val json = JSONObject().apply {
+            put("versionCode", 25)
+            put("latestVersionCode", 25)
+            put("versionName", "1.2.5")
+            put("latestVersionName", "1.2.5")
+            put("apkUrl", "https://example.com/apk/CVA-SmartGuardian-v1.2.5.apk")
+            put("fileSize", "14.2 MB")
+            put("sha256", "181C3B2100885995EA9FE8A954747DA509873DA7B2278643A090AA998DB693C7")
+            put("isForceUpdate", false)
+            val changelog = JSONArray().apply {
+                put("Nâng cấp v1.2.5 sửa lỗi nhận diện HyperOS")
+            }
+            put("changelog", changelog)
+        }
+
+        // Current device version is 24, remote is 25 -> Must produce UpdateInfo
+        val updateInfo = AppUpdateManager.parseUpdateInfo(json, currentVersionCode = 24)
+        assertNotNull("UpdateInfo must not be null when remoteVersionCode > currentVersionCode", updateInfo)
+        assertEquals(25, updateInfo?.versionCode)
+        assertEquals("1.2.5", updateInfo?.versionName)
+        assertEquals("https://example.com/apk/CVA-SmartGuardian-v1.2.5.apk", updateInfo?.apkUrl)
+        assertEquals("14.2 MB", updateInfo?.fileSize)
+        assertEquals("181C3B2100885995EA9FE8A954747DA509873DA7B2278643A090AA998DB693C7", updateInfo?.sha256)
+        assertFalse(updateInfo?.isForceUpdate == true)
+        assertEquals(1, updateInfo?.changelog?.size)
+    }
+
+    @Test
+    fun testAppUpdateManagerRejectsUpdateWhenRemoteSameOrLower() {
+        val json = JSONObject().apply {
+            put("versionCode", 25)
+            put("latestVersionCode", 25)
+            put("versionName", "1.2.5")
+            put("apkUrl", "https://example.com/apk/CVA-SmartGuardian-v1.2.5.apk")
+        }
+
+        // Current device version is already 25 -> Must return null
+        val sameVersionInfo = AppUpdateManager.parseUpdateInfo(json, currentVersionCode = 25)
+        assertNull("UpdateInfo must be null when device is already on same version", sameVersionInfo)
+
+        // Current device version is 26 (newer than remote) -> Must return null
+        val newerVersionInfo = AppUpdateManager.parseUpdateInfo(json, currentVersionCode = 26)
+        assertNull("UpdateInfo must be null when device is on newer version", newerVersionInfo)
+    }
+
+    @Test
+    fun testAppUpdateManagerHandlesMissingFieldsAndMalformedJsonSafely() {
+        // Null JSON
+        assertNull(AppUpdateManager.parseUpdateInfo(null, currentVersionCode = 24))
+
+        // Empty JSON without apkUrl
+        val emptyJson = JSONObject().apply {
+            put("versionCode", 25)
+        }
+        assertNull("Missing apkUrl must safely return null", AppUpdateManager.parseUpdateInfo(emptyJson, currentVersionCode = 24))
+
+        // JSON with fallback versionCode (without latestVersionCode key)
+        val legacyJson = JSONObject().apply {
+            put("versionCode", 25)
+            put("versionName", "1.2.5")
+            put("apkUrl", "https://example.com/app.apk")
+        }
+        val legacyInfo = AppUpdateManager.parseUpdateInfo(legacyJson, currentVersionCode = 24)
+        assertNotNull(legacyInfo)
+        assertEquals(25, legacyInfo?.versionCode)
+    }
+
+    @Test
+    fun testUsageTrackerServiceBackgroundOtaConstants() {
+        // Verify notification IDs and channel IDs defined in production UsageTrackerService
+        assertEquals("cva_smart_guardian_ota", UsageTrackerService.OTA_CHANNEL_ID)
+        assertEquals(2002, UsageTrackerService.OTA_NOTIFICATION_ID)
     }
 
     private class FakeTestContext(

@@ -53,6 +53,42 @@ object AppUpdateManager {
         if (json == null) return@withContext null
 
         try {
+            val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.packageManager.getPackageInfo(
+                    context.packageName,
+                    android.content.pm.PackageManager.PackageInfoFlags.of(0)
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageInfo(context.packageName, 0)
+            }
+
+            val currentVersionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                packageInfo.longVersionCode.toInt()
+            } else {
+                @Suppress("DEPRECATION")
+                packageInfo.versionCode
+            }
+
+            val updateInfo = parseUpdateInfo(json, currentVersionCode)
+            if (updateInfo != null) {
+                Log.d(TAG, "Phiên bản hiện tại: $currentVersionCode, Phát hiện bản mới từ xa: ${updateInfo.versionCode}")
+            } else {
+                Log.d(TAG, "Phiên bản hiện tại: $currentVersionCode, Đã ở bản mới nhất hoặc dữ liệu không hợp lệ")
+            }
+            updateInfo
+        } catch (e: Exception) {
+            Log.e(TAG, "Lỗi kiểm tra bản cập nhật", e)
+            null
+        }
+    }
+
+    /**
+     * Phân tích và xác thực payload thông tin cập nhật từ JSON đối chiếu với phiên bản hiện tại
+     */
+    fun parseUpdateInfo(json: JSONObject?, currentVersionCode: Int): UpdateInfo? {
+        if (json == null) return null
+        try {
             val remoteVersionCode = if (json.has("latestVersionCode")) {
                 json.optInt("latestVersionCode", 0)
             } else {
@@ -76,27 +112,8 @@ object AppUpdateManager {
                 }
             }
 
-            val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                context.packageManager.getPackageInfo(
-                    context.packageName,
-                    android.content.pm.PackageManager.PackageInfoFlags.of(0)
-                )
-            } else {
-                @Suppress("DEPRECATION")
-                context.packageManager.getPackageInfo(context.packageName, 0)
-            }
-
-            val currentVersionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                packageInfo.longVersionCode.toInt()
-            } else {
-                @Suppress("DEPRECATION")
-                packageInfo.versionCode
-            }
-
-            Log.d(TAG, "Phiên bản hiện tại: $currentVersionCode, Phiên bản từ xa: $remoteVersionCode")
-
             if (remoteVersionCode > currentVersionCode && apkUrl.isNotEmpty()) {
-                UpdateInfo(
+                return UpdateInfo(
                     versionCode = remoteVersionCode,
                     versionName = remoteVersionName,
                     apkUrl = apkUrl,
@@ -105,12 +122,11 @@ object AppUpdateManager {
                     changelog = changelogList,
                     isForceUpdate = isForceUpdate
                 )
-            } else {
-                null
             }
+            return null
         } catch (e: Exception) {
-            Log.e(TAG, "Lỗi kiểm tra bản cập nhật", e)
-            null
+            Log.e(TAG, "Lỗi phân tích update info JSON", e)
+            return null
         }
     }
 

@@ -6,7 +6,7 @@
   "minSupportedVersion": 1,
   "isForceUpdate": false,
   "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.2.5.apk",
-  "sha256": "181C3B2100885995EA9FE8A954747DA509873DA7B2278643A090AA998DB693C7",
+  "sha256": "13A37900B8A9559042996F255531C1F1CEFAA17D5E8110F5B0A53D7D9741F684",
   "fileSize": "5.79 MB",
   "changelog": [
     "Cải tiến nhận diện ứng dụng foreground trên Xiaomi HyperOS / MIUI bằng cơ chế Dual-Trigger và quét sâu AccessibilityWindowInfo",
