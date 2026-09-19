@@ -517,88 +517,237 @@
       40%, 80% { transform: translateX(8px); }
     }
 
-    /* ACCORDION & APP STATS DETAILS */
-    .category-accordion-card {
+    /* CATEGORY PILL SELECTOR & HIGH-FIDELITY APP CARDS (APPLE/DRIBBLE 2026 EDTECH SPEC) */
+    .category-pill-bar {
       display: flex;
-      flex-direction: column;
-      gap: 4px;
+      gap: 8px;
+      margin-bottom: 12px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+      -webkit-overflow-scrolling: touch;
     }
-    .category-accordion-btn {
-      background: rgba(30, 41, 59, 0.5);
+    .category-pill-bar::-webkit-scrollbar {
+      height: 4px;
+    }
+    .category-pill-bar::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 999px;
+    }
+    .category-pill-btn {
+      flex: 1;
+      min-width: 105px;
+      background: rgba(30, 41, 59, 0.6);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
       border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 10px;
+      border-radius: 999px;
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      cursor: pointer;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      user-select: none;
+      color: #94a3b8;
+      font-size: 0.78rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .category-pill-btn:hover {
+      background: rgba(30, 41, 59, 0.9);
+      border-color: rgba(255, 255, 255, 0.2);
+      color: #f8fafc;
+      transform: translateY(-1px);
+    }
+    .category-pill-btn.active.tab-social {
+      background: rgba(244, 63, 94, 0.18);
+      border-color: rgba(244, 63, 94, 0.6);
+      color: #fda4af;
+      box-shadow: 0 0 16px rgba(244, 63, 94, 0.25);
+    }
+    .category-pill-btn.active.tab-study {
+      background: rgba(56, 189, 248, 0.18);
+      border-color: rgba(56, 189, 248, 0.6);
+      color: #7dd3fc;
+      box-shadow: 0 0 16px rgba(56, 189, 248, 0.25);
+    }
+    .category-pill-btn.active.tab-game {
+      background: rgba(251, 191, 36, 0.18);
+      border-color: rgba(251, 191, 36, 0.6);
+      color: #fde68a;
+      box-shadow: 0 0 16px rgba(251, 191, 36, 0.25);
+    }
+    .pill-time-tag {
+      font-size: 0.68rem;
+      font-weight: 800;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      color: inherit;
+    }
+    .category-showcase-panel {
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 16px;
+      padding: 14px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+      animation: fadeInSlide 0.25s ease-out;
+    }
+    .showcase-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .showcase-title-box {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .showcase-indicator-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .showcase-title-text {
+      font-size: 0.8rem;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .showcase-counter-badge {
+      font-size: 0.68rem;
+      color: #94a3b8;
+      font-weight: 600;
+      background: rgba(255, 255, 255, 0.06);
+      padding: 2px 8px;
+      border-radius: 999px;
+    }
+    .category-view-pane {
+      display: none;
+    }
+    .category-view-pane.active {
+      display: block;
+    }
+    .squircle-app-card {
+      background: rgba(30, 41, 59, 0.45);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: 12px;
       padding: 10px 12px;
+      margin-bottom: 8px;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .squircle-app-card:last-child {
+      margin-bottom: 0;
+    }
+    .squircle-app-card:hover {
+      background: rgba(30, 41, 59, 0.75);
+      border-color: rgba(255, 255, 255, 0.15);
+      transform: translateY(-1px);
+    }
+    .squircle-app-card.is-active-app {
+      background: rgba(16, 185, 129, 0.12);
+      border-color: rgba(16, 185, 129, 0.5);
+      box-shadow: 0 0 16px rgba(16, 185, 129, 0.2);
+    }
+    .squircle-top-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      cursor: pointer;
-      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-      user-select: none;
+      margin-bottom: 6px;
     }
-    .category-accordion-btn:hover {
-      background: rgba(30, 41, 59, 0.85);
-      border-color: rgba(255, 255, 255, 0.18);
-      transform: translateY(-1px);
+    .squircle-identity-box {
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
-    .category-accordion-btn.active {
-      border-color: rgba(56, 189, 248, 0.5);
-      background: rgba(30, 41, 59, 0.95);
-      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
-    }
-    .category-chevron {
-      display: inline-block;
-      transition: transform 0.25s ease;
-      font-size: 0.72rem;
-      color: #94a3b8;
-      margin-left: 6px;
-    }
-    .category-accordion-btn.active .category-chevron {
-      transform: rotate(180deg);
-      color: #38bdf8;
-    }
-    .category-detail-panel {
-      display: none;
-      background: rgba(15, 23, 42, 0.8);
-      border: 1px solid rgba(255, 255, 255, 0.08);
+    .squircle-app-icon {
+      width: 38px;
+      height: 38px;
       border-radius: 10px;
-      padding: 10px 12px;
-      margin-top: 2px;
-      margin-bottom: 4px;
-      animation: fadeInSlide 0.25s ease-out;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
     }
-    .category-detail-panel.open {
-      display: block;
+    .squircle-app-icon svg {
+      width: 22px;
+      height: 22px;
+    }
+    .squircle-app-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .squircle-app-name {
+      font-size: 0.86rem;
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: 0.01em;
+    }
+    .squircle-app-time {
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: #94a3b8;
+    }
+    .neon-capsule-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 0.66rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+    .neon-capsule-badge.online {
+      background: rgba(16, 185, 129, 0.18);
+      border: 1px solid rgba(16, 185, 129, 0.6);
+      color: #34d399;
+      box-shadow: 0 0 10px rgba(16, 185, 129, 0.25);
+    }
+    .neon-capsule-badge.offline {
+      background: rgba(148, 163, 184, 0.08);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      color: #94a3b8;
+    }
+    .neon-capsule-badge.unused {
+      background: transparent;
+      border: 1px solid rgba(100, 116, 139, 0.2);
+      color: #64748b;
+    }
+    .live-pulse-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 8px #10b981;
+      animation: pulseGlow 1.4s infinite;
+      display: inline-block;
+    }
+    .smooth-progress-pill {
+      width: 100%;
+      height: 5px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      overflow: hidden;
+      margin-top: 4px;
+    }
+    .smooth-progress-fill {
+      height: 100%;
+      border-radius: 999px;
+      transition: width 0.35s ease;
     }
     @keyframes fadeInSlide {
       from { opacity: 0; transform: translateY(-6px); }
       to { opacity: 1; transform: translateY(0); }
-    }
-    .app-detail-card {
-      background: rgba(30, 41, 59, 0.45);
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      border-radius: 8px;
-      padding: 9px 11px;
-      margin-bottom: 7px;
-      transition: background 0.15s ease;
-    }
-    .app-detail-card:last-child {
-      margin-bottom: 0;
-    }
-    .app-detail-card.is-active-app {
-      background: rgba(16, 185, 129, 0.12);
-      border-color: rgba(16, 185, 129, 0.4);
-      box-shadow: 0 0 10px rgba(16, 185, 129, 0.15);
-    }
-    .live-pulse-dot {
-      display: inline-block;
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: #10b981;
-      box-shadow: 0 0 6px #10b981;
-      animation: pulseGlow 1.5s infinite;
-      margin-right: 4px;
-      vertical-align: middle;
     }
     @keyframes pulseGlow {
       0% { transform: scale(0.9); opacity: 0.8; }
@@ -909,94 +1058,75 @@
         </div>
       </div>
 
-      <!-- 2. PHÂN BỔ THỜI GIAN SỬ DỤNG HÔM NAY (HỌC TẬP VS GIẢI TRÍ) -->
+      <!-- 2. PHÂN BỔ THỜI GIAN SỬ DỤNG HÔM NAY (PILL SELECTOR & HIGH-FIDELITY APP CARDS) -->
       <div style="margin-bottom: 16px;">
-        <div style="font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
-          <span>📊</span> Thời Lượng Sử Dụng Hôm Nay
+        <div style="font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span>📊</span> Thời Lượng Sử Dụng Hôm Nay
+          </div>
+          <span style="font-size: 0.68rem; color: #94a3b8;">Chạm để chuyển danh mục</span>
         </div>
         
-        <div style="display: flex; flex-direction: column; gap: 8px;">
-          <!-- HỌC TẬP (INTERACTIVE ACCORDION CARD) -->
-          <div class="category-accordion-card">
-            <div class="category-accordion-btn" id="btnAccordionStudy" title="Nhấn để xem chi tiết các ứng dụng học tập">
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <span style="font-size: 1.1rem;">📚</span>
-                <div>
-                  <div style="font-size: 0.82rem; color: #f8fafc; font-weight: 700;">Ứng dụng Học Tập</div>
-                  <div style="font-size: 0.68rem; color: #94a3b8;">Azota, K12Online, OLM, Duolingo... (Bấm để xem)</div>
-                </div>
+        <!-- PILL SELECTOR BAR -->
+        <div class="category-pill-bar">
+          <button type="button" class="category-pill-btn active tab-social" id="btnPillSocial" data-cat="social" title="Xem thống kê Mạng xã hội & Video">
+            <span>💬</span>
+            <span>Mạng Xã Hội</span>
+            <span class="pill-time-tag" id="dashSocialTime">--</span>
+          </button>
+          <button type="button" class="category-pill-btn tab-study" id="btnPillStudy" data-cat="study" title="Xem thống kê Ứng dụng học tập">
+            <span>📚</span>
+            <span>Học Tập</span>
+            <span class="pill-time-tag" id="dashStudyTime">--</span>
+          </button>
+          <button type="button" class="category-pill-btn tab-game" id="btnPillGame" data-cat="game" title="Xem thống kê Trò chơi & Game">
+            <span>🎮</span>
+            <span>Trò Chơi</span>
+            <span class="pill-time-tag" id="dashGameTime">--</span>
+          </button>
+        </div>
+
+        <!-- SHOWCASE CONTAINER -->
+        <div class="category-showcase-panel">
+          <!-- SOCIAL VIEW PANE -->
+          <div class="category-view-pane active" id="panelSocialDetail">
+            <div class="showcase-header">
+              <div class="showcase-title-box">
+                <span class="showcase-indicator-dot" style="background: #f43f5e; box-shadow: 0 0 8px #f43f5e;"></span>
+                <span class="showcase-title-text" style="color: #fda4af;">Mạng Xã Hội (Facebook, TikTok, YouTube)</span>
               </div>
-              <div style="display: flex; align-items: center; gap: 6px;">
-                <span style="font-size: 0.85rem; font-weight: 800; color: #38bdf8;" id="dashStudyTime">--</span>
-                <span class="category-chevron" id="chevronStudy">▼</span>
-              </div>
+              <span class="showcase-counter-badge" id="dashSocialAppCount">0 ứng dụng</span>
             </div>
-            <div class="category-detail-panel" id="panelStudyDetail">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid rgba(255, 255, 255, 0.08);">
-                <span style="font-size: 0.72rem; font-weight: 700; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.05em;">
-                  Chi Tiết Ứng Dụng Học Tập
-                </span>
-                <span style="font-size: 0.68rem; color: #94a3b8;" id="dashStudyAppCount">0 ứng dụng</span>
-              </div>
-              <div id="listStudyApps" style="display: flex; flex-direction: column; gap: 6px;">
-                <div style="text-align: center; color: #94a3b8; font-size: 0.74rem; padding: 8px;">Đang tải danh sách...</div>
-              </div>
+            <div id="listSocialApps" style="display: flex; flex-direction: column; gap: 6px;">
+              <div style="text-align: center; color: #94a3b8; font-size: 0.74rem; padding: 12px;">Đang tải danh sách...</div>
             </div>
           </div>
 
-          <!-- GAME / GIẢI TRÍ (INTERACTIVE ACCORDION CARD) -->
-          <div class="category-accordion-card">
-            <div class="category-accordion-btn" id="btnAccordionGame" title="Nhấn để xem chi tiết các trò chơi">
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <span style="font-size: 1.1rem;">🎮</span>
-                <div>
-                  <div style="font-size: 0.82rem; color: #f8fafc; font-weight: 700;">Game & Trò Chơi</div>
-                  <div style="font-size: 0.68rem; color: #94a3b8;">Liên Quân, Free Fire, Roblox... (Bấm để xem)</div>
-                </div>
+          <!-- STUDY VIEW PANE -->
+          <div class="category-view-pane" id="panelStudyDetail">
+            <div class="showcase-header">
+              <div class="showcase-title-box">
+                <span class="showcase-indicator-dot" style="background: #38bdf8; box-shadow: 0 0 8px #38bdf8;"></span>
+                <span class="showcase-title-text" style="color: #7dd3fc;">Ứng Dụng Học Tập & Nộp Bài</span>
               </div>
-              <div style="display: flex; align-items: center; gap: 6px;">
-                <span style="font-size: 0.85rem; font-weight: 800; color: #fbbf24;" id="dashGameTime">--</span>
-                <span class="category-chevron" id="chevronGame">▼</span>
-              </div>
+              <span class="showcase-counter-badge" id="dashStudyAppCount">0 ứng dụng</span>
             </div>
-            <div class="category-detail-panel" id="panelGameDetail">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid rgba(255, 255, 255, 0.08);">
-                <span style="font-size: 0.72rem; font-weight: 700; color: #fbbf24; text-transform: uppercase; letter-spacing: 0.05em;">
-                  Chi Tiết Game & Trò Chơi
-                </span>
-                <span style="font-size: 0.68rem; color: #94a3b8;" id="dashGameAppCount">0 ứng dụng</span>
-              </div>
-              <div id="listGameApps" style="display: flex; flex-direction: column; gap: 6px;">
-                <div style="text-align: center; color: #94a3b8; font-size: 0.74rem; padding: 8px;">Đang tải danh sách...</div>
-              </div>
+            <div id="listStudyApps" style="display: flex; flex-direction: column; gap: 6px;">
+              <div style="text-align: center; color: #94a3b8; font-size: 0.74rem; padding: 12px;">Đang tải danh sách...</div>
             </div>
           </div>
 
-          <!-- MẠNG XÃ HỘI (INTERACTIVE ACCORDION CARD) -->
-          <div class="category-accordion-card">
-            <div class="category-accordion-btn" id="btnAccordionSocial" title="Nhấn để xem chi tiết YouTube, TikTok, Facebook...">
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <span style="font-size: 1.1rem;">💬</span>
-                <div>
-                  <div style="font-size: 0.82rem; color: #f8fafc; font-weight: 700;">Mạng Xã Hội & Video</div>
-                  <div style="font-size: 0.68rem; color: #f87171; font-weight: 600;">YouTube, TikTok, Facebook... (Bấm để xem)</div>
-                </div>
+          <!-- GAME VIEW PANE -->
+          <div class="category-view-pane" id="panelGameDetail">
+            <div class="showcase-header">
+              <div class="showcase-title-box">
+                <span class="showcase-indicator-dot" style="background: #fbbf24; box-shadow: 0 0 8px #fbbf24;"></span>
+                <span class="showcase-title-text" style="color: #fde68a;">Trò Chơi & Giải Trí</span>
               </div>
-              <div style="display: flex; align-items: center; gap: 6px;">
-                <span style="font-size: 0.85rem; font-weight: 800; color: #f87171;" id="dashSocialTime">--</span>
-                <span class="category-chevron" id="chevronSocial">▼</span>
-              </div>
+              <span class="showcase-counter-badge" id="dashGameAppCount">0 ứng dụng</span>
             </div>
-            <div class="category-detail-panel" id="panelSocialDetail">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid rgba(255, 255, 255, 0.08);">
-                <span style="font-size: 0.72rem; font-weight: 700; color: #f87171; text-transform: uppercase; letter-spacing: 0.05em;">
-                  Chi Tiết Mạng Xã Hội (Facebook, TikTok, YouTube)
-                </span>
-                <span style="font-size: 0.68rem; color: #94a3b8;" id="dashSocialAppCount">0 ứng dụng</span>
-              </div>
-              <div id="listSocialApps" style="display: flex; flex-direction: column; gap: 6px;">
-                <div style="text-align: center; color: #94a3b8; font-size: 0.74rem; padding: 8px;">Đang tải danh sách...</div>
-              </div>
+            <div id="listGameApps" style="display: flex; flex-direction: column; gap: 6px;">
+              <div style="text-align: center; color: #94a3b8; font-size: 0.74rem; padding: 12px;">Đang tải danh sách...</div>
             </div>
           </div>
         </div>
@@ -1731,11 +1861,17 @@
         const studyM = Number(u.studyTimeMinutes) || 0;
         const gameM = Number(u.gameTimeMinutes) || 0;
         const socialM = Number(u.socialTimeMinutes) || 0;
-        const totalM = studyM + gameM + socialM || 1;
 
-        if (dashStudyTime) dashStudyTime.textContent = `${Math.floor(studyM / 60)}h ${studyM % 60}m (${Math.round(studyM * 100 / totalM)}%)`;
-        if (dashGameTime) dashGameTime.textContent = `${gameM}m (${Math.round(gameM * 100 / totalM)}%)`;
-        if (dashSocialTime) dashSocialTime.textContent = `${socialM}m (${Math.round(socialM * 100 / totalM)}%)`;
+        const formatCompactTime = (m) => {
+          if (!m || m <= 0) return '0m';
+          const h = Math.floor(m / 60);
+          const rem = m % 60;
+          return h > 0 ? `${h}h${rem > 0 ? ` ${rem}m` : ''}` : `${rem}m`;
+        };
+
+        if (dashStudyTime) dashStudyTime.textContent = formatCompactTime(studyM);
+        if (dashGameTime) dashGameTime.textContent = formatCompactTime(gameM);
+        if (dashSocialTime) dashSocialTime.textContent = formatCompactTime(socialM);
       } else {
         // Tuyệt đối không hiển thị số liệu giả nếu chưa có dữ liệu đo đạc
         if (dashBalanceScore) {
@@ -1890,38 +2026,96 @@
       }
 
       // ======================================================================
-      // BỘ KHỞI TẠO VÀ RENDER THỐNG KÊ CHI TIẾT DANH MỤC ỨNG DỤNG (ACCORDION)
+      // BỘ KHỞI TẠO VÀ RENDER DANH MỤC ỨNG DỤNG (PILL SELECTOR & SQUIRCLE CARDS)
       // ======================================================================
-      function initCategoryAccordions() {
-        const btnSocial = document.getElementById('btnAccordionSocial');
-        const panelSocial = document.getElementById('panelSocialDetail');
-        const btnStudy = document.getElementById('btnAccordionStudy');
-        const panelStudy = document.getElementById('panelStudyDetail');
-        const btnGame = document.getElementById('btnAccordionGame');
-        const panelGame = document.getElementById('panelGameDetail');
+      function createBrandSvg(type) {
+        const ns = 'http://www.w3.org/2000/svg';
+        const svg = document.createElementNS(ns, 'svg');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('fill', '#ffffff');
 
-        if (btnSocial && panelSocial && !btnSocial.dataset.bound) {
+        if (type === 'youtube') {
+          const path = document.createElementNS(ns, 'path');
+          path.setAttribute('d', 'M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z');
+          svg.appendChild(path);
+        } else if (type === 'tiktok') {
+          const path = document.createElementNS(ns, 'path');
+          path.setAttribute('d', 'M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-1.01-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.24 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z');
+          svg.appendChild(path);
+        } else if (type === 'facebook') {
+          const path = document.createElementNS(ns, 'path');
+          path.setAttribute('d', 'M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z');
+          svg.appendChild(path);
+        } else if (type === 'messenger') {
+          const path = document.createElementNS(ns, 'path');
+          path.setAttribute('d', 'M12 2C6.477 2 2 6.145 2 11.258c0 2.914 1.455 5.518 3.735 7.215V22l3.382-1.855c.915.253 1.884.39 2.883.39 5.523 0 10-4.145 10-9.277C22 6.145 17.523 2 12 2zm1.066 12.443l-2.581-2.753-5.04 2.753 5.541-5.882 2.645 2.753 4.976-2.753-5.541 5.882z');
+          svg.appendChild(path);
+        } else if (type === 'zalo') {
+          const text = document.createElementNS(ns, 'text');
+          text.setAttribute('x', '12');
+          text.setAttribute('y', '16');
+          text.setAttribute('font-family', 'system-ui, -apple-system, sans-serif');
+          text.setAttribute('font-weight', '900');
+          text.setAttribute('font-size', '10.5');
+          text.setAttribute('text-anchor', 'middle');
+          text.setAttribute('fill', '#ffffff');
+          text.textContent = 'Zalo';
+          svg.appendChild(text);
+        } else if (type === 'instagram') {
+          const path = document.createElementNS(ns, 'path');
+          path.setAttribute('d', 'M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z');
+          svg.appendChild(path);
+        } else if (type === 'study') {
+          const path = document.createElementNS(ns, 'path');
+          path.setAttribute('d', 'M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 4h5v8l-2.5-1.5L6 12V4z');
+          svg.appendChild(path);
+        } else if (type === 'game') {
+          const path = document.createElementNS(ns, 'path');
+          path.setAttribute('d', 'M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-10 7H8v3H6v-3H3v-2h3V8h2v3h3v2zm4.5 2c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm3-3c-.83 0-1.5-.67-1.5-1.5S17.67 9 18.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z');
+          svg.appendChild(path);
+        } else {
+          const path = document.createElementNS(ns, 'path');
+          path.setAttribute('d', 'M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z');
+          svg.appendChild(path);
+        }
+        return svg;
+      }
+
+      function switchCategoryTab(catName) {
+        const tabs = [
+          { name: 'social', btn: document.getElementById('btnPillSocial'), pane: document.getElementById('panelSocialDetail') },
+          { name: 'study', btn: document.getElementById('btnPillStudy'), pane: document.getElementById('panelStudyDetail') },
+          { name: 'game', btn: document.getElementById('btnPillGame'), pane: document.getElementById('panelGameDetail') }
+        ];
+        tabs.forEach(t => {
+          if (t.btn && t.pane) {
+            if (t.name === catName) {
+              t.btn.classList.add('active');
+              t.pane.classList.add('active');
+            } else {
+              t.btn.classList.remove('active');
+              t.pane.classList.remove('active');
+            }
+          }
+        });
+      }
+
+      function initCategoryPills() {
+        const btnSocial = document.getElementById('btnPillSocial');
+        const btnStudy = document.getElementById('btnPillStudy');
+        const btnGame = document.getElementById('btnPillGame');
+
+        if (btnSocial && !btnSocial.dataset.bound) {
           btnSocial.dataset.bound = 'true';
-          btnSocial.addEventListener('click', () => {
-            const isOpen = panelSocial.classList.toggle('open');
-            btnSocial.classList.toggle('active', isOpen);
-          });
+          btnSocial.addEventListener('click', () => switchCategoryTab('social'));
         }
-
-        if (btnStudy && panelStudy && !btnStudy.dataset.bound) {
+        if (btnStudy && !btnStudy.dataset.bound) {
           btnStudy.dataset.bound = 'true';
-          btnStudy.addEventListener('click', () => {
-            const isOpen = panelStudy.classList.toggle('open');
-            btnStudy.classList.toggle('active', isOpen);
-          });
+          btnStudy.addEventListener('click', () => switchCategoryTab('study'));
         }
-
-        if (btnGame && panelGame && !btnGame.dataset.bound) {
+        if (btnGame && !btnGame.dataset.bound) {
           btnGame.dataset.bound = 'true';
-          btnGame.addEventListener('click', () => {
-            const isOpen = panelGame.classList.toggle('open');
-            btnGame.classList.toggle('active', isOpen);
-          });
+          btnGame.addEventListener('click', () => switchCategoryTab('game'));
         }
       }
 
@@ -1935,42 +2129,49 @@
             pkg: 'com.google.android.youtube',
             aliases: ['youtube', 'com.google.android.youtube.tv', 'music'],
             name: 'YouTube',
-            icon: '🔴',
+            brandType: 'youtube',
+            gradient: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)',
             color: '#ef4444'
           },
           {
             pkg: 'com.zhiliaoapp.musically',
             aliases: ['tiktok', 'com.ss.android.ugc.trill', 'com.zhiliaoapp.musically.go'],
             name: 'TikTok',
-            icon: '🎵',
+            brandType: 'tiktok',
+            gradient: 'linear-gradient(135deg, #09090b 0%, #18181b 100%)',
+            border: '1px solid rgba(0, 242, 254, 0.45)',
             color: '#06b6d4'
           },
           {
             pkg: 'com.facebook.katana',
             aliases: ['facebook', 'com.facebook.lite'],
             name: 'Facebook',
-            icon: '🔵',
-            color: '#3b82f6'
+            brandType: 'facebook',
+            gradient: 'linear-gradient(135deg, #1877f2 0%, #0d65d9 100%)',
+            color: '#1877f2'
           },
           {
             pkg: 'com.facebook.orca',
             aliases: ['messenger', 'com.facebook.mlite'],
             name: 'Messenger',
-            icon: '🗨️',
+            brandType: 'messenger',
+            gradient: 'linear-gradient(135deg, #00b2fe 0%, #006aff 50%, #9b00e8 100%)',
             color: '#a855f7'
           },
           {
             pkg: 'com.zing.zalo',
             aliases: ['zalo'],
             name: 'Zalo',
-            icon: '💬',
+            brandType: 'zalo',
+            gradient: 'linear-gradient(135deg, #0068ff 0%, #0284c7 100%)',
             color: '#0284c7'
           },
           {
             pkg: 'com.instagram.android',
             aliases: ['instagram'],
             name: 'Instagram',
-            icon: '📸',
+            brandType: 'instagram',
+            gradient: 'linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)',
             color: '#ec4899'
           }
         ];
@@ -2008,7 +2209,9 @@
           appCards.push({
             name: k.name,
             pkg: k.pkg,
-            icon: k.icon,
+            brandType: k.brandType,
+            gradient: k.gradient,
+            border: k.border,
             color: k.color,
             durationMinutes: durMin,
             isActive: isActive,
@@ -2029,7 +2232,8 @@
             appCards.push({
               name: h.appName || h.packageName,
               pkg: h.packageName,
-              icon: '💬',
+              brandType: 'social',
+              gradient: 'linear-gradient(135deg, #f43f5e 0%, #e11d48 100%)',
               color: '#f87171',
               durationMinutes: durMin,
               isActive: isActive,
@@ -2052,123 +2256,78 @@
 
         appCards.forEach(app => {
           const card = document.createElement('div');
-          card.className = `app-detail-card ${app.isActive ? 'is-active-app' : ''}`;
-          if (app.isActive) {
-            card.style.background = 'rgba(239, 68, 68, 0.12)';
-            card.style.borderColor = 'rgba(239, 68, 68, 0.5)';
-            card.style.boxShadow = '0 0 10px rgba(239, 68, 68, 0.2)';
-          }
+          card.className = `squircle-app-card ${app.isActive ? 'is-active-app' : ''}`;
 
           const topRow = document.createElement('div');
-          topRow.style.display = 'flex';
-          topRow.style.alignItems = 'center';
-          topRow.style.justifyContent = 'space-between';
-          topRow.style.marginBottom = '4px';
+          topRow.className = 'squircle-top-row';
 
-          const titleBox = document.createElement('div');
-          titleBox.style.display = 'flex';
-          titleBox.style.alignItems = 'center';
-          titleBox.style.gap = '7px';
+          const idBox = document.createElement('div');
+          idBox.className = 'squircle-identity-box';
 
-          const iconSpan = document.createElement('span');
-          iconSpan.style.fontSize = '1.05rem';
-          iconSpan.textContent = app.icon;
+          const iconBox = document.createElement('div');
+          iconBox.className = 'squircle-app-icon';
+          iconBox.style.background = app.gradient || app.color;
+          if (app.border) iconBox.style.border = app.border;
+          iconBox.appendChild(createBrandSvg(app.brandType));
 
-          const nameSpan = document.createElement('span');
-          nameSpan.style.fontSize = '0.82rem';
-          nameSpan.style.fontWeight = '700';
-          nameSpan.style.color = '#f8fafc';
-          nameSpan.textContent = app.name;
+          const metaBox = document.createElement('div');
+          metaBox.className = 'squircle-app-meta';
 
-          titleBox.appendChild(iconSpan);
-          titleBox.appendChild(nameSpan);
+          const nameBox = document.createElement('div');
+          nameBox.className = 'squircle-app-name';
+          nameBox.textContent = app.name;
 
-          const badgeSpan = document.createElement('span');
-          if (app.isActive) {
-            badgeSpan.style.fontSize = '0.68rem';
-            badgeSpan.style.fontWeight = '800';
-            badgeSpan.style.color = '#f87171';
-            badgeSpan.style.background = 'rgba(239, 68, 68, 0.2)';
-            badgeSpan.style.border = '1px solid rgba(239, 68, 68, 0.5)';
-            badgeSpan.style.padding = '2px 7px';
-            badgeSpan.style.borderRadius = '9999px';
-            badgeSpan.style.display = 'inline-flex';
-            badgeSpan.style.alignItems = 'center';
-
-            const dot = document.createElement('span');
-            dot.className = 'live-pulse-dot';
-            dot.style.background = '#ef4444';
-            dot.style.boxShadow = '0 0 6px #ef4444';
-
-            const txt = document.createElement('span');
-            txt.textContent = '🟢 ĐANG MỞ (ONLINE)';
-
-            badgeSpan.appendChild(dot);
-            badgeSpan.appendChild(txt);
-          } else if (app.durationMinutes > 0) {
-            badgeSpan.style.fontSize = '0.66rem';
-            badgeSpan.style.fontWeight = '600';
-            badgeSpan.style.color = '#94a3b8';
-            badgeSpan.style.background = 'rgba(148, 163, 184, 0.1)';
-            badgeSpan.style.padding = '2px 6px';
-            badgeSpan.style.borderRadius = '9999px';
-            badgeSpan.textContent = '⚪ ĐÃ ĐÓNG';
-          } else {
-            badgeSpan.style.fontSize = '0.66rem';
-            badgeSpan.style.color = '#64748b';
-            badgeSpan.textContent = '⚪ Chưa mở';
-          }
-
-          topRow.appendChild(titleBox);
-          topRow.appendChild(badgeSpan);
-
-          const infoRow = document.createElement('div');
-          infoRow.style.display = 'flex';
-          infoRow.style.justifyContent = 'space-between';
-          infoRow.style.alignItems = 'center';
-          infoRow.style.fontSize = '0.72rem';
-          infoRow.style.color = '#94a3b8';
-
-          const timeLabel = document.createElement('div');
+          const timeBox = document.createElement('div');
+          timeBox.className = 'squircle-app-time';
+          let timeText = 'Chưa mở hôm nay';
           if (app.durationMinutes > 0) {
             const hrs = Math.floor(app.durationMinutes / 60);
             const mns = app.durationMinutes % 60;
-            const timeStr = hrs > 0 ? `${hrs}h ${mns}m` : `${app.durationMinutes} phút`;
-            timeLabel.innerHTML = sanitizeHtml(`⏱️ Mở hôm nay: <strong style="color: #f1f5f9; font-size: 0.76rem;">${timeStr}</strong>`);
-          } else {
-            timeLabel.textContent = '⏱️ Hôm nay chưa sử dụng';
+            timeText = hrs > 0 ? `${hrs}h ${mns}m hôm nay` : `${app.durationMinutes} phút hôm nay`;
           }
-
-          const lastTimeLabel = document.createElement('div');
           if (app.lastUsed) {
-            const timeStr = new Date(app.lastUsed).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-            lastTimeLabel.textContent = `Lần cuối: ${timeStr}`;
+            const lastTime = new Date(app.lastUsed).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+            timeText += ` • Lần cuối: ${lastTime}`;
+          }
+          timeBox.textContent = timeText;
+
+          metaBox.appendChild(nameBox);
+          metaBox.appendChild(timeBox);
+          idBox.appendChild(iconBox);
+          idBox.appendChild(metaBox);
+
+          const badgeBox = document.createElement('div');
+          if (app.isActive) {
+            badgeBox.className = 'neon-capsule-badge online';
+            const dot = document.createElement('span');
+            dot.className = 'live-pulse-dot';
+            const txt = document.createElement('span');
+            txt.textContent = '🟢 Online';
+            badgeBox.appendChild(dot);
+            badgeBox.appendChild(txt);
+          } else if (app.durationMinutes > 0) {
+            badgeBox.className = 'neon-capsule-badge offline';
+            badgeBox.textContent = '⚪ Đã đóng';
           } else {
-            lastTimeLabel.textContent = '--';
+            badgeBox.className = 'neon-capsule-badge unused';
+            badgeBox.textContent = '⚪ Chưa mở';
           }
 
-          infoRow.appendChild(timeLabel);
-          infoRow.appendChild(lastTimeLabel);
+          topRow.appendChild(idBox);
+          topRow.appendChild(badgeBox);
 
-          const progressBg = document.createElement('div');
-          progressBg.style.width = '100%';
-          progressBg.style.height = '4px';
-          progressBg.style.borderRadius = '9999px';
-          progressBg.style.background = 'rgba(255, 255, 255, 0.08)';
-          progressBg.style.overflow = 'hidden';
-          progressBg.style.marginTop = '6px';
+          const progressTrack = document.createElement('div');
+          progressTrack.className = 'smooth-progress-pill';
 
           const progressFill = document.createElement('div');
+          progressFill.className = 'smooth-progress-fill';
           const pct = app.durationMinutes > 0 ? Math.min(100, Math.max(8, Math.round((app.durationMinutes / maxMins) * 100))) : 0;
           progressFill.style.width = `${pct}%`;
-          progressFill.style.height = '100%';
-          progressFill.style.borderRadius = '9999px';
-          progressFill.style.background = app.isActive ? 'linear-gradient(90deg, #f87171, #ef4444)' : app.color;
-          progressBg.appendChild(progressFill);
+          progressFill.style.background = app.gradient || app.color;
+          progressTrack.appendChild(progressFill);
 
           card.appendChild(topRow);
-          card.appendChild(infoRow);
-          card.appendChild(progressBg);
+          card.appendChild(progressTrack);
           listSocialApps.appendChild(card);
         });
       }
@@ -2179,12 +2338,12 @@
         if (!listStudyApps) return;
 
         const KNOWN_STUDY = [
-          { pkg: 'vn.azota.app', name: 'Azota (Nộp bài)', icon: '📘', color: '#38bdf8' },
-          { pkg: 'vn.k12online.app', name: 'K12Online (Học trực tuyến)', icon: '🏫', color: '#60a5fa' },
-          { pkg: 'com.duolingo', name: 'Duolingo (Học ngoại ngữ)', icon: '🦉', color: '#34d399' },
-          { pkg: 'com.google.android.apps.classroom', name: 'Google Classroom', icon: '📝', color: '#facc15' },
-          { pkg: 'vn.olm.app', name: 'OLM.vn (Học trực tuyến)', icon: '📖', color: '#38bdf8' },
-          { pkg: 'us.zoom.videomeetings', name: 'Zoom / Meet', icon: '📹', color: '#818cf8' }
+          { pkg: 'vn.azota.app', name: 'Azota (Nộp bài)', color: '#38bdf8', gradient: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)' },
+          { pkg: 'vn.k12online.app', name: 'K12Online (Học trực tuyến)', color: '#60a5fa', gradient: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)' },
+          { pkg: 'com.duolingo', name: 'Duolingo (Học ngoại ngữ)', color: '#34d399', gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' },
+          { pkg: 'com.google.android.apps.classroom', name: 'Google Classroom', color: '#facc15', gradient: 'linear-gradient(135deg, #eab308 0%, #ca8a04 100%)' },
+          { pkg: 'vn.olm.app', name: 'OLM.vn (Học trực tuyến)', color: '#38bdf8', gradient: 'linear-gradient(135deg, #0284c7 0%, #075985 100%)' },
+          { pkg: 'us.zoom.videomeetings', name: 'Zoom / Meet', color: '#818cf8', gradient: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)' }
         ];
 
         const historyRaw = devData.app_history || (devData.usage && devData.usage.appHistory) || null;
@@ -2208,7 +2367,7 @@
           if (durMin > 0 || isActive) usedCount++;
           appCards.push({
             name: k.name,
-            icon: k.icon,
+            gradient: k.gradient,
             color: k.color,
             durationMinutes: durMin,
             isActive: isActive,
@@ -2225,102 +2384,77 @@
 
         appCards.forEach(app => {
           const card = document.createElement('div');
-          card.className = `app-detail-card ${app.isActive ? 'is-active-app' : ''}`;
-          if (app.isActive) {
-            card.style.background = 'rgba(56, 189, 248, 0.12)';
-            card.style.borderColor = 'rgba(56, 189, 248, 0.5)';
-            card.style.boxShadow = '0 0 10px rgba(56, 189, 248, 0.2)';
-          }
+          card.className = `squircle-app-card ${app.isActive ? 'is-active-app' : ''}`;
 
           const topRow = document.createElement('div');
-          topRow.style.display = 'flex';
-          topRow.style.alignItems = 'center';
-          topRow.style.justifyContent = 'space-between';
-          topRow.style.marginBottom = '4px';
+          topRow.className = 'squircle-top-row';
 
-          const titleBox = document.createElement('div');
-          titleBox.style.display = 'flex';
-          titleBox.style.alignItems = 'center';
-          titleBox.style.gap = '7px';
+          const idBox = document.createElement('div');
+          idBox.className = 'squircle-identity-box';
 
-          const iconSpan = document.createElement('span');
-          iconSpan.style.fontSize = '1.05rem';
-          iconSpan.textContent = app.icon;
+          const iconBox = document.createElement('div');
+          iconBox.className = 'squircle-app-icon';
+          iconBox.style.background = app.gradient || app.color;
+          iconBox.appendChild(createBrandSvg('study'));
 
-          const nameSpan = document.createElement('span');
-          nameSpan.style.fontSize = '0.82rem';
-          nameSpan.style.fontWeight = '700';
-          nameSpan.style.color = '#f8fafc';
-          nameSpan.textContent = app.name;
+          const metaBox = document.createElement('div');
+          metaBox.className = 'squircle-app-meta';
 
-          titleBox.appendChild(iconSpan);
-          titleBox.appendChild(nameSpan);
+          const nameBox = document.createElement('div');
+          nameBox.className = 'squircle-app-name';
+          nameBox.textContent = app.name;
 
-          const badgeSpan = document.createElement('span');
-          if (app.isActive) {
-            badgeSpan.style.fontSize = '0.68rem';
-            badgeSpan.style.fontWeight = '800';
-            badgeSpan.style.color = '#38bdf8';
-            badgeSpan.style.background = 'rgba(56, 189, 248, 0.2)';
-            badgeSpan.style.border = '1px solid rgba(56, 189, 248, 0.5)';
-            badgeSpan.style.padding = '2px 7px';
-            badgeSpan.style.borderRadius = '9999px';
-            badgeSpan.textContent = '🟢 ĐANG HỌC';
-          } else if (app.durationMinutes > 0) {
-            badgeSpan.style.fontSize = '0.66rem';
-            badgeSpan.style.color = '#94a3b8';
-            badgeSpan.textContent = '⚪ ĐÃ ĐÓNG';
-          } else {
-            badgeSpan.style.fontSize = '0.66rem';
-            badgeSpan.style.color = '#64748b';
-            badgeSpan.textContent = '⚪ Chưa mở';
-          }
-
-          topRow.appendChild(titleBox);
-          topRow.appendChild(badgeSpan);
-
-          const infoRow = document.createElement('div');
-          infoRow.style.display = 'flex';
-          infoRow.style.justifyContent = 'space-between';
-          infoRow.style.alignItems = 'center';
-          infoRow.style.fontSize = '0.72rem';
-          infoRow.style.color = '#94a3b8';
-
-          const timeLabel = document.createElement('div');
+          const timeBox = document.createElement('div');
+          timeBox.className = 'squircle-app-time';
+          let timeText = 'Chưa mở hôm nay';
           if (app.durationMinutes > 0) {
             const hrs = Math.floor(app.durationMinutes / 60);
             const mns = app.durationMinutes % 60;
-            const timeStr = hrs > 0 ? `${hrs}h ${mns}m` : `${app.durationMinutes} phút`;
-            timeLabel.innerHTML = sanitizeHtml(`⏱️ Học hôm nay: <strong style="color: #f1f5f9; font-size: 0.76rem;">${timeStr}</strong>`);
+            timeText = hrs > 0 ? `${hrs}h ${mns}m hôm nay` : `${app.durationMinutes} phút hôm nay`;
+          }
+          if (app.lastUsed) {
+            const lastTime = new Date(app.lastUsed).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+            timeText += ` • Lần cuối: ${lastTime}`;
+          }
+          timeBox.textContent = timeText;
+
+          metaBox.appendChild(nameBox);
+          metaBox.appendChild(timeBox);
+          idBox.appendChild(iconBox);
+          idBox.appendChild(metaBox);
+
+          const badgeBox = document.createElement('div');
+          if (app.isActive) {
+            badgeBox.className = 'neon-capsule-badge online';
+            const dot = document.createElement('span');
+            dot.className = 'live-pulse-dot';
+            const txt = document.createElement('span');
+            txt.textContent = '🟢 Đang học';
+            badgeBox.appendChild(dot);
+            badgeBox.appendChild(txt);
+          } else if (app.durationMinutes > 0) {
+            badgeBox.className = 'neon-capsule-badge offline';
+            badgeBox.textContent = '⚪ Đã đóng';
           } else {
-            timeLabel.textContent = '⏱️ Hôm nay chưa mở';
+            badgeBox.className = 'neon-capsule-badge unused';
+            badgeBox.textContent = '⚪ Chưa mở';
           }
 
-          const lastTimeLabel = document.createElement('div');
-          lastTimeLabel.textContent = app.lastUsed ? `Lần cuối: ${new Date(app.lastUsed).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}` : '--';
+          topRow.appendChild(idBox);
+          topRow.appendChild(badgeBox);
 
-          infoRow.appendChild(timeLabel);
-          infoRow.appendChild(lastTimeLabel);
-
-          const progressBg = document.createElement('div');
-          progressBg.style.width = '100%';
-          progressBg.style.height = '4px';
-          progressBg.style.borderRadius = '9999px';
-          progressBg.style.background = 'rgba(255, 255, 255, 0.08)';
-          progressBg.style.overflow = 'hidden';
-          progressBg.style.marginTop = '6px';
+          const progressTrack = document.createElement('div');
+          progressTrack.className = 'smooth-progress-pill';
 
           const progressFill = document.createElement('div');
+          progressFill.className = 'smooth-progress-fill';
           const pct = app.durationMinutes > 0 ? Math.min(100, Math.max(8, Math.round((app.durationMinutes / maxMins) * 100))) : 0;
           progressFill.style.width = `${pct}%`;
-          progressFill.style.height = '100%';
-          progressFill.style.borderRadius = '9999px';
-          progressFill.style.background = app.color;
-          progressBg.appendChild(progressFill);
+          progressFill.style.background = app.gradient || app.color;
+          progressTrack.appendChild(progressFill);
 
           card.appendChild(topRow);
-          card.appendChild(infoRow);
-          card.appendChild(progressBg);
+          card.appendChild(progressTrack);
           listStudyApps.appendChild(card);
         });
       }
@@ -2331,12 +2465,12 @@
         if (!listGameApps) return;
 
         const KNOWN_GAMES = [
-          { pkg: 'com.garena.game.kgvn', name: 'Liên Quân Mobile', icon: '⚔️', color: '#fbbf24' },
-          { pkg: 'com.dts.freefireth', name: 'Free Fire', icon: '🔥', color: '#f97316' },
-          { pkg: 'com.roblox.client', name: 'Roblox', icon: '🧱', color: '#ef4444' },
-          { pkg: 'com.mojang.minecraftpe', name: 'Minecraft', icon: '⛏️', color: '#10b981' },
-          { pkg: 'com.vng.pubgmobile', name: 'PUBG Mobile', icon: '🔫', color: '#eab308' },
-          { pkg: 'com.zing.zingspeedm', name: 'ZingSpeed Mobile', icon: '🏎️', color: '#06b6d4' }
+          { pkg: 'com.garena.game.kgvn', name: 'Liên Quân Mobile', color: '#fbbf24', gradient: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)' },
+          { pkg: 'com.dts.freefireth', name: 'Free Fire', color: '#f97316', gradient: 'linear-gradient(135deg, #ea580c 0%, #c2410c 100%)' },
+          { pkg: 'com.roblox.client', name: 'Roblox', color: '#ef4444', gradient: 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)' },
+          { pkg: 'com.mojang.minecraftpe', name: 'Minecraft', color: '#10b981', gradient: 'linear-gradient(135deg, #059669 0%, #047857 100%)' },
+          { pkg: 'com.vng.pubgmobile', name: 'PUBG Mobile', color: '#eab308', gradient: 'linear-gradient(135deg, #ca8a04 0%, #a16207 100%)' },
+          { pkg: 'com.zing.zingspeedm', name: 'ZingSpeed Mobile', color: '#06b6d4', gradient: 'linear-gradient(135deg, #0891b2 0%, #0e7490 100%)' }
         ];
 
         const historyRaw = devData.app_history || (devData.usage && devData.usage.appHistory) || null;
@@ -2360,7 +2494,7 @@
           if (durMin > 0 || isActive) usedCount++;
           appCards.push({
             name: k.name,
-            icon: k.icon,
+            gradient: k.gradient,
             color: k.color,
             durationMinutes: durMin,
             isActive: isActive,
@@ -2377,121 +2511,97 @@
 
         appCards.forEach(app => {
           const card = document.createElement('div');
-          card.className = `app-detail-card ${app.isActive ? 'is-active-app' : ''}`;
-          if (app.isActive) {
-            card.style.background = 'rgba(251, 191, 36, 0.12)';
-            card.style.borderColor = 'rgba(251, 191, 36, 0.5)';
-            card.style.boxShadow = '0 0 10px rgba(251, 191, 36, 0.2)';
-          }
+          card.className = `squircle-app-card ${app.isActive ? 'is-active-app' : ''}`;
 
           const topRow = document.createElement('div');
-          topRow.style.display = 'flex';
-          topRow.style.alignItems = 'center';
-          topRow.style.justifyContent = 'space-between';
-          topRow.style.marginBottom = '4px';
+          topRow.className = 'squircle-top-row';
 
-          const titleBox = document.createElement('div');
-          titleBox.style.display = 'flex';
-          titleBox.style.alignItems = 'center';
-          titleBox.style.gap = '7px';
+          const idBox = document.createElement('div');
+          idBox.className = 'squircle-identity-box';
 
-          const iconSpan = document.createElement('span');
-          iconSpan.style.fontSize = '1.05rem';
-          iconSpan.textContent = app.icon;
+          const iconBox = document.createElement('div');
+          iconBox.className = 'squircle-app-icon';
+          iconBox.style.background = app.gradient || app.color;
+          iconBox.appendChild(createBrandSvg('game'));
 
-          const nameSpan = document.createElement('span');
-          nameSpan.style.fontSize = '0.82rem';
-          nameSpan.style.fontWeight = '700';
-          nameSpan.style.color = '#f8fafc';
-          nameSpan.textContent = app.name;
+          const metaBox = document.createElement('div');
+          metaBox.className = 'squircle-app-meta';
 
-          titleBox.appendChild(iconSpan);
-          titleBox.appendChild(nameSpan);
+          const nameBox = document.createElement('div');
+          nameBox.className = 'squircle-app-name';
+          nameBox.textContent = app.name;
 
-          const badgeSpan = document.createElement('span');
-          if (app.isActive) {
-            badgeSpan.style.fontSize = '0.68rem';
-            badgeSpan.style.fontWeight = '800';
-            badgeSpan.style.color = '#fbbf24';
-            badgeSpan.style.background = 'rgba(251, 191, 36, 0.2)';
-            badgeSpan.style.border = '1px solid rgba(251, 191, 36, 0.5)';
-            badgeSpan.style.padding = '2px 7px';
-            badgeSpan.style.borderRadius = '9999px';
-            badgeSpan.textContent = '🎮 ĐANG CHƠI';
-          } else if (app.durationMinutes > 0) {
-            badgeSpan.style.fontSize = '0.66rem';
-            badgeSpan.style.color = '#94a3b8';
-            badgeSpan.textContent = '⚪ ĐÃ ĐÓNG';
-          } else {
-            badgeSpan.style.fontSize = '0.66rem';
-            badgeSpan.style.color = '#64748b';
-            badgeSpan.textContent = '⚪ Chưa chơi';
-          }
-
-          topRow.appendChild(titleBox);
-          topRow.appendChild(badgeSpan);
-
-          const infoRow = document.createElement('div');
-          infoRow.style.display = 'flex';
-          infoRow.style.justifyContent = 'space-between';
-          infoRow.style.alignItems = 'center';
-          infoRow.style.fontSize = '0.72rem';
-          infoRow.style.color = '#94a3b8';
-
-          const timeLabel = document.createElement('div');
+          const timeBox = document.createElement('div');
+          timeBox.className = 'squircle-app-time';
+          let timeText = 'Chưa chơi hôm nay';
           if (app.durationMinutes > 0) {
             const hrs = Math.floor(app.durationMinutes / 60);
             const mns = app.durationMinutes % 60;
-            const timeStr = hrs > 0 ? `${hrs}h ${mns}m` : `${app.durationMinutes} phút`;
-            timeLabel.innerHTML = sanitizeHtml(`⏱️ Chơi hôm nay: <strong style="color: #f1f5f9; font-size: 0.76rem;">${timeStr}</strong>`);
+            timeText = hrs > 0 ? `${hrs}h ${mns}m hôm nay` : `${app.durationMinutes} phút hôm nay`;
+          }
+          if (app.lastUsed) {
+            const lastTime = new Date(app.lastUsed).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+            timeText += ` • Lần cuối: ${lastTime}`;
+          }
+          timeBox.textContent = timeText;
+
+          metaBox.appendChild(nameBox);
+          metaBox.appendChild(timeBox);
+          idBox.appendChild(iconBox);
+          idBox.appendChild(metaBox);
+
+          const badgeBox = document.createElement('div');
+          if (app.isActive) {
+            badgeBox.className = 'neon-capsule-badge online';
+            const dot = document.createElement('span');
+            dot.className = 'live-pulse-dot';
+            const txt = document.createElement('span');
+            txt.textContent = '🟢 Đang chơi';
+            badgeBox.appendChild(dot);
+            badgeBox.appendChild(txt);
+          } else if (app.durationMinutes > 0) {
+            badgeBox.className = 'neon-capsule-badge offline';
+            badgeBox.textContent = '⚪ Đã đóng';
           } else {
-            timeLabel.textContent = '⏱️ Hôm nay chưa chơi';
+            badgeBox.className = 'neon-capsule-badge unused';
+            badgeBox.textContent = '⚪ Chưa chơi';
           }
 
-          const lastTimeLabel = document.createElement('div');
-          lastTimeLabel.textContent = app.lastUsed ? `Lần cuối: ${new Date(app.lastUsed).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}` : '--';
+          topRow.appendChild(idBox);
+          topRow.appendChild(badgeBox);
 
-          infoRow.appendChild(timeLabel);
-          infoRow.appendChild(lastTimeLabel);
-
-          const progressBg = document.createElement('div');
-          progressBg.style.width = '100%';
-          progressBg.style.height = '4px';
-          progressBg.style.borderRadius = '9999px';
-          progressBg.style.background = 'rgba(255, 255, 255, 0.08)';
-          progressBg.style.overflow = 'hidden';
-          progressBg.style.marginTop = '6px';
+          const progressTrack = document.createElement('div');
+          progressTrack.className = 'smooth-progress-pill';
 
           const progressFill = document.createElement('div');
+          progressFill.className = 'smooth-progress-fill';
           const pct = app.durationMinutes > 0 ? Math.min(100, Math.max(8, Math.round((app.durationMinutes / maxMins) * 100))) : 0;
           progressFill.style.width = `${pct}%`;
-          progressFill.style.height = '100%';
-          progressFill.style.borderRadius = '9999px';
-          progressFill.style.background = app.color;
-          progressBg.appendChild(progressFill);
+          progressFill.style.background = app.gradient || app.color;
+          progressTrack.appendChild(progressFill);
 
           card.appendChild(topRow);
-          card.appendChild(infoRow);
-          card.appendChild(progressBg);
+          card.appendChild(progressTrack);
           listGameApps.appendChild(card);
         });
       }
 
-      // Kích hoạt accordions và nạp dữ liệu phân tích từng nhóm app
-      initCategoryAccordions();
+      // Khởi tạo phím Pill Category và kết xuất dữ liệu từng nhóm
+      initCategoryPills();
       renderSocialAppBreakdown(deviceData);
       renderStudyAppBreakdown(deviceData);
       renderGameAppBreakdown(deviceData);
 
-      // Tự động mở rộng danh mục Mạng Xã Hội nếu ứng dụng đang chạy thuộc nhóm Mạng Xã Hội
+      // Tự động kích hoạt tab phù hợp với ứng dụng con đang mở
       const currentCat = (deviceData.active_app && deviceData.active_app.category) ? deviceData.active_app.category.toLowerCase() : '';
-      if (currentCat === 'social' || (deviceData.active_app && (deviceData.active_app.packageName || '').includes('youtube'))) {
-        const panelSocial = document.getElementById('panelSocialDetail');
-        const btnSocial = document.getElementById('btnAccordionSocial');
-        if (panelSocial && btnSocial && !panelSocial.classList.contains('open')) {
-          panelSocial.classList.add('open');
-          btnSocial.classList.add('active');
-        }
+      const curPkg = (deviceData.active_app && deviceData.active_app.packageName) ? deviceData.active_app.packageName.toLowerCase() : '';
+      if (currentCat === 'study' || curPkg.includes('azota') || curPkg.includes('k12') || curPkg.includes('duolingo') || curPkg.includes('classroom')) {
+        switchCategoryTab('study');
+      } else if (currentCat === 'game' || curPkg.includes('game') || curPkg.includes('freefire') || curPkg.includes('roblox') || curPkg.includes('minecraft')) {
+        switchCategoryTab('game');
+      } else {
+        // Mặc định hiển thị tab Mạng Xã Hội chuẩn theo bản phác thảo
+        switchCategoryTab('social');
       }
 
       // Cập nhật dữ liệu Tin nhắn & Phản hồi của con
