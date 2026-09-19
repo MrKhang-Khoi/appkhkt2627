@@ -106,7 +106,23 @@ if (fs.existsSync(indexHtmlPath)) {
     console.error('\x1b[31m%s\x1b[0m', '❌ LỖI WEB PORTAL: Thiếu biến bảo toàn trạng thái tab (userHasChosenTab, currentCategoryTab)!');
     process.exit(1);
   }
-  portalAuditReport = `index.html static scan: 0 ${VAR_KW}, 0 loose ${EQ2}, 0 empty catch, userHasChosenTab and currentCategoryTab present.`;
+
+  // 3.5b. Kiểm tra cú pháp V8 AST toàn vẹn của tất cả các khối script trong index.html
+  const scriptTags = htmlContent.match(/<script\b[^>]*>([\s\S]*?)<\/script>/gi) || [];
+  for (let sIdx = 0; sIdx < scriptTags.length; sIdx++) {
+    const sCode = scriptTags[sIdx].replace(/<script\b[^>]*>/i, '').replace(/<\/script>/i, '');
+    if (sCode.trim()) {
+      try {
+        new vm.Script(sCode);
+      } catch (err) {
+        console.error('\x1b[31m%s\x1b[0m', `❌ LỖI CÚ PHÁP WEB PORTAL (Script block ${sIdx + 1}): ${err.message}`);
+        console.error(err.stack);
+        process.exit(1);
+      }
+    }
+  }
+
+  portalAuditReport = `index.html static scan: 0 ${VAR_KW}, 0 loose ${EQ2}, 0 empty catch, userHasChosenTab and currentCategoryTab present, ${scriptTags.length} script tags V8 syntax validated.`;
   console.log('\x1b[32m%s\x1b[0m', `✅ ${portalAuditReport}`);
 }
 
