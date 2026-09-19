@@ -1,19 +1,8 @@
 {
-    "isForceUpdate": true,
-    "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.2.2.apk",
-    "minSupportedVersion": 1,
-    "releaseDate": "2026-09-19",
-    "sha256": "C7040998719E32A897BBA221C5AEDC0BDA009F31AC6DF097C88E5B55AAE161BB",
-    "versionName": "1.2.2",
-    "versionCode": 22,
-    "latestVersionName": "1.2.2",
-    "latestVersionCode": 22,
-    "changelog": [
-        "Nâng cấp tính năng Chặn Website 2 chiều: Chặn tên miền 1-chạm trực tiếp từ Web Dashboard Phụ Huynh",
-        "Tích hợp Bảng Quy Tắc Lọc Web Phụ Huynh: Quản lý danh sách chặn (Blacklist) và ngoại lệ an toàn (Whitelist) tùy chỉnh",
-        "Chế Độ Giờ Học (Study Safe Whitelist): Khóa toàn bộ website ngoài danh sách giáo dục (Azota, OLM, Hocmai, Khan Academy...)",
-        "Đồng bộ động tức thời qua Firebase RTDB (/web_rules) và lưu bộ nhớ đệm SharedPreferences trên thiết bị Android",
-        "Tối ưu hiệu năng bộ lọc kiểm tra URL đa tầng dưới 2ms, không hao pin"
-    ],
-    "fileSize": "5.76 MB"
+  "versionCode": 23,
+  "versionName": "1.2.3",
+  "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.2.3.apk",
+  "sha256": "F6A647888725231A4B86A4A39637FA0708A7D9624E0F2EABD598E6012DB418B4",
+  "releaseNotes": "Khắc phục triệt để lỗi báo ngoại tuyến khi màn hình mở: Tích hợp Coroutine Ticker 15s trong GuardianAccessibilityService, tự động duy trì UsageTrackerService và đồng bộ nhịp tim liên tục khi lướt web.",
+  "updatedAt": 1789807820737
 }

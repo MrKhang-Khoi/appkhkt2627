@@ -1905,12 +1905,15 @@
       studentWebHeartbeatInterval = setInterval(sendPing, 10000);
     }
 
-    // HÀM TÍNH TOÁN TRẠNG THÁI KẾT NỐI THẬT QUA NHỊP TIM (HEARTBEAT ENGINE)
+    // HÀM TÍNH TOÁN TRẠNG THÁI KẾT NỐI THẬT QUA NHỊP TIM & TƯƠNG TÁC (HEARTBEAT & ACTIVITY ENGINE)
     function calculateDeviceOnlineStatus(deviceData, pairingData) {
       const now = Date.now();
       const lastContact = Math.max(
         Number(deviceData?.lastHeartbeat) || 0,
         Number(deviceData?.lastSync) || 0,
+        Number(deviceData?.active_app?.timestamp) || 0,
+        Number(deviceData?.web_activity?.timestamp) || 0,
+        Number(deviceData?.location?.timestamp) || 0,
         Number(pairingData?.lastHeartbeat) || 0,
         Number(pairingData?.lastSync) || 0
       );
@@ -1920,13 +1923,26 @@
       }
 
       const diffSeconds = Math.max(0, Math.floor((now - lastContact) / 1000));
-      // Ngưỡng Heartbeat: 45 giây. 
-      // Thiết bị học sinh (Android hoặc Web) gửi heartbeat mỗi 10 giây.
-      // Nếu tắt mạng (ngắt Wi-Fi / 4G), sau 45s không có ping mới -> Chắc chắn NGOẠI TUYẾN!
-      if (diffSeconds <= 45) {
+      const isScreenOff = deviceData?.active_app?.packageName === 'SCREEN_OFF';
+
+      // Ngưỡng đánh giá kết nối chuẩn công nghiệp cho thiết bị di động:
+      // 1. Trong vòng 90 giây: Thiết bị đang trực tuyến và phản hồi thời gian thực
+      if (diffSeconds <= 90) {
+        if (isScreenOff) {
+          return { isOnline: true, diffSeconds, text: 'Màn hình tắt / Khóa máy (Trực tuyến)', color: '#38bdf8' };
+        }
         return { isOnline: true, diffSeconds, text: 'Đang hoạt động thời gian thực', color: '#10b981' };
       }
 
+      // 2. Từ 91s - 180s (1.5 - 3 phút): Thiết bị trực tuyến, có thể đang ở chế độ tiết kiệm pin hoặc đọc nội dung tĩnh
+      if (diffSeconds <= 180) {
+        if (isScreenOff) {
+          return { isOnline: true, diffSeconds, text: 'Màn hình tắt / Chờ mở máy', color: '#64748b' };
+        }
+        return { isOnline: true, diffSeconds, text: 'Trực tuyến (Chờ tương tác)', color: '#10b981' };
+      }
+
+      // 3. Sau 3 phút không có bất kỳ tín hiệu nào: Thiết bị chính thức Ngoại tuyến
       let timeText = '';
       if (diffSeconds < 60) {
         timeText = 'Vừa ngắt kết nối';
@@ -3509,11 +3525,12 @@
 
       try {
         const t0 = performance.now();
-        const [devRes, famDevRes, actRes, histRes] = await Promise.all([
+        const [devRes, famDevRes, actRes, histRes, webActRes] = await Promise.all([
           fetch(`${FIREBASE_BASE}/devices/${deviceId}.json`, { cache: 'no-cache' }).catch(() => null),
           fetch(`${FIREBASE_BASE}/families/${currentFamilyCode}/devices/${deviceId}.json`, { cache: 'no-cache' }).catch(() => null),
           fetch(`${FIREBASE_BASE}/families/${currentFamilyCode}/devices/${deviceId}/active_app.json`, { cache: 'no-cache' }).catch(() => null),
-          fetch(`${FIREBASE_BASE}/families/${currentFamilyCode}/devices/${deviceId}/app_history.json`, { cache: 'no-cache' }).catch(() => null)
+          fetch(`${FIREBASE_BASE}/families/${currentFamilyCode}/devices/${deviceId}/app_history.json`, { cache: 'no-cache' }).catch(() => null),
+          fetch(`${FIREBASE_BASE}/families/${currentFamilyCode}/devices/${deviceId}/web_activity.json`, { cache: 'no-cache' }).catch(() => null)
         ]);
         const latency = Math.round(performance.now() - t0);
         if (btnCheckFirebaseConn) btnCheckFirebaseConn.textContent = `⚡ Firebase: ${latency}ms`;
@@ -3522,11 +3539,18 @@
         const famDevData = (famDevRes && famDevRes.ok) ? await famDevRes.json() : null;
         const actData = (actRes && actRes.ok) ? await actRes.json() : null;
         const histData = (histRes && histRes.ok) ? await histRes.json() : null;
+        const webActData = (webActRes && webActRes.ok) ? await webActRes.json() : null;
 
         // Luôn ưu tiên nguồn dữ liệu có nhịp tim (lastHeartbeat) mới nhất
         const devHb = Number(devData?.lastHeartbeat || 0);
         const famHb = Number(famDevData?.lastHeartbeat || 0);
         const targetData = (devHb >= famHb) ? { ...famDevData, ...devData } : { ...devData, ...famDevData };
+
+        if (webActData) {
+          targetData.web_activity = webActData;
+        } else if (devData?.web_activity) {
+          targetData.web_activity = devData.web_activity;
+        }
 
         // Chọn trạng thái active_app có mốc thời gian mới nhất, tránh bị đè bởi bản ghi cũ
         const devAppTime = Number(devData?.active_app?.timestamp || 0);

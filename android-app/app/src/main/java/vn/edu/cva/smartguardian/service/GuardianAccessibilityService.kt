@@ -3,8 +3,17 @@ package vn.edu.cva.smartguardian.service
 import android.accessibilityservice.AccessibilityService
 import android.content.Context
 import android.content.Intent
+import android.os.PowerManager
+import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import vn.edu.cva.smartguardian.data.AppClassifier
 import vn.edu.cva.smartguardian.data.WebFilterList
 import vn.edu.cva.smartguardian.ui.BlockedActivity
@@ -27,6 +36,10 @@ class GuardianAccessibilityService : AccessibilityService() {
         "com.google.android.googlequicksearchbox"
     )
 
+    private val serviceJob = SupervisorJob()
+    private val serviceScope = CoroutineScope(Dispatchers.Default + serviceJob)
+    private var heartbeatJob: Job? = null
+
     private var lastCheckedUrl: String = ""
     private var lastBlockTimestamp: Long = 0L
     private var lastHeartbeatTimestamp: Long = 0L
@@ -39,6 +52,40 @@ class GuardianAccessibilityService : AccessibilityService() {
     override fun onCreate() {
         super.onCreate()
         WebFilterList.loadFromPreferences(this)
+        try {
+            UsageTrackerService.start(this)
+        } catch (e: Exception) {
+            Log.w("GuardianAccess", "Failed to start UsageTrackerService: ${e.message}")
+        }
+        startPeriodicHeartbeat()
+    }
+
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        try {
+            UsageTrackerService.start(this)
+        } catch (e: Exception) {
+            Log.w("GuardianAccess", "Failed to start UsageTrackerService on connect: ${e.message}")
+        }
+        startPeriodicHeartbeat()
+    }
+
+    private fun startPeriodicHeartbeat() {
+        heartbeatJob?.cancel()
+        heartbeatJob = serviceScope.launch {
+            val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
+            while (isActive) {
+                try {
+                    val isInteractive = pm?.isInteractive ?: true
+                    if (isInteractive) {
+                        UsageTrackerService.sendHeartbeatPing(applicationContext)
+                    }
+                } catch (e: Exception) {
+                    Log.w("GuardianAccess", "Periodic heartbeat error: ${e.message}")
+                }
+                delay(15_000L) // Bắn nhịp tim định kỳ mỗi 15 giây khi màn hình đang bật
+            }
+        }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -324,5 +371,13 @@ class GuardianAccessibilityService : AccessibilityService() {
 
     override fun onInterrupt() {
         // Được gọi khi hệ thống tạm ngắt dịch vụ
+    }
+
+    override fun onDestroy() {
+        try {
+            heartbeatJob?.cancel()
+            serviceJob.cancel()
+        } catch (_: Exception) {}
+        super.onDestroy()
     }
 }

@@ -298,6 +298,27 @@ class UsageTrackerService : Service() {
                         .put(body)
                         .build()
                     sharedHttpClient.newCall(reqDev).execute().close()
+
+                    // Khi người dùng đang tương tác với ứng dụng (khác SCREEN_OFF): cập nhật ngay lastHeartbeat
+                    if (packageName != "SCREEN_OFF") {
+                        val hbJson = JSONObject().apply {
+                            put("lastHeartbeat", activeJson.getLong("timestamp"))
+                            put("lastSync", activeJson.getLong("timestamp"))
+                            put("online", true)
+                        }
+                        val hbBody = hbJson.toString().toRequestBody(mediaType)
+                        val reqFamHb = okhttp3.Request.Builder()
+                            .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId.json")
+                            .patch(hbBody)
+                            .build()
+                        sharedHttpClient.newCall(reqFamHb).execute().close()
+
+                        val reqDevHb = okhttp3.Request.Builder()
+                            .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$androidId.json")
+                            .patch(hbBody)
+                            .build()
+                        sharedHttpClient.newCall(reqDevHb).execute().close()
+                    }
                 } catch (e: Exception) {
                     Log.w("UsageTrackerService", "reportActiveApp failed: ${e.message}")
                 }
@@ -356,7 +377,26 @@ class UsageTrackerService : Service() {
                         .build()
                     sharedHttpClient.newCall(reqDev).execute().close()
 
-                    // 2. Ghi nhật ký vào /web_history/$now.json (lịch sử duyệt web)
+                    // 2. Cập nhật nhịp tim tươi mới ngay khi có duyệt web
+                    val hbJson = JSONObject().apply {
+                        put("lastHeartbeat", now)
+                        put("lastSync", now)
+                        put("online", true)
+                    }
+                    val hbBody = hbJson.toString().toRequestBody(mediaType)
+                    val reqFamHb = okhttp3.Request.Builder()
+                        .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId.json")
+                        .patch(hbBody)
+                        .build()
+                    sharedHttpClient.newCall(reqFamHb).execute().close()
+
+                    val reqDevHb = okhttp3.Request.Builder()
+                        .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$androidId.json")
+                        .patch(hbBody)
+                        .build()
+                    sharedHttpClient.newCall(reqDevHb).execute().close()
+
+                    // 3. Ghi nhật ký vào /web_history/$now.json (lịch sử duyệt web)
                     val reqHistFam = okhttp3.Request.Builder()
                         .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId/web_history/$now.json")
                         .put(body)
