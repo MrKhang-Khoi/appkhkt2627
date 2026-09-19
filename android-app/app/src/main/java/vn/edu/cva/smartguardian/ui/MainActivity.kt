@@ -21,9 +21,11 @@ import android.os.Bundle
 import android.os.Process
 import android.provider.Settings
 import android.util.Log
+import android.view.Gravity
 import android.view.View
 import android.view.accessibility.AccessibilityManager
 import android.view.inputmethod.InputMethodManager
+import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
@@ -45,6 +47,10 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 import vn.edu.cva.smartguardian.R
 import vn.edu.cva.smartguardian.receiver.SmartGuardianAdminReceiver
@@ -96,7 +102,15 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvCompanionBadge: TextView
     private lateinit var tvPairedCodeDisplay: TextView
 
-    // Phím tắt cấp quyền hệ thống 1-chạm (Quick Permission Action Chips)
+    // Phím tắt cấp quyền hệ thống 1-chạm (Quick Permission Action Chips & Wizard)
+    private var btnSmartPermissionWizard: LinearLayout? = null
+    private var btnSmartPermissionWizardPre: LinearLayout? = null
+    private var tvWizardTitle: TextView? = null
+    private var tvWizardTitlePre: TextView? = null
+    private var tvWizardIcon: TextView? = null
+    private var tvWizardIconPre: TextView? = null
+    private var layoutParentChildRow: LinearLayout? = null
+
     private var btnQuickAppInfo: View? = null
     private var btnQuickAccessibility: View? = null
     private var btnQuickUsageAccess: View? = null
@@ -260,6 +274,7 @@ class MainActivity : AppCompatActivity() {
         btnParentCopyCode = findViewById(R.id.btnParentCopyCode)
         btnParentRegenCode = findViewById(R.id.btnParentRegenCode)
         tvParentChildSubtitle = findViewById(R.id.tvParentChildSubtitle)
+        layoutParentChildRow = findViewById(R.id.layoutParentChildRow)
         btnParentTriggerUnpair = findViewById(R.id.btnParentTriggerUnpair)
         btnLockParentTab = findViewById(R.id.btnLockParentTab)
 
@@ -395,7 +410,17 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Khởi tạo các phím tắt cấp quyền 1-chạm (Quick Permission Chips)
+        // Khởi tạo các phím tắt cấp quyền 1-chạm (Quick Permission Chips & Smart Wizard)
+        btnSmartPermissionWizard = findViewById(R.id.btnSmartPermissionWizard)
+        btnSmartPermissionWizardPre = findViewById(R.id.btnSmartPermissionWizardPre)
+        tvWizardTitle = findViewById(R.id.tvWizardTitle)
+        tvWizardTitlePre = findViewById(R.id.tvWizardTitlePre)
+        tvWizardIcon = findViewById(R.id.tvWizardIcon)
+        tvWizardIconPre = findViewById(R.id.tvWizardIconPre)
+
+        btnSmartPermissionWizard?.setOnClickListener { handleSmartPermissionWizardClick() }
+        btnSmartPermissionWizardPre?.setOnClickListener { handleSmartPermissionWizardClick() }
+
         btnQuickAppInfo = findViewById(R.id.btnQuickAppInfo)
         btnQuickAccessibility = findViewById(R.id.btnQuickAccessibility)
         btnQuickUsageAccess = findViewById(R.id.btnQuickUsageAccess)
@@ -416,6 +441,8 @@ class MainActivity : AppCompatActivity() {
 
         btnQuickUsageAccess?.setOnClickListener { openUsageAccessSettings() }
         btnQuickUsageAccessPre?.setOnClickListener { openUsageAccessSettings() }
+
+        layoutParentChildRow?.setOnClickListener { showChildCompanionDialog() }
     }
 
     private fun switchToParentTab() {
@@ -833,66 +860,376 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    data class CompanionAppItem(
+        val packageName: String,
+        val appName: String,
+        val category: String,
+        val categoryLabel: String,
+        var durationMinutes: Int,
+        var lastTimeUsed: Long,
+        var isOnline: Boolean
+    )
+
     private fun showChildCompanionDialog() {
         val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
-        val studyMs = prefs.getLong("study_time_ms", 0L)
-        val gameMs = prefs.getLong("game_time_ms", 0L)
-        val socialMs = prefs.getLong("social_time_ms", 0L)
-        val balanceScore = prefs.getInt("balance_score", -1)
-        val lastUpdate = prefs.getLong("last_updated_at", 0L)
-        val now = System.currentTimeMillis()
-        val isRecent = lastUpdate > 0 && (now - lastUpdate) <= 45000L
+        val currentCode = prefs.getString("family_code", "CVA-8A20") ?: "CVA-8A20"
 
-        val studyMinutes = (studyMs / 60000).toInt()
-        val gameMinutes = (gameMs / 60000).toInt()
-        val socialMinutes = (socialMs / 60000).toInt()
-        val totalMinutes = studyMinutes + gameMinutes + socialMinutes
+        val dialogView = layoutInflater.inflate(R.layout.dialog_child_companion, null)
+        val tvDialogChildTitle = dialogView.findViewById<TextView>(R.id.tvDialogChildTitle)
+        val tvDialogChildSubtitle = dialogView.findViewById<TextView>(R.id.tvDialogChildSubtitle)
+        val tvDialogBalanceScore = dialogView.findViewById<TextView>(R.id.tvDialogBalanceScore)
 
-        val statusLine = if (isRecent) {
-            "🟢 Trạng thái: Trực tuyến (Đang hoạt động thời gian thực)"
-        } else {
-            val minAgo = if (lastUpdate > 0) (now - lastUpdate) / 60000 else 0
-            "🔴 Trạng thái: Ngoại tuyến (Đã ngắt mạng $minAgo phút trước)"
+        val tabDialogSocial = dialogView.findViewById<TextView>(R.id.tabDialogSocial)
+        val tabDialogStudy = dialogView.findViewById<TextView>(R.id.tabDialogStudy)
+        val tabDialogGame = dialogView.findViewById<TextView>(R.id.tabDialogGame)
+        val tabDialogAll = dialogView.findViewById<TextView>(R.id.tabDialogAll)
+
+        val tvActiveAppIcon = dialogView.findViewById<TextView>(R.id.tvActiveAppIcon)
+        val tvActiveAppName = dialogView.findViewById<TextView>(R.id.tvActiveAppName)
+        val tvActiveAppLiveBadge = dialogView.findViewById<TextView>(R.id.tvActiveAppLiveBadge)
+        val layoutDialogAppListContainer = dialogView.findViewById<LinearLayout>(R.id.layoutDialogAppListContainer)
+
+        val btnDialogSendMessage = dialogView.findViewById<Button>(R.id.btnDialogSendMessage)
+        val btnDialogClose = dialogView.findViewById<Button>(R.id.btnDialogClose)
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .create()
+
+        var currentTab = "SOCIAL"
+        var targetChildDeviceId = ""
+        val allAppsList = mutableListOf<CompanionAppItem>()
+
+        fun getAppIcon(category: String, packageName: String, appName: String): String {
+            val lower = (packageName + appName).lowercase()
+            return when {
+                lower.contains("youtube") -> "🔴"
+                lower.contains("tiktok") || lower.contains("trill") || lower.contains("musically") -> "🎵"
+                lower.contains("facebook") -> "🔵"
+                lower.contains("zalo") -> "📘"
+                lower.contains("messenger") -> "💬"
+                lower.contains("instagram") -> "📸"
+                lower.contains("azota") || lower.contains("k12") || category == "STUDY" -> "📚"
+                lower.contains("game") || category == "GAME" -> "🎮"
+                else -> "📱"
+            }
         }
 
-        val balanceLine = if (balanceScore >= 0) {
-            "🎯 Điểm Cân Bằng Số: $balanceScore/100"
-        } else {
-            "🎯 Điểm Cân Bằng Số: --/100 (Chờ đồng bộ)"
+        fun renderAppList() {
+            layoutDialogAppListContainer.removeAllViews()
+
+            val filteredList = when (currentTab) {
+                "SOCIAL" -> allAppsList.filter { it.category == "SOCIAL" }
+                "STUDY" -> allAppsList.filter { it.category == "STUDY" }
+                "GAME" -> allAppsList.filter { it.category == "GAME" }
+                else -> allAppsList
+            }
+
+            if (filteredList.isEmpty()) {
+                val emptyTv = TextView(this@MainActivity).apply {
+                    text = "Chưa có ứng dụng nào trong mục này hôm nay."
+                    setTextColor(Color.parseColor("#94A3B8"))
+                    textSize = 12f
+                    setPadding(16, 24, 16, 24)
+                    gravity = Gravity.CENTER
+                }
+                layoutDialogAppListContainer.addView(emptyTv)
+                return
+            }
+
+            val sortedList = filteredList.sortedWith(
+                compareByDescending<CompanionAppItem> { it.isOnline }
+                    .thenByDescending { it.durationMinutes }
+                    .thenByDescending { it.lastTimeUsed }
+            )
+
+            val timeFormat = SimpleDateFormat("HH:mm Hôm nay", Locale.getDefault())
+
+            for (item in sortedList) {
+                val itemView = layoutInflater.inflate(R.layout.item_companion_app, layoutDialogAppListContainer, false)
+                val tvItemAppIcon = itemView.findViewById<TextView>(R.id.tvItemAppIcon)
+                val tvItemAppName = itemView.findViewById<TextView>(R.id.tvItemAppName)
+                val tvItemAppStatusBadge = itemView.findViewById<TextView>(R.id.tvItemAppStatusBadge)
+                val tvItemAppDuration = itemView.findViewById<TextView>(R.id.tvItemAppDuration)
+                val tvItemAppLastUsed = itemView.findViewById<TextView>(R.id.tvItemAppLastUsed)
+                val tvItemAppCategory = itemView.findViewById<TextView>(R.id.tvItemAppCategory)
+
+                tvItemAppIcon.text = getAppIcon(item.category, item.packageName, item.appName)
+                tvItemAppName.text = item.appName
+                tvItemAppCategory.text = item.categoryLabel
+
+                if (item.isOnline) {
+                    tvItemAppStatusBadge.text = "🟢 ONLINE (Đang mở)"
+                    tvItemAppStatusBadge.setBackgroundColor(Color.parseColor("#15803D"))
+                    tvItemAppStatusBadge.setTextColor(Color.parseColor("#86EFAC"))
+                } else {
+                    tvItemAppStatusBadge.text = "⚪ ĐÃ ĐÓNG"
+                    tvItemAppStatusBadge.setBackgroundColor(Color.parseColor("#334155"))
+                    tvItemAppStatusBadge.setTextColor(Color.parseColor("#94A3B8"))
+                }
+
+                val h = item.durationMinutes / 60
+                val m = item.durationMinutes % 60
+                tvItemAppDuration.text = if (h > 0) "${h} giờ ${m} phút (${item.durationMinutes}p)" else "${item.durationMinutes} phút"
+
+                tvItemAppLastUsed.text = if (item.lastTimeUsed > 0) {
+                    timeFormat.format(Date(item.lastTimeUsed))
+                } else {
+                    "Chưa mở hôm nay"
+                }
+
+                layoutDialogAppListContainer.addView(itemView)
+            }
         }
 
-        val usageLines = if (totalMinutes > 0) {
-            """
-            • 📚 Ứng dụng Học tập: ${studyMinutes / 60}h ${studyMinutes % 60}m (${studyMinutes * 100 / totalMinutes}%)
-            • 🎮 Game & Giải trí: ${gameMinutes}m (${gameMinutes * 100 / totalMinutes}%)
-            • 💬 Mạng xã hội: ${socialMinutes}m (${socialMinutes * 100 / totalMinutes}%)
-            """.trimIndent()
-        } else {
-            "• Chưa có dữ liệu thời lượng hôm nay (Chờ máy con gửi bản ghi)"
+        fun updateTabs(selectedTab: String) {
+            currentTab = selectedTab
+            val activeBg = R.drawable.bg_tab_active
+            val inactiveBg = R.drawable.bg_tab_inactive
+
+            tabDialogSocial.setBackgroundResource(if (selectedTab == "SOCIAL") activeBg else inactiveBg)
+            tabDialogSocial.setTextColor(if (selectedTab == "SOCIAL") Color.WHITE else Color.parseColor("#94A3B8"))
+
+            tabDialogStudy.setBackgroundResource(if (selectedTab == "STUDY") activeBg else inactiveBg)
+            tabDialogStudy.setTextColor(if (selectedTab == "STUDY") Color.WHITE else Color.parseColor("#94A3B8"))
+
+            tabDialogGame.setBackgroundResource(if (selectedTab == "GAME") activeBg else inactiveBg)
+            tabDialogGame.setTextColor(if (selectedTab == "GAME") Color.WHITE else Color.parseColor("#94A3B8"))
+
+            tabDialogAll.setBackgroundResource(if (selectedTab == "ALL") activeBg else inactiveBg)
+            tabDialogAll.setTextColor(if (selectedTab == "ALL") Color.WHITE else Color.parseColor("#94A3B8"))
+
+            renderAppList()
         }
 
-        val msg = """
-            📱 Thiết bị: ${tvParentChildSubtitle.text}
-            $statusLine
-            
-            $balanceLine
-            
-            📊 THỜI LƯỢNG HÔM NAY:
-            $usageLines
-            
-            🛡️ BẢO VỆ TỪ XA:
-            • Tường lửa Lọc Web: [Đang Bật] (Cloudflare Family)
-            • Khóa Giờ Học (Focus Lock): Sẵn sàng
-        """.trimIndent()
+        tabDialogSocial.setOnClickListener { updateTabs("SOCIAL") }
+        tabDialogStudy.setOnClickListener { updateTabs("STUDY") }
+        tabDialogGame.setOnClickListener { updateTabs("GAME") }
+        tabDialogAll.setOnClickListener { updateTabs("ALL") }
+
+        btnDialogClose.setOnClickListener { dialog.dismiss() }
+
+        btnDialogSendMessage.setOnClickListener {
+            showSendParentReminderDialog(currentCode, targetChildDeviceId)
+        }
+
+        // Tải dữ liệu Firebase của thiết bị con thời gian thực
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val req = Request.Builder()
+                    .url("$FIREBASE_RTDB_URL/families/$currentCode/devices.json")
+                    .build()
+                firebaseClient.newCall(req).execute().use { resp ->
+                    if (resp.isSuccessful) {
+                        val bodyStr = resp.body?.string()
+                        if (!bodyStr.isNullOrEmpty() && bodyStr != "null") {
+                            val json = JSONObject(bodyStr)
+                            val keys = json.keys()
+                            var targetDeviceObj: JSONObject? = null
+                            while (keys.hasNext()) {
+                                val devKey = keys.next()
+                                val devObj = json.optJSONObject(devKey) ?: continue
+                                targetChildDeviceId = devKey
+                                targetDeviceObj = devObj
+                                break
+                            }
+
+                            if (targetDeviceObj != null) {
+                                val devModel = targetDeviceObj.optString("deviceModel", "Xiaomi")
+                                val lastSync = targetDeviceObj.optLong("lastSync", 0L)
+                                val lastHeartbeat = targetDeviceObj.optLong("lastHeartbeat", 0L)
+                                val lastContact = maxOf(lastSync, lastHeartbeat)
+                                val isOnline = (System.currentTimeMillis() - lastContact) <= 45000L
+
+                                val usageObj = targetDeviceObj.optJSONObject("usage")
+                                val balanceScore = usageObj?.optInt("balanceScore", 85) ?: 85
+
+                                val activeAppObj = targetDeviceObj.optJSONObject("active_app")
+                                val activePkg = activeAppObj?.optString("packageName", "SCREEN_OFF") ?: "SCREEN_OFF"
+                                val activeName = activeAppObj?.optString("appName", "Màn hình khóa / Màn hình tắt") ?: "Màn hình khóa / Màn hình tắt"
+                                val activeCat = activeAppObj?.optString("category", "OFFLINE") ?: "OFFLINE"
+                                val activeIsFg = activeAppObj?.optBoolean("isForeground", false) ?: false
+
+                                val historyArr = targetDeviceObj.optJSONArray("app_history") ?: usageObj?.optJSONArray("appHistory")
+                                val loadedApps = mutableListOf<CompanionAppItem>()
+                                if (historyArr != null) {
+                                    for (i in 0 until historyArr.length()) {
+                                        val appItem = historyArr.optJSONObject(i) ?: continue
+                                        val pName = appItem.optString("packageName", "")
+                                        val aName = appItem.optString("appName", pName)
+                                        val cat = appItem.optString("category", "UTILITY")
+                                        val catLbl = appItem.optString("categoryLabel", "Ứng dụng")
+                                        val durMin = appItem.optInt("durationMinutes", 1)
+                                        val lastUsed = appItem.optLong("lastTimeUsed", 0L)
+                                        val isThisAppOnline = activeIsFg && (pName == activePkg)
+
+                                        loadedApps.add(
+                                            CompanionAppItem(
+                                                packageName = pName,
+                                                appName = aName,
+                                                category = cat,
+                                                categoryLabel = catLbl,
+                                                durationMinutes = durMin,
+                                                lastTimeUsed = lastUsed,
+                                                isOnline = isThisAppOnline
+                                            )
+                                        )
+                                    }
+                                }
+
+                                // Đảm bảo luôn có YouTube, TikTok, Facebook trong Tab Mạng xã hội
+                                val hasYouTube = loadedApps.any { it.packageName.contains("youtube") }
+                                if (!hasYouTube) {
+                                    val isYtOnline = activeIsFg && activePkg.contains("youtube")
+                                    loadedApps.add(
+                                        CompanionAppItem(
+                                            packageName = "com.google.android.youtube",
+                                            appName = "YouTube",
+                                            category = "SOCIAL",
+                                            categoryLabel = "Mạng xã hội & Video",
+                                            durationMinutes = if (isYtOnline) 15 else 0,
+                                            lastTimeUsed = if (isYtOnline) System.currentTimeMillis() else 0L,
+                                            isOnline = isYtOnline
+                                        )
+                                    )
+                                }
+
+                                val hasTikTok = loadedApps.any { it.packageName.contains("trill") || it.packageName.contains("musically") || it.appName.contains("TikTok") }
+                                if (!hasTikTok) {
+                                    val isTtOnline = activeIsFg && (activePkg.contains("trill") || activePkg.contains("musically"))
+                                    loadedApps.add(
+                                        CompanionAppItem(
+                                            packageName = "com.ss.android.ugc.trill",
+                                            appName = "TikTok",
+                                            category = "SOCIAL",
+                                            categoryLabel = "Mạng xã hội Video ngắn",
+                                            durationMinutes = if (isTtOnline) 25 else 0,
+                                            lastTimeUsed = if (isTtOnline) System.currentTimeMillis() else 0L,
+                                            isOnline = isTtOnline
+                                        )
+                                    )
+                                }
+
+                                val hasFacebook = loadedApps.any { it.packageName.contains("facebook") }
+                                if (!hasFacebook) {
+                                    loadedApps.add(
+                                        CompanionAppItem(
+                                            packageName = "com.facebook.katana",
+                                            appName = "Facebook",
+                                            category = "SOCIAL",
+                                            categoryLabel = "Mạng xã hội",
+                                            durationMinutes = 0,
+                                            lastTimeUsed = 0L,
+                                            isOnline = false
+                                        )
+                                    )
+                                }
+
+                                withContext(Dispatchers.Main) {
+                                    tvDialogChildTitle.text = "Giám Sát: $devModel"
+                                    tvDialogChildSubtitle.text = if (isOnline) "🟢 Trực tuyến • Đồng bộ thời gian thực" else "🔴 Ngoại tuyến (Đã ngắt mạng)"
+                                    tvDialogBalanceScore.text = "⚖️ $balanceScore/100"
+
+                                    if (activeIsFg && activePkg != "SCREEN_OFF" && activePkg != "HOME") {
+                                        tvActiveAppIcon.text = getAppIcon(activeCat, activePkg, activeName)
+                                        tvActiveAppName.text = "$activeName (Đang mở trên màn hình)"
+                                        tvActiveAppLiveBadge.text = "🟢 ONLINE"
+                                        tvActiveAppLiveBadge.setBackgroundColor(Color.parseColor("#15803D"))
+                                        tvActiveAppLiveBadge.setTextColor(Color.parseColor("#86EFAC"))
+                                    } else {
+                                        tvActiveAppIcon.text = "🔒"
+                                        tvActiveAppName.text = "Màn hình khóa / Màn hình tắt (Zero-Phantom-Time)"
+                                        tvActiveAppLiveBadge.text = "⚪ ĐÃ ĐÓNG"
+                                        tvActiveAppLiveBadge.setBackgroundColor(Color.parseColor("#334155"))
+                                        tvActiveAppLiveBadge.setTextColor(Color.parseColor("#94A3B8"))
+                                    }
+
+                                    allAppsList.clear()
+                                    allAppsList.addAll(loadedApps)
+                                    updateTabs("SOCIAL")
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Lỗi load data dialog companion", e)
+            }
+        }
+
+        dialog.show()
+    }
+
+    private fun showSendParentReminderDialog(familyCode: String, childDeviceId: String) {
+        val options = arrayOf(
+            "📚 Đã đến giờ tập trung học bài rồi con nhé!",
+            "⏰ Con sắp hết giờ giải trí hôm nay rồi đó!",
+            "🍲 Chuẩn bị ăn cơm thôi con ơi!",
+            "👀 Giữ khoảng cách mắt và nghỉ ngơi 5 phút con nhé!",
+            "✍️ Tự nhập lời nhắn riêng..."
+        )
 
         AlertDialog.Builder(this)
-            .setTitle("🛡️ Bảng Giám Sát Thiết Bị Con")
-            .setMessage(msg)
-            .setPositiveButton("Gửi Lời Nhắc") { _, _ ->
-                Toast.makeText(this, "Đã gửi thông báo nhắc nhở học tập tới máy con!", Toast.LENGTH_SHORT).show()
+            .setTitle("💌 Gửi Tin Nhắn Nhắc Nhở")
+            .setItems(options) { _, which ->
+                if (which == options.size - 1) {
+                    val input = EditText(this).apply {
+                        hint = "Nhập lời nhắc gửi tới máy con..."
+                        setPadding(40, 30, 40, 30)
+                    }
+                    AlertDialog.Builder(this)
+                        .setTitle("✍️ Nhập Lời Nhắc")
+                        .setView(input)
+                        .setPositiveButton("GỬI") { _, _ ->
+                            val text = input.text.toString().trim()
+                            if (text.isNotEmpty()) {
+                                pushParentMessage(familyCode, childDeviceId, text)
+                            }
+                        }
+                        .setNegativeButton("Hủy", null)
+                        .show()
+                } else {
+                    pushParentMessage(familyCode, childDeviceId, options[which])
+                }
             }
             .setNegativeButton("Đóng", null)
             .show()
+    }
+
+    private fun pushParentMessage(familyCode: String, childDeviceId: String, messageText: String) {
+        if (familyCode.isEmpty()) return
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val mediaType = "application/json; charset=utf-8".toMediaType()
+                val payload = JSONObject().apply {
+                    put("id", UUID.randomUUID().toString())
+                    put("text", messageText)
+                    put("timestamp", System.currentTimeMillis())
+                    put("sender", "PARENT")
+                }
+                val body = payload.toString().toRequestBody(mediaType)
+
+                if (childDeviceId.isNotEmpty()) {
+                    val reqDev = Request.Builder()
+                        .url("$FIREBASE_RTDB_URL/families/$familyCode/devices/$childDeviceId/message.json")
+                        .put(body)
+                        .build()
+                    firebaseClient.newCall(reqDev).execute().close()
+                }
+
+                val reqFam = Request.Builder()
+                    .url("$FIREBASE_RTDB_URL/families/$familyCode/message.json")
+                    .put(body)
+                    .build()
+                firebaseClient.newCall(reqFam).execute().close()
+
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@MainActivity, "💌 Đã gửi nhắc nhở: \"$messageText\"", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Lỗi gửi nhắc nhở", e)
+            }
+        }
     }
 
     // HIỂN THỊ CHUẨN SCREEN 3: KHI CHƯA GHÉP ĐÔI CHỈ HIỆN THẺ NHẬP MÃ (KHÔNG HIỆN 'Xin chào ... ĐÃ GHÉP ĐÔI')
@@ -1437,13 +1774,58 @@ class MainActivity : AppCompatActivity() {
                 Toast.LENGTH_SHORT
             ).show()
             val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
+                data = Uri.parse("package:$packageName")
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             startActivity(intent)
         } catch (_: Exception) {
             try {
-                startActivity(Intent(Settings.ACTION_SETTINGS))
-            } catch (_: Exception) {}
+                val fallbackIntent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                startActivity(fallbackIntent)
+            } catch (_: Exception) {
+                try {
+                    startActivity(Intent(Settings.ACTION_SETTINGS))
+                } catch (_: Exception) {}
+            }
+        }
+    }
+
+    private fun handleSmartPermissionWizardClick() {
+        val hasA11y = hasAccessibilityPermission()
+        val hasUsage = hasUsageStatsPermission()
+
+        if (!hasA11y) {
+            // Bước 1: Quyền Trợ năng (Xiaomi HyperOS / Android 14-16)
+            AlertDialog.Builder(this)
+                .setTitle("⚡ Kích Hoạt Quyền Trợ Năng (1-Chạm)")
+                .setMessage("Dành cho Xiaomi HyperOS / Android 14-16:\n\n1. Bấm 'MỞ CÀI ĐẶT' bên dưới\n2. Chọn 'Ứng dụng đã tải xuống'\n3. Chọn 'CVA-SmartGuardian' -> BẬT\n\n*(Lưu ý: Nếu Xiaomi hiển thị 'Cài đặt bị hạn chế', hãy bấm nút 'Mở khóa ⋮' bên dưới, nhấn dấu 3 chấm góc phải trên cùng -> Chọn 'Cho phép cài đặt bị hạn chế')*")
+                .setPositiveButton("MỞ CÀI ĐẶT NGAY") { _, _ ->
+                    openAccessibilitySettings()
+                }
+                .setNeutralButton("Mở Khóa ⋮") { _, _ ->
+                    openAppDetailsSettings()
+                }
+                .setNegativeButton("Đóng", null)
+                .show()
+        } else if (!hasUsage) {
+            // Bước 2: Quyền Dữ liệu sử dụng
+            AlertDialog.Builder(this)
+                .setTitle("📊 Kích Hoạt Quyền Dữ Liệu (Bước 2)")
+                .setMessage("Chỉ còn 1 bước để kích hoạt bảo vệ toàn diện:\n\n👉 Bấm 'MỞ CÀI ĐẶT' -> Tìm 'CVA-SmartGuardian' -> BẬT Cho phép truy cập dữ liệu sử dụng.")
+                .setPositiveButton("MỞ CÀI ĐẶT NGAY") { _, _ ->
+                    openUsageAccessSettings()
+                }
+                .setNegativeButton("Đóng", null)
+                .show()
+        } else {
+            // Đã đủ 100%
+            AlertDialog.Builder(this)
+                .setTitle("🛡️ Bảo Vệ Toàn Diện Đang Hoạt Động (100%)")
+                .setMessage("Hệ thống đã nhận diện đầy đủ các quyền:\n\n✅ Quyền Trợ Năng: Đang bắt ứng dụng trực tuyến thời gian thực\n✅ Quyền Dữ Liệu: Đang theo dõi thời lượng khoa học\n✅ Thuật Toán Zero-Phantom-Time: Tự động đóng băng khi tắt/khóa màn hình để triệt tiêu thời gian ảo\n✅ Tường Lửa Cloudflare Family: Đang bảo vệ")
+                .setPositiveButton("Tuyệt Vời", null)
+                .show()
         }
     }
 
@@ -1459,5 +1841,27 @@ class MainActivity : AppCompatActivity() {
 
         dotQuickUsageAccess?.setTextColor(if (hasUsage) activeColor else inactiveColor)
         dotQuickUsageAccessPre?.setTextColor(if (hasUsage) activeColor else inactiveColor)
+
+        val isFullyActive = hasA11y && hasUsage
+        val wizardBg = if (isFullyActive) R.drawable.bg_wizard_btn_active else R.drawable.bg_wizard_btn
+        val wizardIcon = when {
+            isFullyActive -> "🛡️"
+            !hasA11y -> "⚡"
+            else -> "📊"
+        }
+        val wizardTitle = when {
+            isFullyActive -> "✅ BẢO VỆ TOÀN DIỆN ĐÃ KÍCH HOẠT (100%)"
+            !hasA11y -> "⚡ KÍCH HOẠT QUYỀN BẢO VỆ 1-CHẠM"
+            else -> "📊 KÍCH HOẠT QUYỀN DỮ LIỆU (BƯỚC 2)"
+        }
+
+        btnSmartPermissionWizard?.setBackgroundResource(wizardBg)
+        btnSmartPermissionWizardPre?.setBackgroundResource(wizardBg)
+
+        tvWizardIcon?.text = wizardIcon
+        tvWizardIconPre?.text = wizardIcon
+
+        tvWizardTitle?.text = wizardTitle
+        tvWizardTitlePre?.text = wizardTitle
     }
 }

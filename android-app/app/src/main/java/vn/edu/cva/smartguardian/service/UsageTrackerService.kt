@@ -418,10 +418,41 @@ class UsageTrackerService : Service() {
         }
     }
 
+    private val screenStateReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val ctx = context ?: return
+            when (intent?.action) {
+                Intent.ACTION_SCREEN_OFF -> {
+                    Log.d("UsageTrackerService", "Phát hiện tắt màn hình (SCREEN_OFF): Đóng băng bộ đếm và cập nhật active_app")
+                    reportActiveApp(
+                        context = ctx,
+                        packageName = "SCREEN_OFF",
+                        appName = "Màn hình tắt / Khóa máy",
+                        category = "OFFLINE",
+                        categoryLabel = "Đã tắt màn hình",
+                        isForeground = false
+                    )
+                }
+                Intent.ACTION_USER_PRESENT, Intent.ACTION_SCREEN_ON -> {
+                    Log.d("UsageTrackerService", "Phát hiện mở màn hình: Tiếp tục giám sát đồng hành")
+                    sendHeartbeatPing(ctx)
+                }
+            }
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
         startForegroundNotification()
+
+        val screenFilter = android.content.IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_USER_PRESENT)
+        }
+        registerReceiver(screenStateReceiver, screenFilter)
+
         startTrackingLoop()
     }
 
@@ -432,6 +463,9 @@ class UsageTrackerService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        try {
+            unregisterReceiver(screenStateReceiver)
+        } catch (_: Exception) {}
         serviceJob.cancel()
         super.onDestroy()
     }

@@ -3,17 +3,18 @@
     "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.0.apk",
     "minSupportedVersion": 1,
     "releaseDate": "2026-09-19",
-    "sha256": "F106A9FAC85AE7E088CB86F054A4E35AB12A515D29CD79B53C283EC27231061C",
-    "versionName": "1.1.6",
-    "versionCode": 16,
-    "latestVersionName": "1.1.6",
-    "latestVersionCode": 16,
+    "sha256": "FCAB346F7507D5FB48C377334CE56D92099683AF21D0DBC37F62528D8D61B45E",
+    "versionName": "1.1.7",
+    "versionCode": 17,
+    "latestVersionName": "1.1.7",
+    "latestVersionCode": 17,
     "changelog": [
-        "Tích hợp thanh phím tắt cấp quyền 1-chạm nhỏ gọn chuẩn UX (Mở khóa ⋮, Trợ năng, Dữ liệu dùng)",
-        "Đèn báo trạng thái trực quan: Xanh lá (Đã bật), Đỏ (Chưa bật) cho từng quyền hệ thống",
-        "Tự động hướng dẫn mở khóa Cài đặt bị hạn chế (Restricted Settings) cho Android 13-16 / Xiaomi HyperOS",
-        "Giám sát ứng dụng đang mở thời gian thực (<1ms) qua Android AccessibilityService chuẩn AOSP",
-        "Thống kê lịch sử các ứng dụng đã mở hôm nay (App Usage History Timeline) kèm thời lượng chi tiết"
+        "Đóng gói quy trình xin quyền Xiaomi HyperOS / Android bằng NÚT THÔNG MINH 1-CHẠM (Smart Permission Wizard)",
+        "Nâng cấp thuật toán Zero-Phantom-Time: Tự động phát hiện tắt màn hình / khóa máy, đóng băng bộ đếm để triệt tiêu thời gian ảo",
+        "Phân biệt chính xác tuyệt đối giữa ứng dụng đang mở trực tiếp (Foreground) vs ứng dụng chạy ngầm (Background)",
+        "Tái thiết kế Giao diện Phụ huynh chi tiết theo Tab Mạng xã hội: Liệt kê trực quan YouTube, TikTok, Facebook...",
+        "Hiển thị chi tiết theo từng dòng: Thời gian mở trong ngày, thời điểm mở gần nhất, và trạng thái 🟢 ONLINE / ⚪ ĐÃ ĐÓNG",
+        "Tích hợp tính năng gửi tin nhắn nhắc nhở tức thì tới điện thoại của học sinh"
     ],
-    "fileSize": "5.74 MB"
+    "fileSize": "5.75 MB"
 }

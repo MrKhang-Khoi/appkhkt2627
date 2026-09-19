@@ -127,6 +127,36 @@
           </div>
         </div>
 
+        <!-- BẢNG GIÁM SÁT MẠNG XÃ HỘI & ỨNG DỤNG THỜI GIAN THỰC -->
+        <div class="panel-card" style="border-top: 4px solid var(--social-color);">
+          <div class="panel-head" style="flex-wrap: wrap; gap: 10px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 1.35rem;">🌐</span>
+              <div>
+                <h3 class="panel-title" style="margin: 0;">Giám Sát Mạng Xã Hội &amp; Thời Lượng Ứng Dụng</h3>
+                <div style="font-size: 0.74rem; color: var(--text-muted);">Trực quan hóa trạng thái Online / Đã đóng (Triệt tiêu thời gian ảo Zero-Phantom-Time)</div>
+              </div>
+            </div>
+            <div id="liveActiveAppBadge" class="live-status-pill online">
+              <span class="live-pulse"></span>
+              <span id="liveActiveAppText">Đang mở: YouTube</span>
+            </div>
+          </div>
+
+          <!-- THANH CHỌN TAB ỨNG DỤNG -->
+          <div class="app-tabs-bar" id="appTabsBar">
+            <button type="button" class="app-tab-btn active" data-tab="social">🌐 Mạng Xã Hội</button>
+            <button type="button" class="app-tab-btn" data-tab="study">📚 Học Tập</button>
+            <button type="button" class="app-tab-btn" data-tab="game">🎮 Trò Chơi</button>
+            <button type="button" class="app-tab-btn" data-tab="all">📱 Tất Cả</button>
+          </div>
+
+          <!-- DANH SÁCH ỨNG DỤNG LIỆT KÊ CHI TIẾT (YOUTUBE, TIKTOK, FACEBOOK...) -->
+          <div class="app-tracker-list" id="appTrackerList">
+            <!-- Render động qua JavaScript -->
+          </div>
+        </div>
+
         <!-- Dòng thời gian sử dụng chi tiết -->
         <div class="panel-card">
           <div class="panel-head">

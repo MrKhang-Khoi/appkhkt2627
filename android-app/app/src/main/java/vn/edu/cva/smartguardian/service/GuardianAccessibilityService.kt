@@ -1,6 +1,7 @@
 package vn.edu.cva.smartguardian.service
 
 import android.accessibilityservice.AccessibilityService
+import android.content.Context
 import android.content.Intent
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -58,14 +59,32 @@ class GuardianAccessibilityService : AccessibilityService() {
             return
         }
 
-        // Bỏ qua nếu là chính app CVA-SmartGuardian, bàn phím gõ chữ hoặc System UI
+        // Bỏ qua nếu là chính app CVA-SmartGuardian hoặc bàn phím gõ chữ
         if (packageName == applicationContext.packageName ||
-            packageName == "com.android.systemui" ||
             packageName.contains("inputmethod") ||
             packageName.contains("keyboard") ||
             packageName == "com.google.android.inputmethod.latin" ||
             packageName == "com.vng.inputmethod.labankey"
         ) {
+            return
+        }
+
+        // Bắt sự kiện màn hình khóa (Lockscreen / Keyguard) của Android
+        if (packageName == "com.android.systemui" || packageName.contains("keyguard")) {
+            val pm = getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+            val isInteractive = pm?.isInteractive ?: true
+            if (!isInteractive || lastActivePackage != "SCREEN_OFF") {
+                lastActivePackage = "SCREEN_OFF"
+                lastActiveUploadTimestamp = now
+                UsageTrackerService.reportActiveApp(
+                    context = this,
+                    packageName = "SCREEN_OFF",
+                    appName = "Màn hình khóa / Màn hình tắt",
+                    category = "OFFLINE",
+                    categoryLabel = "Đã tắt màn hình",
+                    isForeground = false
+                )
+            }
             return
         }
 
