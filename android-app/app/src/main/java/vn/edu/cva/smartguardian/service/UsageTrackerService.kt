@@ -807,6 +807,8 @@ class UsageTrackerService : Service() {
                                 put("deviceId", androidId)
                                 put("deviceModel", "$manufacturer $model")
                                 put("androidVersion", "Android ${Build.VERSION.RELEASE}")
+                                put("appVersion", "1.2.4")
+                                put("appVersionCode", 24)
                                 put("isPaired", true)
                                 put("status", "paired")
                             }

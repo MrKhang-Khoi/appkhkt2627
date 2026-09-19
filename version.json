@@ -6,7 +6,7 @@
   "minSupportedVersion": 1,
   "isForceUpdate": false,
   "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.2.4.apk",
-  "sha256": "4F5CE8178EAD27F090D8BE92B47D70DD586872EA68B5D7A9EAB43BD270CED3D7",
+  "sha256": "F136627B71441684D020ECFA8D179C8EC077412838717A6B665A4346B2B8DB9E",
   "fileSize": "5.79 MB",
   "changelog": [
     "Nâng cấp Hardware Invariant: Chuyển tức thì trạng thái SCREEN_OFF lên Firebase và Web Dashboard phụ huynh khi tắt màn hình",

@@ -9,6 +9,7 @@ import android.os.PowerManager
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -287,29 +288,17 @@ class GuardianAccessibilityService : AccessibilityService() {
         extractAndAuditBrowserUrl(event)
 
         // Chỉ lọc các sự kiện chuyển đổi cửa sổ tiền cảnh
-        if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-            return
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            handleWindowStateChanged(packageName)
+        } else if (event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
+            // Hỗ trợ bắt ngay ứng dụng đang mở nếu TYPE_WINDOW_STATE_CHANGED ban đầu bị hệ điều hành OEM (Xiaomi/HyperOS) làm trễ lúc chuyển cảnh
+            val isCurrentDifferent = synchronized(sessionLock) {
+                currentForegroundPackage != packageName && lastActivePackage != packageName
+            }
+            if (isCurrentDifferent && !isDefaultLauncher(packageName) && packageName != "com.android.systemui" && packageName != "android") {
+                handleWindowStateChanged(packageName)
+            }
         }
-
-        val rawPkg = event.packageName?.toString() ?: return
-        val packageName = rawPkg.trim()
-
-        // Bỏ qua chính ứng dụng giám sát hoặc các service phụ trợ
-        if (packageName == applicationContext.packageName) {
-            return
-        }
-
-        // Bỏ qua bàn phím gõ tiếng Việt / Bàn phím hệ thống
-        if (
-            packageName.contains("inputmethod") ||
-            packageName.contains("keyboard") ||
-            packageName == "com.google.android.inputmethod.latin" ||
-            packageName == "com.vng.inputmethod.labankey"
-        ) {
-            return
-        }
-
-        handleWindowStateChanged(packageName)
     }
 
     private fun extractAndAuditBrowserUrl(event: AccessibilityEvent) {
@@ -344,11 +333,29 @@ class GuardianAccessibilityService : AccessibilityService() {
         if (packageName.isEmpty()) return false
 
         // 1. Accessibility Window Hierarchy check: Cửa sổ tiền cảnh đang active
-        val activePkg = try {
-            rootInActiveWindow?.packageName?.toString()?.trim()
+        val rawActivePkg = try {
+            val root = rootInActiveWindow
+            val rootPkg = root?.packageName?.toString()?.trim()
+            if (rootPkg == packageName) {
+                packageName
+            } else {
+                // Kiểm tra danh sách windows tương tác nếu rootInActiveWindow chưa kịp cập nhật lúc chuyển cảnh
+                val hasAppWindow = windows?.any { win ->
+                    win.type == AccessibilityWindowInfo.TYPE_APPLICATION &&
+                    win.root?.packageName?.toString()?.trim() == packageName
+                } ?: false
+                if (hasAppWindow) packageName else rootPkg
+            }
         } catch (e: Exception) {
             Log.w("GuardianAccess", "rootInActiveWindow check failed: ${e.message}")
             null
+        }
+
+        // Bỏ qua Launcher và SystemUI trong quá trình chuyển tiếp màn hình (không coi là xung đột app thứ ba)
+        val activePkg = if (rawActivePkg != null && (isDefaultLauncher(rawActivePkg) || rawActivePkg == "com.android.systemui" || rawActivePkg == "android")) {
+            null
+        } else {
+            rawActivePkg
         }
 
         // 2. ActivityManager RunningAppProcessInfo check: Tiến trình tiền cảnh thực tế (hỗ trợ named processes như package:name)
@@ -375,7 +382,7 @@ class GuardianAccessibilityService : AccessibilityService() {
         try {
             val usm = getSystemService(Context.USAGE_STATS_SERVICE) as? android.app.usage.UsageStatsManager
             val now = System.currentTimeMillis()
-            val events = usm?.queryEvents(now - 5000L, now)
+            val events = usm?.queryEvents(now - 60_000L, now)
             if (events != null) {
                 var lastEventPkg = ""
                 var lastEventType = -1
@@ -391,6 +398,13 @@ class GuardianAccessibilityService : AccessibilityService() {
                 }
                 if (lastEventType == android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED) {
                     lastResumedPkg = lastEventPkg
+                }
+            }
+            if (lastResumedPkg == null && usm != null) {
+                val stats = usm.queryUsageStats(android.app.usage.UsageStatsManager.INTERVAL_DAILY, now - 60_000L, now)
+                val mostRecent = stats?.filter { it.packageName == packageName }?.maxByOrNull { it.lastTimeUsed }
+                if (mostRecent != null && now - mostRecent.lastTimeUsed < 60_000L) {
+                    lastResumedPkg = mostRecent.packageName
                 }
             }
         } catch (e: Exception) {
