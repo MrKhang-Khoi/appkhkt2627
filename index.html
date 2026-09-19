@@ -519,38 +519,28 @@
 
     /* CATEGORY PILL SELECTOR & HIGH-FIDELITY APP CARDS (APPLE/DRIBBLE 2026 EDTECH SPEC) */
     .category-pill-bar {
-      display: flex;
-      gap: 8px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
       margin-bottom: 12px;
-      overflow-x: auto;
-      padding-bottom: 4px;
-      -webkit-overflow-scrolling: touch;
-    }
-    .category-pill-bar::-webkit-scrollbar {
-      height: 4px;
-    }
-    .category-pill-bar::-webkit-scrollbar-thumb {
-      background: rgba(255, 255, 255, 0.15);
-      border-radius: 999px;
     }
     .category-pill-btn {
-      flex: 1;
-      min-width: 105px;
+      min-width: 0;
       background: rgba(30, 41, 59, 0.6);
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
       border: 1px solid rgba(255, 255, 255, 0.08);
       border-radius: 999px;
-      padding: 8px 12px;
+      padding: 7px 6px;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 6px;
+      gap: 4px;
       cursor: pointer;
       transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
       user-select: none;
       color: #94a3b8;
-      font-size: 0.78rem;
+      font-size: 0.72rem;
       font-weight: 700;
       white-space: nowrap;
     }
@@ -579,9 +569,9 @@
       box-shadow: 0 0 16px rgba(251, 191, 36, 0.25);
     }
     .pill-time-tag {
-      font-size: 0.68rem;
+      font-size: 0.62rem;
       font-weight: 800;
-      padding: 2px 7px;
+      padding: 1px 5px;
       border-radius: 999px;
       background: rgba(255, 255, 255, 0.08);
       color: inherit;
@@ -660,12 +650,15 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
+      gap: 8px;
       margin-bottom: 6px;
     }
     .squircle-identity-box {
       display: flex;
       align-items: center;
       gap: 10px;
+      min-width: 0;
+      flex: 1;
     }
     .squircle-app-icon {
       width: 38px;
@@ -685,27 +678,37 @@
       display: flex;
       flex-direction: column;
       gap: 2px;
+      min-width: 0;
+      overflow: hidden;
     }
     .squircle-app-name {
       font-size: 0.86rem;
       font-weight: 700;
       color: #ffffff;
       letter-spacing: 0.01em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .squircle-app-time {
-      font-size: 0.72rem;
+      font-size: 0.71rem;
       font-weight: 600;
       color: #94a3b8;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .neon-capsule-badge {
       display: inline-flex;
       align-items: center;
       gap: 5px;
-      padding: 3px 8px;
+      padding: 4px 9px;
       border-radius: 999px;
       font-size: 0.66rem;
       font-weight: 700;
       letter-spacing: 0.02em;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
     .neon-capsule-badge.online {
       background: rgba(16, 185, 129, 0.18);
@@ -2678,6 +2681,13 @@
         if (dashChildLocTime) dashChildLocTime.textContent = '--';
       }
     }
+
+    // Expose dashboard functions for testing & external controllers
+    window.updateChildDashboardLive = updateChildDashboardLive;
+    window.switchCategoryTab = switchCategoryTab;
+    window.renderSocialAppBreakdown = renderSocialAppBreakdown;
+    window.renderStudyAppBreakdown = renderStudyAppBreakdown;
+    window.renderGameAppBreakdown = renderGameAppBreakdown;
 
     // 5. BẢNG GIÁM SÁT & ĐỒNG HÀNH THỜI GIAN THỰC (KHI PHỤ HUYNH BẤM VÀO THIẾT BỊ CON)
     const childDashboardModal = document.getElementById('childDashboardModal');
