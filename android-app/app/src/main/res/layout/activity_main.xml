@@ -22,37 +22,29 @@
             android:paddingBottom="24dp">
 
             <!-- ========================================================== -->
-            <!-- 1. TOP HEADER BAR: CĂN GIỮA CHUẨN 2D BLUEPRINT            -->
+            <!-- 1. TOP HEADER BAR: CĂN GIỮA HOÀN HẢO CÂN XỨNG             -->
             <!-- ========================================================== -->
             <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
+                android:orientation="horizontal"
                 android:gravity="center"
-                android:layout_marginBottom="22dp">
+                android:layout_marginBottom="20dp">
 
                 <ImageView
-                    android:layout_width="44dp"
-                    android:layout_height="44dp"
-                    android:src="@drawable/ic_shield_cyber_lock"
-                    android:contentDescription="Shield Logo"
-                    android:layout_marginBottom="10dp" />
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:src="@drawable/ic_shield_glow"
+                    android:contentDescription="Shield Logo" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="CVA-SmartGuardian"
                     android:textColor="#F8FAFC"
-                    android:textSize="20sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Hệ Sinh Thái Đồng Hành Số"
-                    android:textColor="#94A3B8"
-                    android:textSize="12sp"
-                    android:layout_marginTop="3dp" />
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:layout_marginStart="10dp" />
             </LinearLayout>
 
             <!-- ========================================================== -->
@@ -74,9 +66,9 @@
                     android:layout_height="match_parent"
                     android:layout_weight="1"
                     android:background="@drawable/bg_tab_inactive"
-                    android:text="Phụ Huynh"
+                    android:text="👨‍👩‍👧 Phụ Huynh"
                     android:textColor="#94A3B8"
-                    android:textSize="14sp"
+                    android:textSize="13sp"
                     android:textStyle="bold"
                     android:gravity="center"
                     android:clickable="true"
@@ -89,9 +81,9 @@
                     android:layout_height="match_parent"
                     android:layout_weight="1"
                     android:background="@drawable/bg_tab_active"
-                    android:text="Học Sinh"
+                    android:text="🎒 Học Sinh"
                     android:textColor="#FFFFFF"
-                    android:textSize="14sp"
+                    android:textSize="13sp"
                     android:textStyle="bold"
                     android:gravity="center"
                     android:clickable="true"
@@ -119,13 +111,6 @@
                     android:gravity="center_horizontal"
                     android:padding="24dp"
                     android:visibility="visible">
-
-                    <ImageView
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:src="@drawable/ic_lock_neon"
-                        android:contentDescription="Security Lock"
-                        android:layout_marginBottom="14dp" />
 
                     <TextView
                         android:layout_width="wrap_content"
@@ -396,198 +381,413 @@
                         </LinearLayout>
                     </LinearLayout>
 
-                    <!-- BIOMETRIC FINGERPRINT & ENCRYPTION BADGE (2D BLUEPRINT) -->
-                    <ImageView
-                        android:id="@+id/ivParentBiometric"
-                        android:layout_width="38dp"
-                        android:layout_height="38dp"
-                        android:src="@drawable/ic_fingerprint_cyber"
-                        android:contentDescription="Biometric Unlock"
-                        android:layout_marginTop="20dp"
-                        android:layout_marginBottom="12dp" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="✔ AES-256 Encrypted • v1.2.0"
-                        android:textColor="#64748B"
-                        android:textSize="11sp"
-                        android:layout_marginBottom="4dp" />
-
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="Mã PIN bảo mật mặc định: 1234"
-                        android:textColor="#475569"
-                        android:textSize="10sp" />
+                        android:textColor="#64748B"
+                        android:textSize="11sp"
+                        android:layout_marginTop="16dp" />
                 </LinearLayout>
 
                 <!-- SCREEN 2: PARENT HUB -->
+                <!-- SCREEN 2: PARENT HUB (CHUẨN MINIMALIST SCREEN TIME & CHỐNG RỐI) -->
                 <LinearLayout
                     android:id="@+id/layoutParentHub"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:background="@drawable/bg_glass_card"
                     android:orientation="vertical"
-                    android:padding="22dp"
+                    android:padding="20dp"
                     android:visibility="gone">
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Parent Hub"
-                        android:textColor="#F8FAFC"
-                        android:textSize="19sp"
-                        android:textStyle="bold"
-                        android:layout_gravity="center_horizontal"
-                        android:layout_marginBottom="18dp" />
-
-                    <!-- THẺ VÀNG KIM MÃ GIA ĐÌNH -->
+                    <!-- TOP ROW: TITLE & CHIP MÃ GIA ĐÌNH -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:background="@drawable/bg_gold_card"
                         android:orientation="horizontal"
                         android:gravity="center_vertical"
-                        android:padding="16dp"
                         android:layout_marginBottom="16dp">
 
                         <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="🏅"
-                            android:textSize="32sp"
-                            android:layout_marginEnd="14dp" />
-
-                        <LinearLayout
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:orientation="vertical">
+                            android:text="Bảng Quản Lý"
+                            android:textColor="#F8FAFC"
+                            android:textSize="18sp"
+                            android:textStyle="bold" />
+
+                        <!-- CHIP MÃ GIA ĐÌNH SIÊU GỌN -->
+                        <LinearLayout
+                            android:id="@+id/btnParentCopyCode"
+                            android:layout_width="wrap_content"
+                            android:layout_height="32dp"
+                            android:background="@drawable/bg_compact_chip"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:paddingLeft="10dp"
+                            android:paddingRight="10dp"
+                            android:clickable="true"
+                            android:focusable="true">
 
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="MÃ GIA ĐÌNH:"
-                                android:textColor="#FCD34D"
-                                android:textSize="12sp"
-                                android:textStyle="bold"
-                                android:letterSpacing="0.06" />
+                                android:text="Mã: "
+                                android:textColor="#94A3B8"
+                                android:textSize="11sp" />
 
                             <TextView
                                 android:id="@+id/tvParentHubFamilyCode"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="CVA-8A20"
+                                android:text="CVA-A646"
                                 android:textColor="#FBBF24"
-                                android:textSize="24sp"
-                                android:textStyle="bold"
-                                android:letterSpacing="0.08" />
+                                android:textSize="11sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text=" 📋"
+                                android:textSize="10sp" />
+
+                            <TextView
+                                android:id="@+id/btnParentRegenCode"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text=" 🔄"
+                                android:textSize="10sp"
+                                android:clickable="true"
+                                android:focusable="true" />
                         </LinearLayout>
                     </LinearLayout>
 
-                    <!-- NÚT SAO CHÉP VÀ ĐỔI MÃ -->
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center"
-                        android:layout_marginBottom="18dp">
-
-                        <TextView
-                            android:id="@+id/btnParentCopyCode"
-                            android:layout_width="wrap_content"
-                            android:layout_height="38dp"
-                            android:background="@drawable/bg_device_card"
-                            android:text="📋 Sao Chép Mã"
-                            android:textColor="#93C5FD"
-                            android:textSize="12sp"
-                            android:textStyle="bold"
-                            android:gravity="center"
-                            android:paddingLeft="16dp"
-                            android:paddingRight="16dp"
-                            android:layout_marginEnd="10dp"
-                            android:clickable="true"
-                            android:focusable="true" />
-
-                        <TextView
-                            android:id="@+id/btnParentRegenCode"
-                            android:layout_width="wrap_content"
-                            android:layout_height="38dp"
-                            android:background="@drawable/bg_device_card"
-                            android:text="🔄 Đổi Mã Mới"
-                            android:textColor="#94A3B8"
-                            android:textSize="12sp"
-                            android:gravity="center"
-                            android:paddingLeft="16dp"
-                            android:paddingRight="16dp"
-                            android:clickable="true"
-                            android:focusable="true" />
-                    </LinearLayout>
-
-                    <!-- THẺ TRẠNG THÁI THIẾT BỊ CON -->
+                    <!-- 1. THẺ TRẠNG THÁI CON TRỰC TUYẾN LIVE -->
                     <LinearLayout
                         android:id="@+id/layoutParentChildRow"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:background="@drawable/bg_device_card"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
+                        android:orientation="vertical"
                         android:padding="14dp"
-                        android:layout_marginBottom="24dp"
+                        android:layout_marginBottom="14dp"
                         android:clickable="true"
                         android:focusable="true">
 
-                        <FrameLayout
-                            android:layout_width="38dp"
-                            android:layout_height="38dp"
-                            android:background="@drawable/bg_tab_container"
-                            android:layout_marginEnd="12dp">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_gravity="center"
-                                android:text="👤"
-                                android:textSize="16sp" />
-
-                            <View
-                                android:id="@+id/dotParentChildOnline"
-                                android:layout_width="8dp"
-                                android:layout_height="8dp"
-                                android:layout_gravity="bottom|end"
-                                android:background="@drawable/bg_pin_dot_filled" />
-                        </FrameLayout>
-
                         <LinearLayout
-                            android:layout_width="0dp"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:orientation="vertical">
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
 
                             <TextView
-                                android:layout_width="wrap_content"
+                                android:id="@+id/tvParentChildName"
+                                android:layout_width="0dp"
                                 android:layout_height="wrap_content"
-                                android:text="Ghép Đôi"
+                                android:layout_weight="1"
+                                android:text="Liam Chen (Lớp 9B)"
                                 android:textColor="#F8FAFC"
-                                android:textSize="14sp"
+                                android:textSize="15sp"
                                 android:textStyle="bold" />
 
-                            <TextView
-                                android:id="@+id/tvParentChildSubtitle"
+                            <LinearLayout
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Paired child • Xiaomi HyperOS"
-                                android:textColor="#94A3B8"
-                                android:textSize="11sp" />
+                                android:orientation="horizontal"
+                                android:gravity="center_vertical">
+
+                                <View
+                                    android:id="@+id/dotParentChildOnline"
+                                    android:layout_width="8dp"
+                                    android:layout_height="8dp"
+                                    android:background="@drawable/bg_pin_dot_filled"
+                                    android:layout_marginEnd="6dp" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="TRỰC TUYẾN"
+                                    android:textColor="#34D399"
+                                    android:textSize="11sp"
+                                    android:textStyle="bold" />
+                            </LinearLayout>
                         </LinearLayout>
 
                         <TextView
+                            android:id="@+id/tvParentChildSubtitle"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="›"
-                            android:textColor="#64748B"
-                            android:textSize="20sp" />
+                            android:text="● Đang mở: TikTok (04:57)"
+                            android:textColor="#94A3B8"
+                            android:textSize="12sp"
+                            android:layout_marginTop="6dp" />
+                    </LinearLayout>
+
+                    <!-- 2. THẺ THỜI LƯỢNG SỬ DỤNG HÔM NAY (CHUẨN APPLE SCREEN TIME) -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_device_card"
+                        android:orientation="vertical"
+                        android:padding="16dp"
+                        android:layout_marginBottom="16dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="bottom"
+                            android:layout_marginBottom="10dp">
+
+                            <TextView
+                                android:id="@+id/tvParentScreenTimeTotal"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="2h 30m"
+                                android:textColor="#F8FAFC"
+                                android:textSize="22sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text=" Hôm nay"
+                                android:textColor="#94A3B8"
+                                android:textSize="13sp"
+                                android:layout_marginStart="6dp"
+                                android:layout_marginBottom="2dp" />
+                        </LinearLayout>
+
+                        <!-- THANH TIẾN TRÌNH PHÂN ĐOẠN ĐA SẮC (SEGMENTED BAR) -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="8dp"
+                            android:background="@drawable/bg_progress_bar_container"
+                            android:orientation="horizontal"
+                            android:layout_marginBottom="10dp">
+
+                            <!-- HỌC TẬP: 60% -->
+                            <View
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="60"
+                                android:background="#38BDF8" />
+
+                            <!-- MẠNG XÃ HỘI: 30% -->
+                            <View
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="30"
+                                android:background="#F43F5E" />
+
+                            <!-- GAME: 10% -->
+                            <View
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="10"
+                                android:background="#F59E0B" />
+                        </LinearLayout>
+
+                        <!-- DÒNG THỐNG KÊ TỐI GIẢN -->
+                        <TextView
+                            android:id="@+id/tvParentUsageStats"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="📚 Học tập: 1h30m • 💬 Mạng XH: 45m • 🎮 Game: 15m"
+                            android:textColor="#94A3B8"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+
+                    <!-- 3. HOẠT ĐỘNG GẦN ĐÂY: LƯỚI 2 CỘT SQUIRCLE CHUẨN MỰC -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Hoạt Động Gần Đây"
+                        android:textColor="#F8FAFC"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="10dp" />
+
+                    <!-- HÀNG 1: TIKTOK & VIETJACK -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginBottom="8dp">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="52dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_device_card"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:paddingLeft="10dp"
+                            android:paddingRight="10dp"
+                            android:layout_marginEnd="4dp">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="🎵"
+                                android:textSize="16sp"
+                                android:layout_marginEnd="8dp" />
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="TikTok"
+                                    android:textColor="#F8FAFC"
+                                    android:textSize="12sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Mạng XH • 25m"
+                                    android:textColor="#94A3B8"
+                                    android:textSize="10sp" />
+                            </LinearLayout>
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="52dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_device_card"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:paddingLeft="10dp"
+                            android:paddingRight="10dp"
+                            android:layout_marginStart="4dp">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="📚"
+                                android:textSize="16sp"
+                                android:layout_marginEnd="8dp" />
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="VietJack"
+                                    android:textColor="#F8FAFC"
+                                    android:textSize="12sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Học tập • 35m"
+                                    android:textColor="#94A3B8"
+                                    android:textSize="10sp" />
+                            </LinearLayout>
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- HÀNG 2: YOUTUBE & WIKIPEDIA -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginBottom="18dp">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="52dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_device_card"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:paddingLeft="10dp"
+                            android:paddingRight="10dp"
+                            android:layout_marginEnd="4dp">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="▶️"
+                                android:textSize="16sp"
+                                android:layout_marginEnd="8dp" />
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="YouTube"
+                                    android:textColor="#F8FAFC"
+                                    android:textSize="12sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Mạng XH • 20m"
+                                    android:textColor="#94A3B8"
+                                    android:textSize="10sp" />
+                            </LinearLayout>
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="52dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_device_card"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:paddingLeft="10dp"
+                            android:paddingRight="10dp"
+                            android:layout_marginStart="4dp">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="🌐"
+                                android:textSize="16sp"
+                                android:layout_marginEnd="8dp" />
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Wikipedia"
+                                    android:textColor="#F8FAFC"
+                                    android:textSize="12sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Học tập • 30m"
+                                    android:textColor="#94A3B8"
+                                    android:textSize="10sp" />
+                            </LinearLayout>
+                        </LinearLayout>
                     </LinearLayout>
 
                     <!-- KHU VỰC HÀNH ĐỘNG BẢO VỆ: NGẮT KẾT NỐI -->
@@ -598,22 +798,13 @@
                         android:gravity="center_horizontal">
 
                         <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="🔒 Protected"
-                            android:textColor="#EF4444"
-                            android:textSize="12sp"
-                            android:textStyle="bold"
-                            android:layout_marginBottom="8dp" />
-
-                        <TextView
                             android:id="@+id/btnParentTriggerUnpair"
                             android:layout_width="match_parent"
-                            android:layout_height="48dp"
+                            android:layout_height="44dp"
                             android:background="@drawable/bg_danger_pill"
-                            android:text="Ngắt Kết Nối"
+                            android:text="Ngắt Kết Nối An Toàn"
                             android:textColor="#EF4444"
-                            android:textSize="14sp"
+                            android:textSize="13sp"
                             android:textStyle="bold"
                             android:gravity="center"
                             android:clickable="true"
@@ -629,7 +820,7 @@
                         android:textColor="#64748B"
                         android:textSize="11sp"
                         android:layout_gravity="center_horizontal"
-                        android:layout_marginTop="16dp"
+                        android:layout_marginTop="14dp"
                         android:clickable="true"
                         android:focusable="true" />
                 </LinearLayout>
@@ -744,124 +935,6 @@
                         android:textStyle="bold"
                         android:layout_marginTop="8dp"
                         android:visibility="gone" />
-
-                    <!-- NÚT THÔNG MINH 1-CHẠM CẤP QUYỀN XIAOMI / ANDROID -->
-                    <LinearLayout
-                        android:id="@+id/btnSmartPermissionWizardPre"
-                        android:layout_width="match_parent"
-                        android:layout_height="48dp"
-                        android:background="@drawable/bg_wizard_btn"
-                        android:orientation="horizontal"
-                        android:gravity="center"
-                        android:layout_marginTop="16dp"
-                        android:paddingLeft="14dp"
-                        android:paddingRight="14dp"
-                        android:clickable="true"
-                        android:focusable="true">
-
-                        <TextView
-                            android:id="@+id/tvWizardIconPre"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="⚡"
-                            android:textColor="#FFFFFF"
-                            android:textSize="18sp"
-                            android:layout_marginEnd="8dp" />
-
-                        <TextView
-                            android:id="@+id/tvWizardTitlePre"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="KÍCH HOẠT QUYỀN BẢO VỆ 1-CHẠM"
-                            android:textColor="#FFFFFF"
-                            android:textSize="13sp"
-                            android:textStyle="bold" />
-                    </LinearLayout>
-
-                    <!-- THANH 3 CHIP QUAN SÁT TRẠNG THÁI -->
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center"
-                        android:layout_marginTop="8dp">
-
-                        <LinearLayout
-                            android:id="@+id/btnQuickAppInfoPre"
-                            android:layout_width="0dp"
-                            android:layout_height="32dp"
-                            android:layout_weight="1"
-                            android:layout_marginEnd="6dp"
-                            android:background="@drawable/bg_device_card"
-                            android:gravity="center"
-                            android:paddingLeft="4dp"
-                            android:paddingRight="4dp"
-                            android:clickable="true"
-                            android:focusable="true">
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="🔓 Mở khóa ⋮"
-                                android:textColor="#F8FAFC"
-                                android:textSize="10sp"
-                                android:textStyle="bold" />
-                        </LinearLayout>
-
-                        <LinearLayout
-                            android:id="@+id/btnQuickAccessibilityPre"
-                            android:layout_width="0dp"
-                            android:layout_height="32dp"
-                            android:layout_weight="1"
-                            android:layout_marginEnd="6dp"
-                            android:background="@drawable/bg_device_card"
-                            android:gravity="center"
-                            android:paddingLeft="4dp"
-                            android:paddingRight="4dp"
-                            android:clickable="true"
-                            android:focusable="true">
-                            <TextView
-                                android:id="@+id/dotQuickAccessibilityPre"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="● "
-                                android:textColor="#EF4444"
-                                android:textSize="10sp" />
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="👁️ Trợ năng"
-                                android:textColor="#F8FAFC"
-                                android:textSize="10sp"
-                                android:textStyle="bold" />
-                        </LinearLayout>
-
-                        <LinearLayout
-                            android:id="@+id/btnQuickUsageAccessPre"
-                            android:layout_width="0dp"
-                            android:layout_height="32dp"
-                            android:layout_weight="1"
-                            android:background="@drawable/bg_device_card"
-                            android:gravity="center"
-                            android:paddingLeft="4dp"
-                            android:paddingRight="4dp"
-                            android:clickable="true"
-                            android:focusable="true">
-                            <TextView
-                                android:id="@+id/dotQuickUsageAccessPre"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="● "
-                                android:textColor="#EF4444"
-                                android:textSize="10sp" />
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="📊 Dữ liệu"
-                                android:textColor="#F8FAFC"
-                                android:textSize="10sp"
-                                android:textStyle="bold" />
-                        </LinearLayout>
-                    </LinearLayout>
                 </LinearLayout>
 
                 <!-- TRẠNG THÁI 2: CHỈ HIỆN KHI ĐÃ GHÉP ĐÔI THÀNH CÔNG -->
@@ -875,214 +948,280 @@
                     android:padding="28dp"
                     android:visibility="gone">
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="🛡️"
-                        android:textSize="36sp"
-                        android:layout_marginBottom="12dp" />
-
-                    <TextView
-                        android:id="@+id/tvGreeting"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Xin chào ............ ,"
-                        android:textColor="#94A3B8"
-                        android:textSize="15sp" />
-
-                    <TextView
-                        android:id="@+id/tvCompanionBadge"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="ĐÃ GHÉP ĐÔI"
-                        android:textColor="#F8FAFC"
-                        android:textSize="22sp"
-                        android:textStyle="bold"
-                        android:layout_marginTop="4dp"
-                        android:layout_marginBottom="18dp" />
-
+                    <!-- 1. THẺ KHIÊN BẢO VỆ TINH GỌN (KHÔNG CÓ DÒNG XIN CHÀO) -->
                     <LinearLayout
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:background="@drawable/bg_device_card"
-                        android:paddingLeft="18dp"
-                        android:paddingRight="18dp"
-                        android:paddingTop="8dp"
-                        android:paddingBottom="8dp"
-                        android:gravity="center">
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:padding="12dp"
+                        android:layout_marginBottom="16dp">
 
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Mã kết nối: "
-                            android:textColor="#94A3B8"
-                            android:textSize="13sp" />
+                        <ImageView
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:src="@drawable/ic_shield_cyber_lock"
+                            android:contentDescription="Shield Protection"
+                            android:layout_marginEnd="10dp" />
 
-                        <TextView
-                            android:id="@+id/tvPairedCodeDisplay"
-                            android:layout_width="wrap_content"
+                        <LinearLayout
+                            android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:text="CVA-8A20"
-                            android:textColor="#FBBF24"
-                            android:textSize="14sp"
-                            android:textStyle="bold" />
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="THIẾT BỊ ĐÃ ĐƯỢC BẢO VỆ"
+                                android:textColor="#10B981"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/tvPairedCodeDisplay"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="MÃ GIA ĐÌNH: CVA-A646"
+                                android:textColor="#FBBF24"
+                                android:textSize="11sp"
+                                android:layout_marginTop="2dp" />
+                        </LinearLayout>
                     </LinearLayout>
 
+                    <!-- 2. LƯỚI 4 QUYỀN KHÓA CỨNG (TAMPER-PROOF READ-ONLY 2x2 GRID) -->
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="● Đang đồng hành an toàn cùng Phụ huynh"
-                        android:textColor="#10B981"
-                        android:textSize="12sp"
-                        android:layout_marginTop="14dp" />
+                        android:text="TRẠNG THÁI BẢO VỆ • 🔒 ĐÃ KHÓA BỞI PHỤ HUYNH"
+                        android:textColor="#38BDF8"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:layout_gravity="start"
+                        android:layout_marginBottom="8dp" />
 
-                    <!-- NÚT THÔNG MINH 1-CHẠM CẤP QUYỀN XIAOMI / ANDROID -->
-                    <LinearLayout
-                        android:id="@+id/btnSmartPermissionWizard"
-                        android:layout_width="match_parent"
-                        android:layout_height="48dp"
-                        android:background="@drawable/bg_wizard_btn"
-                        android:orientation="horizontal"
-                        android:gravity="center"
-                        android:layout_marginTop="14dp"
-                        android:paddingLeft="14dp"
-                        android:paddingRight="14dp"
-                        android:clickable="true"
-                        android:focusable="true">
-
-                        <TextView
-                            android:id="@+id/tvWizardIcon"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="⚡"
-                            android:textColor="#FFFFFF"
-                            android:textSize="18sp"
-                            android:layout_marginEnd="8dp" />
-
-                        <TextView
-                            android:id="@+id/tvWizardTitle"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="KÍCH HOẠT QUYỀN BẢO VỆ 1-CHẠM"
-                            android:textColor="#FFFFFF"
-                            android:textSize="13sp"
-                            android:textStyle="bold" />
-                    </LinearLayout>
-
-                    <!-- THANH 3 CHIP QUAN SÁT TRẠNG THÁI -->
+                    <!-- HÀNG 1: QUYỀN TRỢ NĂNG & LỌC WEB -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="horizontal"
-                        android:gravity="center"
-                        android:layout_marginTop="8dp">
+                        android:layout_marginBottom="8dp">
 
-                        <!-- CHIP 1: MỞ KHÓA CÀI ĐẶT HẠN CHẾ (APP INFO) -->
                         <LinearLayout
-                            android:id="@+id/btnQuickAppInfo"
+                            android:id="@+id/cardStudentAccessibility"
                             android:layout_width="0dp"
-                            android:layout_height="32dp"
+                            android:layout_height="52dp"
                             android:layout_weight="1"
-                            android:layout_marginEnd="6dp"
                             android:background="@drawable/bg_device_card"
-                            android:gravity="center"
-                            android:paddingLeft="4dp"
-                            android:paddingRight="4dp"
+                            android:orientation="vertical"
+                            android:gravity="center_vertical"
+                            android:paddingLeft="10dp"
+                            android:paddingRight="10dp"
+                            android:layout_marginEnd="4dp"
                             android:clickable="true"
                             android:focusable="true">
+
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="🔓 Mở khóa ⋮"
+                                android:text="Quyền Trợ Năng"
                                 android:textColor="#F8FAFC"
-                                android:textSize="10sp"
+                                android:textSize="11sp"
                                 android:textStyle="bold" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="● Đang Chạy  🔒"
+                                android:textColor="#10B981"
+                                android:textSize="10sp" />
                         </LinearLayout>
 
-                        <!-- CHIP 2: BẬT TRỢ NĂNG (ACCESSIBILITY) -->
                         <LinearLayout
-                            android:id="@+id/btnQuickAccessibility"
+                            android:id="@+id/cardStudentWebFilter"
                             android:layout_width="0dp"
-                            android:layout_height="32dp"
+                            android:layout_height="52dp"
                             android:layout_weight="1"
-                            android:layout_marginEnd="6dp"
                             android:background="@drawable/bg_device_card"
-                            android:gravity="center"
-                            android:paddingLeft="4dp"
-                            android:paddingRight="4dp"
+                            android:orientation="vertical"
+                            android:gravity="center_vertical"
+                            android:paddingLeft="10dp"
+                            android:paddingRight="10dp"
+                            android:layout_marginStart="4dp"
                             android:clickable="true"
                             android:focusable="true">
-                            <TextView
-                                android:id="@+id/dotQuickAccessibility"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="● "
-                                android:textColor="#EF4444"
-                                android:textSize="10sp" />
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="👁️ Trợ năng"
-                                android:textColor="#F8FAFC"
-                                android:textSize="10sp"
-                                android:textStyle="bold" />
-                        </LinearLayout>
 
-                        <!-- CHIP 3: BẬT TRUY CẬP DỮ LIỆU SỬ DỤNG (USAGE ACCESS) -->
-                        <LinearLayout
-                            android:id="@+id/btnQuickUsageAccess"
-                            android:layout_width="0dp"
-                            android:layout_height="32dp"
-                            android:layout_weight="1"
-                            android:background="@drawable/bg_device_card"
-                            android:gravity="center"
-                            android:paddingLeft="4dp"
-                            android:paddingRight="4dp"
-                            android:clickable="true"
-                            android:focusable="true">
-                            <TextView
-                                android:id="@+id/dotQuickUsageAccess"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="● "
-                                android:textColor="#EF4444"
-                                android:textSize="10sp" />
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="📊 Dữ liệu"
+                                android:text="Lọc Web Độc Hại"
                                 android:textColor="#F8FAFC"
-                                android:textSize="10sp"
+                                android:textSize="11sp"
                                 android:textStyle="bold" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="● Đang Bật  🔒"
+                                android:textColor="#10B981"
+                                android:textSize="10sp" />
                         </LinearLayout>
                     </LinearLayout>
 
-                    <!-- THÔNG TIN BẢO VỆ AN TOÀN SỐ -->
+                    <!-- HÀNG 2: ĐỒNG BỘ DỮ LIỆU & PIN THIẾT BỊ -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="18dp"
-                        android:background="@drawable/bg_tab_container"
-                        android:orientation="vertical"
-                        android:padding="14dp"
-                        android:gravity="center_horizontal">
+                        android:orientation="horizontal"
+                        android:layout_marginBottom="16dp">
+
+                        <LinearLayout
+                            android:id="@+id/cardStudentSync"
+                            android:layout_width="0dp"
+                            android:layout_height="52dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_device_card"
+                            android:orientation="vertical"
+                            android:gravity="center_vertical"
+                            android:paddingLeft="10dp"
+                            android:paddingRight="10dp"
+                            android:layout_marginEnd="4dp"
+                            android:clickable="true"
+                            android:focusable="true">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Đồng Bộ Dữ Liệu"
+                                android:textColor="#F8FAFC"
+                                android:textSize="11sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="● Thời Gian Thực  🔒"
+                                android:textColor="#10B981"
+                                android:textSize="10sp" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/cardStudentBattery"
+                            android:layout_width="0dp"
+                            android:layout_height="52dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_device_card"
+                            android:orientation="vertical"
+                            android:gravity="center_vertical"
+                            android:paddingLeft="10dp"
+                            android:paddingRight="10dp"
+                            android:layout_marginStart="4dp"
+                            android:clickable="true"
+                            android:focusable="true">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Pin Thiết Bị"
+                                android:textColor="#F8FAFC"
+                                android:textSize="11sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="88% Tối Ưu  🔋"
+                                android:textColor="#38BDF8"
+                                android:textSize="10sp" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- 3. HOẠT ĐỘNG HỌC TẬP AN TOÀN (LƯỚI 2 CỘT SQUIRCLE) -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Hoạt Động Học Tập An Toàn"
+                        android:textColor="#F8FAFC"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:layout_gravity="start"
+                        android:layout_marginBottom="8dp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginBottom="14dp">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="48dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_device_card"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:paddingLeft="10dp"
+                            android:paddingRight="10dp"
+                            android:layout_marginEnd="4dp">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="📚"
+                                android:textSize="15sp"
+                                android:layout_marginEnd="8dp" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="VietJack • Học tập"
+                                android:textColor="#F8FAFC"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="48dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_device_card"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:paddingLeft="10dp"
+                            android:paddingRight="10dp"
+                            android:layout_marginStart="4dp">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="🌐"
+                                android:textSize="15sp"
+                                android:layout_marginEnd="8dp" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Wikipedia • Học tập"
+                                android:textColor="#F8FAFC"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- 4. VIÊN NHỘNG TRẠNG THÁI BẢO VỆ ĐÁY MÀN HÌNH -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="38dp"
+                        android:background="@drawable/bg_status_pill_green"
+                        android:gravity="center"
+                        android:layout_marginBottom="12dp">
 
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="🔒 Thiết bị đang được bảo vệ tự động"
-                            android:textColor="#38BDF8"
-                            android:textSize="12sp"
+                            android:text="🛡️ Hệ thống đang bảo vệ an toàn cho bạn"
+                            android:textColor="#34D399"
+                            android:textSize="11sp"
                             android:textStyle="bold" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
-                            android:text="Chỉ Phụ huynh mới có quyền quản lý và ngắt kết nối từ Parent Hub"
-                            android:textColor="#94A3B8"
-                            android:textSize="10sp"
-                            android:gravity="center" />
                     </LinearLayout>
 
                     <!-- KHUNG NHẬN TIN NHẮN TỪ BỐ MẸ & PHẢN HỒI -->

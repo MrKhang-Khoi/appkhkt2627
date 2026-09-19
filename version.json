@@ -1,19 +1,18 @@
 {
     "isForceUpdate": true,
-    "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.0.apk",
+    "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.2.0.apk",
     "minSupportedVersion": 1,
     "releaseDate": "2026-09-19",
-    "sha256": "9C590C5CFDF8677F552696C65A42F8444AF1389534881C7C056D2C4F21D79805",
-    "versionName": "1.1.8",
-    "versionCode": 18,
-    "latestVersionName": "1.1.8",
-    "latestVersionCode": 18,
+    "sha256": "B8E1B4D692BD5BC862FBD6502227D1AAFD6E771D5DCDA97A9B74D848E7E49544",
+    "versionName": "1.2.0",
+    "versionCode": 20,
+    "latestVersionName": "1.2.0",
+    "latestVersionCode": 20,
     "changelog": [
-        "Tái thiết kế giao diện Phụ huynh: Nhấp vào Mạng Xã Hội để mở rộng xem thống kê chi tiết YouTube, TikTok, Facebook, Messenger, Zalo, Instagram",
-        "Hiển thị trạng thái trực tiếp: Đèn nhấp nháy 🟢 ĐANG MỞ (ONLINE) khi con đang dùng mạng xã hội thời gian thực, thời lượng mở hôm nay, và thanh tiến trình %",
-        "Tích hợp công nghệ Dual-Tracking Engine: Accessibility tự động tích lũy từng giây phiên sử dụng ngay cả khi máy chưa kịp flush UsageStats",
-        "Tương tác mượt mà: Accordion mở rộng/thu gọn trực quan, hỗ trợ xem chi tiết cả Ứng dụng Học Tập và Game & Trò Chơi",
-        "Nâng cấp khả năng phân loại và nhận diện đa nền tảng mạng xã hội và ứng dụng học tập THCS"
+        "Màn hình Phụ Huynh: Giao diện tối giản chuẩn Apple Screen Time với chip mã gia đình siêu gọn, thẻ con trực tuyến Live, và thanh thời lượng phân đoạn đa sắc",
+        "Màn hình Học Sinh: Thẻ khiên bảo vệ tinh gọn (bỏ dòng chào thừa), tích hợp lưới 4 quyền an toàn chỉ đọc chống học sinh tự ý tắt/gỡ quyền (Tamper-Proof)",
+        "Nâng cấp bộ mã hóa xác thực AES-256 kết nối đa thiết bị",
+        "Hỗ trợ tính năng tự động phát hiện và cập nhật ứng dụng tức thời qua Firebase RTDB"
     ],
-    "fileSize": "5.75 MB"
+    "fileSize": "5.76 MB"
 }

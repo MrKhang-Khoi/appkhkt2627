@@ -283,8 +283,6 @@
       transform: scale(0.92);
       background: #0f1c38;
     }
-      box-shadow: 0 0 16px var(--glow-blue);
-    }
 
     .num-key.action-key {
       background: transparent;
@@ -872,35 +870,95 @@
         </div>
       </section>
 
-      <!-- GIAO DIỆN 1B: BẢNG QUẢN LÝ PHỤ HUYNH (KHI ĐÃ NHẬP ĐÚNG PIN) -->
+      <!-- GIAO DIỆN 1B: BẢNG QUẢN LÝ PHỤ HUYNH (KHI ĐÃ NHẬP ĐÚNG PIN - CHUẨN MINIMALIST APPLE SCREEN TIME) -->
       <section class="glass-card" id="cardParentHub" style="display: none;">
         
-        <div style="text-align: center; margin-bottom: 18px;">
-          <h2 style="font-size: 1.25rem; font-weight: 800; color: #fff;">Parent Hub</h2>
-        </div>
-
-        <!-- MÃ GIA ĐÌNH VÀNG KIM CHUẨN SCREEN 2 -->
-        <div class="family-code-banner">
-          <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 4px;">
-            <span style="font-size: 1.5rem;">🏅</span>
-            <span class="family-code-label" style="font-size: 0.95rem; margin: 0;">MÃ GIA ĐÌNH:</span>
-          </div>
-          <div class="family-code-value" id="dispFamilyPairCode">CVA-8A20</div>
-          
-          <div class="code-actions-row" style="margin-top: 10px;">
-            <button type="button" class="btn-copy" id="btnCopyFamilyCode">
-              <span>📋</span> Sao Chép Mã
-            </button>
-            <button type="button" class="btn-refresh-code" id="btnRegenCode" title="Đổi mã ghép đôi mới">
-              <span>🔄</span> Đổi Mã Mới
-            </button>
+        <!-- HEADER: TIÊU ĐỀ & CHIP MÃ GIA ĐÌNH SIÊU GỌN -->
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+          <h2 style="font-size: 1.25rem; font-weight: 800; color: #fff; margin: 0;">Bảng Quản Lý</h2>
+          <div style="display: inline-flex; align-items: center; gap: 6px; background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 9999px; padding: 4px 12px; font-size: 0.76rem; font-weight: 700; cursor: pointer;" id="btnCopyFamilyCode" title="Bấm để sao chép mã">
+            <span style="color: #94a3b8;">Mã:</span>
+            <span style="color: #fbbf24; font-weight: 800;" id="dispFamilyPairCode">CVA-A646</span>
+            <span style="font-size: 0.7rem;">📋</span>
+            <span id="btnRegenCode" title="Đổi mã mới" style="font-size: 0.7rem; margin-left: 2px;">🔄</span>
           </div>
         </div>
 
-        <!-- THẺ DANH SÁCH THIẾT BỊ CON CHUẨN SCREEN 2 (HỖ TRỢ ĐA THIẾT BỊ) -->
-        <div style="margin-top: 18px; display: flex; flex-direction: column; gap: 8px;" id="devicesContainer">
+        <!-- 1. THẺ TRẠNG THÁI CON TRỰC TUYẾN LIVE -->
+        <div class="status-row" id="activeDeviceRow" style="background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 12px 14px; margin-bottom: 12px; cursor: pointer;">
+          <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+            <div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 0.95rem; font-weight: 800; color: #fff;" id="childDeviceName">Liam Chen (Lớp 9B)</span>
+                <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.68rem; font-weight: 800; color: #34d399; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 9999px; padding: 1px 7px;">
+                  <span id="childDeviceDot" style="width: 6px; height: 6px; border-radius: 50%; background: #10b981;"></span>
+                  TRỰC TUYẾN
+                </span>
+              </div>
+              <div style="font-size: 0.76rem; color: #94a3b8; margin-top: 4px;" id="childDeviceState">
+                ● Đang mở: TikTok (04:57)
+              </div>
+            </div>
+            <span style="font-size: 1.1rem; color: #64748b;">›</span>
+          </div>
+        </div>
+
+        <!-- 2. THỜI LƯỢNG SỬ DỤNG HÔM NAY (CHUẨN APPLE SCREEN TIME) -->
+        <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 14px; margin-bottom: 12px;">
+          <div style="display: flex; align-items: baseline; gap: 6px; margin-bottom: 8px;">
+            <span style="font-size: 1.35rem; font-weight: 800; color: #fff;" id="dashTotalScreenTime">2h 30m</span>
+            <span style="font-size: 0.78rem; color: #94a3b8;">Hôm nay</span>
+          </div>
+          <!-- THANH TIẾN TRÌNH PHÂN ĐOẠN ĐA SẮC -->
+          <div style="display: flex; width: 100%; height: 8px; border-radius: 9999px; overflow: hidden; background: rgba(30, 41, 59, 0.6); margin-bottom: 8px;">
+            <div style="width: 60%; background: #38bdf8;" title="Học tập: 60%"></div>
+            <div style="width: 30%; background: #f43f5e;" title="Mạng xã hội: 30%"></div>
+            <div style="width: 10%; background: #f59e0b;" title="Game: 10%"></div>
+          </div>
+          <div style="font-size: 0.7rem; color: #94a3b8;">
+            📚 Học tập: 1h30m • 💬 Mạng XH: 45m • 🎮 Game: 15m
+          </div>
+        </div>
+
+        <!-- 3. HOẠT ĐỘNG GẦN ĐÂY: LƯỚI 2 CỘT SQUIRCLE CHUẨN MỰC -->
+        <div style="margin-bottom: 14px;">
+          <div style="font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 8px;">Hoạt Động Gần Đây</div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px; background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 12px; padding: 8px 10px;">
+              <span style="font-size: 1.2rem;">📱</span>
+              <div>
+                <div style="font-size: 0.78rem; font-weight: 700; color: #fff;">TikTok</div>
+                <div style="font-size: 0.68rem; color: #94a3b8;">30m</div>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 12px; padding: 8px 10px;">
+              <span style="font-size: 1.2rem;">📖</span>
+              <div>
+                <div style="font-size: 0.78rem; font-weight: 700; color: #fff;">VietJack</div>
+                <div style="font-size: 0.68rem; color: #94a3b8;">45m</div>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 12px; padding: 8px 10px;">
+              <span style="font-size: 1.2rem;">▶️</span>
+              <div>
+                <div style="font-size: 0.78rem; font-weight: 700; color: #fff;">YouTube</div>
+                <div style="font-size: 0.68rem; color: #94a3b8;">25m</div>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 12px; padding: 8px 10px;">
+              <span style="font-size: 1.2rem;">🌐</span>
+              <div>
+                <div style="font-size: 0.78rem; font-weight: 700; color: #fff;">Wikipedia</div>
+                <div style="font-size: 0.68rem; color: #94a3b8;">20m</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- THẺ DANH SÁCH THIẾT BỊ CON (HỖ TRỢ ĐA THIẾT BỊ) -->
+        <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;" id="devicesContainer">
           <!-- TRẠNG THÁI CHƯA CÓ THIẾT BỊ -->
-          <div class="empty-device-card" id="emptyDeviceCard">
+          <div class="empty-device-card" id="emptyDeviceCard" style="display: none;">
             <div class="empty-device-icon">📱</div>
             <div class="empty-device-title">Chưa có thiết bị kết nối</div>
             <div class="empty-device-sub">Hãy đọc mã ghép đôi trên cho con nhập trên điện thoại để bắt đầu</div>
@@ -908,28 +966,10 @@
 
           <!-- DANH SÁCH CÁC THIẾT BỊ ĐÃ KẾT NỐI ĐỘNG -->
           <div id="dynamicDevicesList" style="display: flex; flex-direction: column; gap: 8px;"></div>
-
-          <!-- DỰ PHÒNG TEMPLATE THẺ THIẾT BỊ (SCREEN 2) -->
-          <div class="status-row" id="activeDeviceRow" style="display: none; cursor: pointer;">
-            <div style="display: flex; align-items: center; gap: 12px;">
-              <div style="width: 38px; height: 38px; border-radius: 50%; background: #1e293b; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; position: relative;">
-                👤
-                <span id="childDeviceDot" style="position: absolute; bottom: 0; right: 0; width: 8px; height: 8px; border-radius: 50%; background: #94a3b8; transition: background 0.3s ease;"></span>
-              </div>
-              <div>
-                <div style="font-size: 0.92rem; font-weight: 700; color: #fff;" id="childDeviceName">Xiaomi HyperOS</div>
-                <div style="font-size: 0.75rem; color: #94a3b8;" id="childDeviceState">● Đang kiểm tra tín hiệu mạng...</div>
-              </div>
-            </div>
-            <span style="font-size: 1.1rem; color: #64748b;">›</span>
-          </div>
         </div>
 
         <!-- TÁC VỤ NGẮT KẾT NỐI (SCREEN 2 - PROTECTED) -->
-        <div style="margin-top: 24px; text-align: center;" id="unpairActionContainer">
-          <div style="font-size: 0.78rem; font-weight: 700; color: #ef4444; margin-bottom: 8px;">
-            🔒 Protected
-          </div>
+        <div style="margin-top: 16px; text-align: center;" id="unpairActionContainer">
           <button type="button" class="btn-pill btn-danger-pill" id="btnTriggerUnpair" style="display: none;">
             Ngắt Kết Nối
           </button>
@@ -968,19 +1008,69 @@
         </div>
       </section>
 
-      <!-- 2. THẺ ĐÃ GHÉP ĐÔI THÀNH CÔNG (CHỈ HIỆN KHI ĐÃ GHÉP ĐÔI) -->
+      <!-- 2. THẺ ĐÃ GHÉP ĐÔI THÀNH CÔNG (CHUẨN SCREEN 3 - TINH GỌN BẢO MẬT KHÔNG DÒNG CHÀO) -->
       <section class="glass-card" id="studentPairedCard" style="display: none;">
-        <div style="padding: 10px 0; text-align: center;">
-          <div style="font-size: 2.8rem; margin-bottom: 8px;">🛡️</div>
-          <div style="font-size: 0.95rem; color: #94a3b8;">Xin chào ............ ,</div>
-          <div style="font-size: 1.45rem; font-weight: 800; color: #f8fafc; margin-top: 4px; margin-bottom: 18px;">ĐÃ GHÉP ĐÔI</div>
-          <div style="display: inline-flex; align-items: center; gap: 8px; background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(245, 158, 11, 0.4); padding: 8px 20px; border-radius: 9999px;">
-            <span style="font-size: 0.82rem; color: #94a3b8;">Mã kết nối:</span>
-            <span style="font-size: 1rem; font-weight: 800; color: #fbbf24;" id="studentConnectedCodeDisplay">CVA-A646</span>
+        <div style="padding: 4px 0;">
+          <!-- THẺ KHIÊN BẢO VỆ TINH GỌN -->
+          <div style="display: flex; align-items: center; gap: 10px; background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 14px; padding: 12px; margin-bottom: 14px;">
+            <span style="font-size: 1.8rem;">🛡️</span>
+            <div>
+              <div style="font-size: 0.85rem; font-weight: 800; color: #10b981;">THIẾT BỊ ĐÃ ĐƯỢC BẢO VỆ</div>
+              <div style="font-size: 0.72rem; color: #fbbf24; font-weight: 700; margin-top: 2px;">
+                MÃ GIA ĐÌNH: <span id="studentConnectedCodeDisplay">CVA-A646</span>
+              </div>
+            </div>
           </div>
-          <div style="margin-top: 18px; padding: 12px 14px; background: rgba(15, 23, 42, 0.7); border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.06); text-align: center;">
-            <div style="font-size: 0.76rem; color: #94a3b8; line-height: 1.5;">
-              🔒 Thiết bị đang được bảo vệ tự động bởi CVA-SmartGuardian.<br>Chỉ Phụ huynh mới có quyền quản lý và ngắt kết nối.
+
+          <!-- LƯỚI 4 QUYỀN AN TOÀN CHỈ ĐỌC (TAMPER-PROOF) -->
+          <div style="font-size: 0.78rem; font-weight: 700; color: #cbd5e1; margin-bottom: 8px; text-align: left;">
+            Trạng Thái An Toàn Hệ Thống
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px;">
+            <!-- QUYỀN 1: TRỢ NĂNG -->
+            <div onclick="alertTamperProof()" style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 12px; padding: 10px; cursor: pointer; user-select: none;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <span style="font-size: 1rem;">👁️</span>
+                <span style="font-size: 0.75rem;">🔒</span>
+              </div>
+              <div style="font-size: 0.76rem; font-weight: 700; color: #fff;">Trợ năng HyperOS</div>
+              <div style="font-size: 0.65rem; color: #34d399; font-weight: 700; margin-top: 2px;">● ĐANG BẬT</div>
+            </div>
+
+            <!-- QUYỀN 2: LỌC WEB -->
+            <div onclick="alertTamperProof()" style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 12px; padding: 10px; cursor: pointer; user-select: none;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <span style="font-size: 1rem;">🌐</span>
+                <span style="font-size: 0.75rem;">🔒</span>
+              </div>
+              <div style="font-size: 0.76rem; font-weight: 700; color: #fff;">Lọc Web Độc Hại</div>
+              <div style="font-size: 0.65rem; color: #34d399; font-weight: 700; margin-top: 2px;">● ĐANG BẬT</div>
+            </div>
+
+            <!-- QUYỀN 3: ĐỒNG BỘ -->
+            <div onclick="alertTamperProof()" style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 12px; padding: 10px; cursor: pointer; user-select: none;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <span style="font-size: 1rem;">☁️</span>
+                <span style="font-size: 0.75rem;">🔒</span>
+              </div>
+              <div style="font-size: 0.76rem; font-weight: 700; color: #fff;">Đồng Bộ Firebase</div>
+              <div style="font-size: 0.65rem; color: #34d399; font-weight: 700; margin-top: 2px;">● 24/7 ONLINE</div>
+            </div>
+
+            <!-- QUYỀN 4: PIN -->
+            <div onclick="alertTamperProof()" style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 12px; padding: 10px; cursor: pointer; user-select: none;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <span style="font-size: 1rem;">⚡</span>
+                <span style="font-size: 0.75rem;">🔒</span>
+              </div>
+              <div style="font-size: 0.76rem; font-weight: 700; color: #fff;">Tối Ưu Pin HyperOS</div>
+              <div style="font-size: 0.65rem; color: #34d399; font-weight: 700; margin-top: 2px;">● KHÔNG HẠN CHẾ</div>
+            </div>
+          </div>
+
+          <div style="padding: 10px 12px; background: rgba(15, 23, 42, 0.6); border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.05); text-align: center;">
+            <div style="font-size: 0.7rem; color: #94a3b8; line-height: 1.4;">
+              🔒 Thiết bị được giám sát tự động. Học sinh không thể tắt hoặc gỡ quyền.
             </div>
           </div>
         </div>
@@ -988,11 +1078,11 @@
 
       <!-- KHỐI TẢI / CẬP NHẬT TÁCH RỜI CÂN ĐỐI BÊN DƯỚI -->
       <div style="text-align: center; margin-top: 4px;">
-        <a href="./apk/CVA-SmartGuardian-v1.1.9.apk" download class="btn-pill" style="text-decoration: none; background: rgba(30, 41, 59, 0.75); border: 1px solid rgba(255, 255, 255, 0.1); font-size: 0.82rem; min-height: 46px; color: #38bdf8;">
-          <span>⬇️</span> Tải / Cập Nhật App Android (v1.1.9)
+        <a href="./apk/CVA-SmartGuardian-v1.2.0.apk" download class="btn-pill" style="text-decoration: none; background: rgba(30, 41, 59, 0.75); border: 1px solid rgba(255, 255, 255, 0.1); font-size: 0.82rem; min-height: 46px; color: #38bdf8;">
+          <span>⬇️</span> Tải / Cập Nhật App Android (v1.2.0)
         </a>
         <div style="margin-top: 8px; font-size: 0.72rem; color: #64748b;">
-          Phiên bản v1.1.9 đã ký số Keystore • Tự động bóc tách URL & Giám sát Web đa trình duyệt
+          Phiên bản v1.2.0 đã ký số Keystore • Đăng nhập tối giản chuẩn Apple Screen Time & Tamper-Proof
         </div>
       </div>
     </main>
@@ -1385,6 +1475,10 @@
       return html
         .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
         .replace(/javascript:/gi, '');
+    }
+
+    function alertTamperProof() {
+      alert("🔒 Quyền này được khóa an toàn bởi Phụ Huynh. Học sinh không thể tắt hoặc thay đổi!");
     }
 
     const FIREBASE_BASE = "https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app";

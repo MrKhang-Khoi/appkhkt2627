@@ -98,30 +98,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var pbPairingLoading: ProgressBar
     private lateinit var tvPairingStatus: TextView
     private lateinit var layoutStudentPairedState: LinearLayout
-    private lateinit var tvGreeting: TextView
-    private lateinit var tvCompanionBadge: TextView
     private lateinit var tvPairedCodeDisplay: TextView
+    private lateinit var cardStudentAccessibility: LinearLayout
+    private lateinit var cardStudentWebFilter: LinearLayout
+    private lateinit var cardStudentSync: LinearLayout
+    private lateinit var cardStudentBattery: LinearLayout
 
-    // Phím tắt cấp quyền hệ thống 1-chạm (Quick Permission Action Chips & Wizard)
-    private var btnSmartPermissionWizard: LinearLayout? = null
-    private var btnSmartPermissionWizardPre: LinearLayout? = null
-    private var tvWizardTitle: TextView? = null
-    private var tvWizardTitlePre: TextView? = null
-    private var tvWizardIcon: TextView? = null
-    private var tvWizardIconPre: TextView? = null
     private var layoutParentChildRow: LinearLayout? = null
-
-    private var btnQuickAppInfo: View? = null
-    private var btnQuickAccessibility: View? = null
-    private var btnQuickUsageAccess: View? = null
-    private var dotQuickAccessibility: TextView? = null
-    private var dotQuickUsageAccess: TextView? = null
-
-    private var btnQuickAppInfoPre: View? = null
-    private var btnQuickAccessibilityPre: View? = null
-    private var btnQuickUsageAccessPre: View? = null
-    private var dotQuickAccessibilityPre: TextView? = null
-    private var dotQuickUsageAccessPre: TextView? = null
 
     // 5. Modals & Overlays
     private lateinit var layoutPinConfirmModal: FrameLayout
@@ -212,7 +195,6 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         checkAllPermissions()
-        refreshQuickPermissionStatus()
 
         // Kiểm tra cập nhật mỗi khi mở lại ứng dụng
         performUpdateCheck(userInitiated = false)
@@ -285,9 +267,11 @@ class MainActivity : AppCompatActivity() {
         pbPairingLoading = findViewById(R.id.pbPairingLoading)
         tvPairingStatus = findViewById(R.id.tvPairingStatus)
         layoutStudentPairedState = findViewById(R.id.layoutStudentPairedState)
-        tvGreeting = findViewById(R.id.tvGreeting)
-        tvCompanionBadge = findViewById(R.id.tvCompanionBadge)
         tvPairedCodeDisplay = findViewById(R.id.tvPairedCodeDisplay)
+        cardStudentAccessibility = findViewById(R.id.cardStudentAccessibility)
+        cardStudentWebFilter = findViewById(R.id.cardStudentWebFilter)
+        cardStudentSync = findViewById(R.id.cardStudentSync)
+        cardStudentBattery = findViewById(R.id.cardStudentBattery)
 
         // Modals & Overlays
         layoutPinConfirmModal = findViewById(R.id.layoutPinConfirmModal)
@@ -387,6 +371,19 @@ class MainActivity : AppCompatActivity() {
             handleConnectPairing()
         }
 
+        // Tamper-Proof 4 Cards: Read-only, click hiện thông báo cảnh báo bảo mật
+        val tamperProofToast = View.OnClickListener {
+            Toast.makeText(
+                this,
+                "🔒 Quyền này được khóa an toàn bởi Phụ Huynh. Học sinh không thể tắt!",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+        cardStudentAccessibility.setOnClickListener(tamperProofToast)
+        cardStudentWebFilter.setOnClickListener(tamperProofToast)
+        cardStudentSync.setOnClickListener(tamperProofToast)
+        cardStudentBattery.setOnClickListener(tamperProofToast)
+
         // Bấm vào thiết bị con trong Parent Hub -> Mở Bảng Giám Sát Đồng Hành
         findViewById<View>(R.id.layoutParentChildRow).setOnClickListener {
             showChildCompanionDialog()
@@ -409,38 +406,6 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "Vui lòng nhập lời nhắn gửi Bố Mẹ", Toast.LENGTH_SHORT).show()
             }
         }
-
-        // Khởi tạo các phím tắt cấp quyền 1-chạm (Quick Permission Chips & Smart Wizard)
-        btnSmartPermissionWizard = findViewById(R.id.btnSmartPermissionWizard)
-        btnSmartPermissionWizardPre = findViewById(R.id.btnSmartPermissionWizardPre)
-        tvWizardTitle = findViewById(R.id.tvWizardTitle)
-        tvWizardTitlePre = findViewById(R.id.tvWizardTitlePre)
-        tvWizardIcon = findViewById(R.id.tvWizardIcon)
-        tvWizardIconPre = findViewById(R.id.tvWizardIconPre)
-
-        btnSmartPermissionWizard?.setOnClickListener { handleSmartPermissionWizardClick() }
-        btnSmartPermissionWizardPre?.setOnClickListener { handleSmartPermissionWizardClick() }
-
-        btnQuickAppInfo = findViewById(R.id.btnQuickAppInfo)
-        btnQuickAccessibility = findViewById(R.id.btnQuickAccessibility)
-        btnQuickUsageAccess = findViewById(R.id.btnQuickUsageAccess)
-        dotQuickAccessibility = findViewById(R.id.dotQuickAccessibility)
-        dotQuickUsageAccess = findViewById(R.id.dotQuickUsageAccess)
-
-        btnQuickAppInfoPre = findViewById(R.id.btnQuickAppInfoPre)
-        btnQuickAccessibilityPre = findViewById(R.id.btnQuickAccessibilityPre)
-        btnQuickUsageAccessPre = findViewById(R.id.btnQuickUsageAccessPre)
-        dotQuickAccessibilityPre = findViewById(R.id.dotQuickAccessibilityPre)
-        dotQuickUsageAccessPre = findViewById(R.id.dotQuickUsageAccessPre)
-
-        btnQuickAppInfo?.setOnClickListener { openAppDetailsSettings() }
-        btnQuickAppInfoPre?.setOnClickListener { openAppDetailsSettings() }
-
-        btnQuickAccessibility?.setOnClickListener { openAccessibilitySettings() }
-        btnQuickAccessibilityPre?.setOnClickListener { openAccessibilitySettings() }
-
-        btnQuickUsageAccess?.setOnClickListener { openUsageAccessSettings() }
-        btnQuickUsageAccessPre?.setOnClickListener { openUsageAccessSettings() }
 
         layoutParentChildRow?.setOnClickListener { showChildCompanionDialog() }
     }
@@ -1232,13 +1197,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // HIỂN THỊ CHUẨN SCREEN 3: KHI CHƯA GHÉP ĐÔI CHỈ HIỆN THẺ NHẬP MÃ (KHÔNG HIỆN 'Xin chào ... ĐÃ GHÉP ĐÔI')
+    // HIỂN THỊ CHUẨN SCREEN 3: KHI ĐÃ GHÉP ĐÔI (ẨN CARD NHẬP MÃ, HIỆN THẺ BẢO VỆ TINH GỌN VÀ LƯỚI 4 QUYỀN AN TOÀN)
     private fun showStudentPairedState(code: String) {
         layoutStudentCard.visibility = View.GONE
         layoutStudentPairedState.visibility = View.VISIBLE
-        tvGreeting.text = "Xin chào ............ ,"
-        tvCompanionBadge.text = "ĐÃ GHÉP ĐÔI"
-        tvPairedCodeDisplay.text = code
+        tvPairedCodeDisplay.text = "MÃ GIA ĐÌNH: $code"
     }
 
     private fun showStudentUnpairedState() {
@@ -1827,41 +1790,5 @@ class MainActivity : AppCompatActivity() {
                 .setPositiveButton("Tuyệt Vời", null)
                 .show()
         }
-    }
-
-    private fun refreshQuickPermissionStatus() {
-        val hasA11y = hasAccessibilityPermission()
-        val hasUsage = hasUsageStatsPermission()
-
-        val activeColor = Color.parseColor("#10B981")
-        val inactiveColor = Color.parseColor("#EF4444")
-
-        dotQuickAccessibility?.setTextColor(if (hasA11y) activeColor else inactiveColor)
-        dotQuickAccessibilityPre?.setTextColor(if (hasA11y) activeColor else inactiveColor)
-
-        dotQuickUsageAccess?.setTextColor(if (hasUsage) activeColor else inactiveColor)
-        dotQuickUsageAccessPre?.setTextColor(if (hasUsage) activeColor else inactiveColor)
-
-        val isFullyActive = hasA11y && hasUsage
-        val wizardBg = if (isFullyActive) R.drawable.bg_wizard_btn_active else R.drawable.bg_wizard_btn
-        val wizardIcon = when {
-            isFullyActive -> "🛡️"
-            !hasA11y -> "⚡"
-            else -> "📊"
-        }
-        val wizardTitle = when {
-            isFullyActive -> "✅ BẢO VỆ TOÀN DIỆN ĐÃ KÍCH HOẠT (100%)"
-            !hasA11y -> "⚡ KÍCH HOẠT QUYỀN BẢO VỆ 1-CHẠM"
-            else -> "📊 KÍCH HOẠT QUYỀN DỮ LIỆU (BƯỚC 2)"
-        }
-
-        btnSmartPermissionWizard?.setBackgroundResource(wizardBg)
-        btnSmartPermissionWizardPre?.setBackgroundResource(wizardBg)
-
-        tvWizardIcon?.text = wizardIcon
-        tvWizardIconPre?.text = wizardIcon
-
-        tvWizardTitle?.text = wizardTitle
-        tvWizardTitlePre?.text = wizardTitle
     }
 }
