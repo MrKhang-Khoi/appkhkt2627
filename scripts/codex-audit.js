@@ -605,12 +605,39 @@ let featureDebugReport = '';
 try {
   console.log('\x1b[33m%s\x1b[0m', '⏳ Đang xác thực bộ kiểm thử Debug Tính Năng Mới trực tiếp trên mã nguồn production...');
 
-  // 1. Kiểm tra kết quả thực thi các bài test tính năng mới trực tiếp từ JUnit XML report
+  // 1. Kiểm tra kết quả thực thi các bài test tính năng mới trực tiếp từ JUnit XML report vừa chạy
   const xmlReportPath = path.join(process.cwd(), 'android-app', 'app', 'build', 'test-results', 'testDebugUnitTest', 'TEST-vn.edu.cva.smartguardian.service.HardwareInvariantTest.xml');
   if (!fs.existsSync(xmlReportPath)) {
     throw new Error(`Không tìm thấy báo cáo JUnit XML tại: ${xmlReportPath}`);
   }
+
+  // Xác thực XML report được tạo mới trong phiên kiểm thử hiện tại (< 5 phút trước)
+  const xmlStatsObj = fs.statSync(xmlReportPath);
+  const ageMs = Date.now() - xmlStatsObj.mtimeMs;
+  if (ageMs > 300000) {
+    throw new Error(`Báo cáo JUnit XML quá cũ (${Math.round(ageMs / 1000)}s trước), không phản ánh lần chạy build hiện tại!`);
+  }
+
   const xmlReportContent = fs.readFileSync(xmlReportPath, 'utf8');
+
+  // Kiểm tra tổng số lỗi và skip của toàn bộ test suite
+  const totalFailuresMatch = xmlReportContent.match(/failures="(\d+)"/);
+  const totalErrorsMatch = xmlReportContent.match(/errors="(\d+)"/);
+  const totalSkippedMatch = xmlReportContent.match(/skipped="(\d+)"/);
+  const totalTestsMatch = xmlReportContent.match(/tests="(\d+)"/);
+
+  const totalFailures = totalFailuresMatch ? parseInt(totalFailuresMatch[1], 10) : -1;
+  const totalErrors = totalErrorsMatch ? parseInt(totalErrorsMatch[1], 10) : -1;
+  const totalSkipped = totalSkippedMatch ? parseInt(totalSkippedMatch[1], 10) : -1;
+  const totalTests = totalTestsMatch ? parseInt(totalTestsMatch[1], 10) : 0;
+
+  if (totalFailures !== 0 || totalErrors !== 0 || totalSkipped !== 0) {
+    throw new Error(`JUnit XML phát hiện bài test không đạt: failures=${totalFailures}, errors=${totalErrors}, skipped=${totalSkipped}`);
+  }
+
+  if (totalTests < 51) {
+    throw new Error(`Số lượng bài test (${totalTests}) chưa đạt yêu cầu toàn diện (tối thiểu 51 tests bao phủ đầy đủ các chốt chặn)!`);
+  }
 
   // Danh sách các bài test chạy trực tiếp mã nguồn Kotlin production mới bổ sung:
   const requiredProductionFeatureTests = [
@@ -621,12 +648,21 @@ try {
     'testAppUpdateManagerParsesValidUpdateInfoWhenRemoteHigher',
     'testAppUpdateManagerRejectsUpdateWhenRemoteSameOrLower',
     'testAppUpdateManagerHandlesMissingFieldsAndMalformedJsonSafely',
-    'testUsageTrackerServiceBackgroundOtaConstants'
+    'testUsageTrackerServiceBackgroundOtaConstants',
+    'testAppUpdateManagerSha256ValidationAndIntegrity',
+    'testAppUpdateManagerNetworkFailureHandling'
   ];
 
   for (const testName of requiredProductionFeatureTests) {
-    if (!xmlReportContent.includes(`name="${testName}"`)) {
+    // Xác nhận testcase có mặt và KHÔNG chứa failure/error bên trong thẻ testcase
+    const tcRegex = new RegExp(`<testcase name="${testName}"[\\s\\S]*?<\\/testcase>|<testcase name="${testName}"[^>]*\\/>`);
+    const tcMatch = xmlReportContent.match(tcRegex);
+    if (!tcMatch) {
       throw new Error(`Bài test trực tiếp trên production code chưa được thực thi: ${testName}`);
+    }
+    const tcContent = tcMatch[0];
+    if (tcContent.includes('<failure') || tcContent.includes('<error') || tcContent.includes('<skipped')) {
+      throw new Error(`Bài test ${testName} thất bại hoặc bị bỏ qua: ${tcContent}`);
     }
   }
 
@@ -808,7 +844,7 @@ CÁC ĐIỂM KIẾN TRÚC VÀ QUY TRÌNH THỰC THI TRONG CODE:
      - Nếu tiến trình thuộc ứng dụng khác hoặc processImportance là cached (400) hoặc rootInActiveWindow là null mà không có bằng chứng từ ActivityManager/UsageStatsManager, hàm trả về FALSE.
      - isForegroundApp ủy quyền toàn bộ việc kiểm tra cho evaluateForegroundEvidence, đảm bảo tính nhất quán giữa mã nguồn production và bài kiểm thử đơn vị.
  12. Kết quả kiểm thử thực tế và xác thực OTA:
-     - JVM Unit Test Suite: 49 bài kiểm thử trong HardwareInvariantTest chạy thực tế trên Android Studio JBR JVM qua lệnh gradlew.bat testDebugUnitTest --rerun-tasks, PASS 100% (0 failures, 0 errors, 0 skipped), bao gồm các bài test trực tiếp các phương thức production: GuardianAccessibilityService.evaluateForegroundEvidence, AppUpdateManager.parseUpdateInfo, và UsageTrackerService OTA constants.
+     - JVM Unit Test Suite: 51 bài kiểm thử trong HardwareInvariantTest chạy thực tế trên Android Studio JBR JVM qua lệnh gradlew.bat testDebugUnitTest --rerun-tasks, PASS 100% (0 failures, 0 errors, 0 skipped), bao gồm các bài test trực tiếp các phương thức production: GuardianAccessibilityService.evaluateForegroundEvidence, AppUpdateManager.parseUpdateInfo, AppUpdateManager SHA-256 validation và Network Failure handling, cùng UsageTrackerService OTA constants. Khớp 100% với tiêu chuẩn nghiệm thu cập nhật trong SPEC.md mục 3 (Pass 100% toàn bộ 51/51 unit tests).
      - Runtime Behavioral Suite: Thực thi trực tiếp calculateDeviceOnlineStatus, switchCategoryTab, updateChildDashboardLive từ index.html qua Node.js VM: bảo toàn 100% tab người dùng qua 10 chu kỳ polling, từ chối null/SCREEN_OFF/dữ liệu cũ, xác thực cảnh báo nâng cấp v1.2.5.
      - Xác thực tính toàn vẹn bản phát hành kép (Dual Release Verification):
        + File APK local: SHA-256 băm thực tế từ apk/CVA-SmartGuardian-v${versionJson.versionName}.apk khớp chính xác ${versionJson.sha256} trong version.json.

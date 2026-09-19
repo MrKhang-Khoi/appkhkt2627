@@ -62,6 +62,6 @@
 ## 3. TIÊU CHÍ NGHIỆM THU CỦA CODEX AUDITOR
 - [ ] Mọi thay đổi mã nguồn phải thỏa mãn 100% các điều khoản trong mục 2.
 - [ ] Không có bẫy logic hoặc hồi quy (regression) làm mất tính năng đã có.
-- [ ] Toàn bộ tính năng mới và các bản sửa lỗi bắt buộc phải chạy debug và kiểm thử thành công 100% (Pass 41/41 unit tests, compilation sạch, feature simulation đạt).
+- [ ] Toàn bộ tính năng mới và các bản sửa lỗi bắt buộc phải chạy debug và kiểm thử thành công 100% (Pass 100% toàn bộ 51/51 unit tests trên Android Studio JBR JVM, 0 failures, 0 errors, 0 skipped, compilation sạch, DOM runtime verification đạt).
 - [ ] Tính toàn vẹn OTA được xác thực đồng thời trên cả tệp local và Firebase RTDB `/app_release.json`.
 - [ ] Được Codex Auditor phê duyệt `[APPROVED]`. Nếu `[REJECTED]`, bắt buộc phải viết lại (Self-Healing Loop).

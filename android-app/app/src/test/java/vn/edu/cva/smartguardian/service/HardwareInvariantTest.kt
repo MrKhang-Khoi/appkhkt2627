@@ -1412,6 +1412,50 @@ class HardwareInvariantTest {
         assertEquals(2002, UsageTrackerService.OTA_NOTIFICATION_ID)
     }
 
+    @Test
+    fun testAppUpdateManagerSha256ValidationAndIntegrity() {
+        val validSha = "13A37900B8A9559042996F255531C1F1CEFAA17D5E8110F5B0A53D7D9741F684"
+        val json = JSONObject().apply {
+            put("versionCode", 25)
+            put("latestVersionCode", 25)
+            put("versionName", "1.2.5")
+            put("latestVersionName", "1.2.5")
+            put("apkUrl", "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.2.5.apk")
+            put("sha256", validSha)
+            put("fileSize", "5.79 MB")
+        }
+
+        val updateInfo = AppUpdateManager.parseUpdateInfo(json, currentVersionCode = 24)
+        assertNotNull(updateInfo)
+        assertEquals(validSha, updateInfo?.sha256)
+        assertEquals(64, updateInfo?.sha256?.length)
+        assertTrue("SHA-256 must be valid hex format", updateInfo?.sha256?.matches(Regex("^[0-9A-Fa-f]{64}$")) == true)
+        assertEquals("1.2.5", updateInfo?.versionName)
+        assertEquals(25, updateInfo?.versionCode)
+    }
+
+    @Test
+    fun testAppUpdateManagerNetworkFailureHandling() {
+        // Test with a custom interceptor that throws an IOException
+        val errorClient = OkHttpClient.Builder()
+            .addInterceptor {
+                throw java.io.IOException("Simulated connection timeout to remote OTA server")
+            }
+            .build()
+
+        val originalClient = AppUpdateManager.httpClient
+        try {
+            AppUpdateManager.httpClient = errorClient
+            // Verify that fetch failures return null without crashing or throwing unhandled exceptions
+            val method = AppUpdateManager.javaClass.getDeclaredMethod("fetchVersionJson", String::class.java)
+            method.isAccessible = true
+            val result = method.invoke(AppUpdateManager, "https://invalid.endpoint/app_release.json")
+            assertNull("Network failure must safely return null without throwing", result)
+        } finally {
+            AppUpdateManager.httpClient = originalClient
+        }
+    }
+
     private class FakeTestContext(
         val prefs: FakeSharedPreferences
     ) : ContextWrapper(null) {

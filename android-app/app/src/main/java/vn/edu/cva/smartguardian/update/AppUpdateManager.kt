@@ -35,7 +35,8 @@ object AppUpdateManager {
     const val FIREBASE_VERSION_URL = "https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/app_release.json"
     const val GITHUB_VERSION_URL = "https://mrkhang-khoi.github.io/appkhkt2627/version.json"
 
-    private val httpClient = OkHttpClient.Builder()
+    @Volatile
+    internal var httpClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
         .build()
