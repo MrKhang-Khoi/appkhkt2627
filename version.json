@@ -2,17 +2,18 @@
     "isForceUpdate": true,
     "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.0.apk",
     "minSupportedVersion": 1,
-    "releaseDate": "2026-09-18",
-    "sha256": "5757EDC4BC2B9F2CB37A70AF767391CCB16A0CBBC2FC8B108896CCDD9269D6DA",
-    "versionName": "1.1.4",
-    "versionCode": 14,
-    "latestVersionName": "1.1.4",
-    "latestVersionCode": 14,
+    "releaseDate": "2026-09-19",
+    "sha256": "F7357A9045652A1DED2004434B034C4E9380402378B6ABEF271275296EDD6BD6",
+    "versionName": "1.1.5",
+    "versionCode": 15,
+    "latestVersionName": "1.1.5",
+    "latestVersionCode": 15,
     "changelog": [
-        "Tích hợp tính năng Định vị con thời gian thực (Live GPS & On-Demand Locator)",
-        "Bản đồ tương tác OpenStreetMap & Leaflet trực tiếp trên bảng điều khiển phụ huynh",
-        "Đo lường sai số GPS, địa chỉ đường phố, mức pin thiết bị và nút chỉ đường Google Maps",
-        "Tối ưu hóa pin On-Demand (0% hao pin khi ở chế độ chờ), tự động tắt GPS sau khi quét"
+        "Giám sát ứng dụng đang mở thời gian thực (<1ms) qua Android AccessibilityService chuẩn AOSP",
+        "Thống kê lịch sử các ứng dụng đã mở hôm nay (App Usage History Timeline) kèm thời lượng chi tiết",
+        "Phân loại thông minh: Học tập, Trò chơi, Mạng xã hội, Tiện ích theo chuẩn CVA Digital Balance",
+        "Tương thích 100% mọi dòng máy Android (Samsung, Xiaomi, Oppo, Vivo, Google Pixel... - Zero Brand Lock)",
+        "Bảng điều khiển phụ huynh cập nhật trực tiếp biểu đồ thời gian và mốc sử dụng từng ứng dụng"
     ],
     "fileSize": "5.73 MB"
 }

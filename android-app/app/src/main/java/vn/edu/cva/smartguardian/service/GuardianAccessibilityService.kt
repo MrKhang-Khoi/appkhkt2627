@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService
 import android.content.Intent
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import vn.edu.cva.smartguardian.data.AppClassifier
 import vn.edu.cva.smartguardian.data.WebFilterList
 import vn.edu.cva.smartguardian.ui.BlockedActivity
 
@@ -24,6 +25,8 @@ class GuardianAccessibilityService : AccessibilityService() {
     private var lastCheckedUrl: String = ""
     private var lastBlockTimestamp: Long = 0L
     private var lastHeartbeatTimestamp: Long = 0L
+    private var lastActivePackage: String = ""
+    private var lastActiveUploadTimestamp: Long = 0L
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
@@ -37,10 +40,84 @@ class GuardianAccessibilityService : AccessibilityService() {
 
         val packageName = event.packageName?.toString() ?: return
 
-        // 1. Chỉ xử lý khi sự kiện đến từ các ứng dụng duyệt web
+        // 1. Bắt sự kiện chuyển cửa sổ (TYPE_WINDOW_STATE_CHANGED) để giám sát ĐANG MỞ CÁI GÌ
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            handleWindowStateChanged(packageName)
+        }
+
+        // 2. Chỉ xử lý khi sự kiện đến từ các ứng dụng duyệt web để lọc web độc hại
         if (BROWSER_PACKAGES.contains(packageName)) {
             val rootNode = rootInActiveWindow ?: return
             inspectBrowserNodeForUrl(rootNode)
+        }
+    }
+
+    private fun handleWindowStateChanged(packageName: String) {
+        val now = System.currentTimeMillis()
+        if (packageName == lastActivePackage && now - lastActiveUploadTimestamp < 10_000L) {
+            return
+        }
+
+        // Bỏ qua nếu là chính app CVA-SmartGuardian, bàn phím gõ chữ hoặc System UI
+        if (packageName == applicationContext.packageName ||
+            packageName == "com.android.systemui" ||
+            packageName.contains("inputmethod") ||
+            packageName.contains("keyboard") ||
+            packageName == "com.google.android.inputmethod.latin" ||
+            packageName == "com.vng.inputmethod.labankey"
+        ) {
+            return
+        }
+
+        val isHome = isDefaultLauncher(packageName)
+        if (isHome) {
+            if (lastActivePackage != "HOME") {
+                lastActivePackage = "HOME"
+                lastActiveUploadTimestamp = now
+                UsageTrackerService.reportActiveApp(
+                    context = this,
+                    packageName = packageName,
+                    appName = "Màn hình chính / Màn hình khóa",
+                    category = "HOME",
+                    categoryLabel = "Màn hình chính",
+                    isForeground = false
+                )
+            }
+            return
+        }
+
+        lastActivePackage = packageName
+        lastActiveUploadTimestamp = now
+
+        var appInfo: android.content.pm.ApplicationInfo? = null
+        val appLabel = try {
+            appInfo = packageManager.getApplicationInfo(packageName, 0)
+            packageManager.getApplicationLabel(appInfo).toString()
+        } catch (e: Exception) {
+            packageName
+        }
+
+        val metadata = AppClassifier.classify(packageName, appLabel, appInfo)
+
+        UsageTrackerService.reportActiveApp(
+            context = this,
+            packageName = packageName,
+            appName = metadata.appName.ifEmpty { appLabel },
+            category = metadata.category.name,
+            categoryLabel = metadata.category.displayName,
+            isForeground = true
+        )
+    }
+
+    private fun isDefaultLauncher(packageName: String): Boolean {
+        return try {
+            val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+            val resolveInfo = packageManager.resolveActivity(intent, 0)
+            resolveInfo?.activityInfo?.packageName == packageName ||
+                    packageName.contains("launcher") ||
+                    packageName.contains("home")
+        } catch (e: Exception) {
+            false
         }
     }
 

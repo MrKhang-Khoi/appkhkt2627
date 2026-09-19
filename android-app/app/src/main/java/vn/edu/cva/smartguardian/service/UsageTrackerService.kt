@@ -174,6 +174,51 @@ class UsageTrackerService : Service() {
             }
         }
 
+        fun reportActiveApp(
+            context: Context,
+            packageName: String,
+            appName: String,
+            category: String,
+            categoryLabel: String,
+            isForeground: Boolean
+        ) {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val pairedCode = prefs.getString("paired_code", "") ?: ""
+            if (pairedCode.isEmpty()) return
+            val androidId = prefs.getString("device_id", "")?.takeIf { it.isNotEmpty() }
+                ?: Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+                ?: "UNKNOWN"
+
+            syncScope.launch {
+                try {
+                    val mediaType = "application/json; charset=utf-8".toMediaType()
+                    val activeJson = JSONObject().apply {
+                        put("packageName", packageName)
+                        put("appName", appName)
+                        put("category", category)
+                        put("categoryLabel", categoryLabel)
+                        put("timestamp", System.currentTimeMillis())
+                        put("isForeground", isForeground)
+                    }
+                    val body = activeJson.toString().toRequestBody(mediaType)
+
+                    val reqFam = okhttp3.Request.Builder()
+                        .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId/active_app.json")
+                        .put(body)
+                        .build()
+                    sharedHttpClient.newCall(reqFam).execute().close()
+
+                    val reqDev = okhttp3.Request.Builder()
+                        .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$androidId/active_app.json")
+                        .put(body)
+                        .build()
+                    sharedHttpClient.newCall(reqDev).execute().close()
+                } catch (e: Exception) {
+                    Log.w("UsageTrackerService", "reportActiveApp failed: ${e.message}")
+                }
+            }
+        }
+
         fun collectAndSave(context: Context) {
             val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager ?: return
 
@@ -203,6 +248,17 @@ class UsageTrackerService : Service() {
 
             val pm = context.packageManager
 
+            data class AppHistoryRecord(
+                val packageName: String,
+                val appName: String,
+                val category: String,
+                val categoryLabel: String,
+                val totalTimeMs: Long,
+                val durationMinutes: Int,
+                val lastTimeUsed: Long
+            )
+            val appList = mutableListOf<AppHistoryRecord>()
+
             for (stat in statsCollection) {
                 val totalTime = stat.totalTimeInForeground
                 if (totalTime <= 0) continue
@@ -221,6 +277,42 @@ class UsageTrackerService : Service() {
                     AppCategory.GAME -> gameTimeMs += totalTime
                     AppCategory.SOCIAL -> socialTimeMs += totalTime
                     AppCategory.UTILITY, AppCategory.OTHER -> utilityTimeMs += totalTime
+                }
+
+                val isSystemOrSelf = stat.packageName == context.packageName ||
+                        stat.packageName == "com.android.systemui" ||
+                        stat.packageName.contains("inputmethod") ||
+                        stat.packageName.contains("keyboard") ||
+                        stat.packageName.contains("launcher")
+
+                if (!isSystemOrSelf && totalTime >= 15_000L) {
+                    appList.add(
+                        AppHistoryRecord(
+                            packageName = stat.packageName,
+                            appName = appLabel,
+                            category = metadata.category.name,
+                            categoryLabel = metadata.category.displayName,
+                            totalTimeMs = totalTime,
+                            durationMinutes = (totalTime / 60000L).toInt().coerceAtLeast(1),
+                            lastTimeUsed = stat.lastTimeUsed
+                        )
+                    )
+                }
+            }
+
+            appList.sortByDescending { it.totalTimeMs }
+            val topApps = appList.take(15)
+            val appHistoryJsonArray = org.json.JSONArray().apply {
+                for (item in topApps) {
+                    put(JSONObject().apply {
+                        put("packageName", item.packageName)
+                        put("appName", item.appName)
+                        put("category", item.category)
+                        put("categoryLabel", item.categoryLabel)
+                        put("totalTimeMs", item.totalTimeMs)
+                        put("durationMinutes", item.durationMinutes)
+                        put("lastTimeUsed", item.lastTimeUsed)
+                    })
                 }
             }
 
@@ -268,7 +360,15 @@ class UsageTrackerService : Service() {
                             put("balanceScore", balanceScore)
                             put("lastSync", now)
                             put("lastHeartbeat", now)
+                            put("appHistory", appHistoryJsonArray)
                         }
+
+                        val historyBody = appHistoryJsonArray.toString().toRequestBody(mediaType)
+                        val reqFamHist = okhttp3.Request.Builder()
+                            .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId/app_history.json")
+                            .put(historyBody)
+                            .build()
+                        sharedHttpClient.newCall(reqFamHist).execute().close()
 
                         // Cập nhật đồng thời nhánh device: online = true, lastSync = now, kèm usage
                         val devicePatch = JSONObject().apply {
@@ -276,6 +376,7 @@ class UsageTrackerService : Service() {
                             put("lastSync", now)
                             put("lastHeartbeat", now)
                             put("usage", usageJson)
+                            put("app_history", appHistoryJsonArray)
                         }
                         val patchBody = devicePatch.toString().toRequestBody(mediaType)
 
