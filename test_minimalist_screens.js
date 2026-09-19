@@ -140,8 +140,8 @@ server.listen(PORT, async () => {
     // 3. Verify Download link
     const downloadHref = await page.getAttribute('a[download]', 'href');
     console.log(`Download APK Href: ${downloadHref}`);
-    if (!downloadHref.includes('v1.2.0')) {
-      throw new Error(`Download link does not point to v1.2.0! Got: ${downloadHref}`);
+    if (!downloadHref.includes('v1.2.1')) {
+      throw new Error(`Download link does not point to v1.2.1! Got: ${downloadHref}`);
     }
 
     console.log(`Total console errors: ${consoleErrors.length}`);

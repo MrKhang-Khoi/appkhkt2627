@@ -85,11 +85,11 @@ class MainActivity : AppCompatActivity() {
     // 3. Tab Phụ Huynh: Screen 2 (Parent Hub)
     private lateinit var layoutParentHub: LinearLayout
     private lateinit var tvParentHubFamilyCode: TextView
-    private lateinit var btnParentCopyCode: TextView
-    private lateinit var btnParentRegenCode: TextView
+    private lateinit var btnParentCopyCode: View
+    private lateinit var btnParentRegenCode: View
     private lateinit var tvParentChildSubtitle: TextView
-    private lateinit var btnParentTriggerUnpair: TextView
-    private lateinit var btnLockParentTab: TextView
+    private lateinit var btnParentTriggerUnpair: View
+    private lateinit var btnLockParentTab: View
 
     // 4. Tab Học Sinh: Screen 3 (Student Card & Paired State)
     private lateinit var layoutStudentCard: LinearLayout
@@ -156,39 +156,44 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        initViews()
-        setupListeners()
+        try {
+            initViews()
+            setupListeners()
 
-        // 1. Tự động quét cập nhật tức thời qua Firebase Cloud
-        performUpdateCheck(userInitiated = false)
+            // 1. Tự động quét cập nhật tức thời qua Firebase Cloud
+            performUpdateCheck(userInitiated = false)
 
-        // 2. Kiểm tra & yêu cầu quyền vị trí nếu chưa có
-        if (!LocationHelper.hasLocationPermission(this)) {
-            locationPermissionLauncher.launch(
-                arrayOf(
-                    android.Manifest.permission.ACCESS_FINE_LOCATION,
-                    android.Manifest.permission.ACCESS_COARSE_LOCATION
+            // 2. Kiểm tra & yêu cầu quyền vị trí nếu chưa có
+            if (!LocationHelper.hasLocationPermission(this)) {
+                locationPermissionLauncher.launch(
+                    arrayOf(
+                        android.Manifest.permission.ACCESS_FINE_LOCATION,
+                        android.Manifest.permission.ACCESS_COARSE_LOCATION
+                    )
                 )
-            )
-        }
-
-        // 3. Mặc định khởi động ở Tab Học Sinh chuẩn Screen 3
-        switchToStudentTab()
-
-        val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
-        val isPaired = prefs.getBoolean("is_paired", false)
-        val pairedCode = prefs.getString("paired_code", "") ?: ""
-
-        if (isPaired && pairedCode.isNotEmpty()) {
-            showStudentPairedState(pairedCode)
-            UsageTrackerService.start(this)
-            startUnpairListener(pairedCode)
-            startHeartbeatLoop(pairedCode)
-            lifecycleScope.launch(Dispatchers.IO) {
-                sendHeartbeatPing(pairedCode)
             }
-        } else {
-            showStudentUnpairedState()
+
+            // 3. Mặc định khởi động ở Tab Học Sinh chuẩn Screen 3
+            switchToStudentTab()
+
+            val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
+            val isPaired = prefs.getBoolean("is_paired", false)
+            val pairedCode = prefs.getString("paired_code", "") ?: ""
+
+            if (isPaired && pairedCode.isNotEmpty()) {
+                showStudentPairedState(pairedCode)
+                UsageTrackerService.start(this)
+                startUnpairListener(pairedCode)
+                startHeartbeatLoop(pairedCode)
+                lifecycleScope.launch(Dispatchers.IO) {
+                    sendHeartbeatPing(pairedCode)
+                }
+            } else {
+                showStudentUnpairedState()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Lỗi nghiêm trọng khi khởi tạo MainActivity: ${e.message}", e)
+            Toast.makeText(this, "Khởi động giao diện: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
         }
     }
 
