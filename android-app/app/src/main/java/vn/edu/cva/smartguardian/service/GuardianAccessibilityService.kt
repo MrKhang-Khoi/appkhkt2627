@@ -36,6 +36,11 @@ class GuardianAccessibilityService : AccessibilityService() {
     private var currentForegroundPackage: String = ""
     private var currentForegroundStartTime: Long = 0L
 
+    override fun onCreate() {
+        super.onCreate()
+        WebFilterList.loadFromPreferences(this)
+    }
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
 

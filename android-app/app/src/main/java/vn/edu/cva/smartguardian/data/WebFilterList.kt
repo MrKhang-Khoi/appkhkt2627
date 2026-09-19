@@ -1,14 +1,18 @@
 package vn.edu.cva.smartguardian.data
 
+import android.content.Context
 import java.net.URI
 import java.util.Locale
+import java.util.concurrent.CopyOnWriteArraySet
 
 enum class WebCategory(val title: String) {
     SAFE("An toàn"),
     ADULT("Nội dung khiêu dâm, người lớn"),
     GAMBLING("Cờ bạc, cá cược trực tuyến"),
     SCAM("Lừa đảo, giả mạo, mã độc"),
-    VIOLENCE("Bạo lực, vũ khí, chất cấm")
+    VIOLENCE("Bạo lực, vũ khí, chất cấm"),
+    BLOCKED_BY_PARENT("Bị chặn bởi phụ huynh"),
+    STUDY_RESTRICTED("Hạn chế trong giờ học")
 }
 
 data class FilterResult(
@@ -79,6 +83,65 @@ object WebFilterList {
         "kiem-tien-tai-nha", "vay-nong-nhanh"
     )
 
+    // 3. DANH SÁCH GIÁO DỤC ĐƯỢC PHÉP TRONG CHẾ ĐỘ GIỜ HỌC (DEFAULT STUDY WHITELIST)
+    val DEFAULT_STUDY_WHITELIST = setOf(
+        "azota.vn", "olm.vn", "hocmai.vn", "vietjack.com", "loigiaihay.com",
+        "khanacademy.org", "scratch.mit.edu", "violet.vn", "tuyensinh247.com",
+        "vuihoc.vn", "trangnguyen.edu.vn", "moet.gov.vn", "wikipedia.org",
+        "duolingo.com", "quizlet.com", "hoidap247.com", "cunghocvui.com",
+        "onluyen.vn", "tienganh123.com", "mathx.vn"
+    )
+
+    // Bộ quy tắc động được cấu hình bởi phụ huynh từ Web Dashboard
+    private val customBlacklist = CopyOnWriteArraySet<String>()
+    private val customWhitelist = CopyOnWriteArraySet<String>()
+    @Volatile
+    private var isStudyMode = false
+
+    /**
+     * Cập nhật danh sách quy tắc lọc web tùy chỉnh từ phụ huynh
+     */
+    fun updateCustomRules(blacklist: Set<String>, whitelist: Set<String>, studyMode: Boolean) {
+        customBlacklist.clear()
+        customBlacklist.addAll(blacklist.map { it.trim().lowercase(Locale.ROOT) }.filter { it.isNotEmpty() })
+
+        customWhitelist.clear()
+        customWhitelist.addAll(whitelist.map { it.trim().lowercase(Locale.ROOT) }.filter { it.isNotEmpty() })
+
+        isStudyMode = studyMode
+    }
+
+    fun isStudyModeEnabled(): Boolean = isStudyMode
+    fun getCustomBlacklist(): Set<String> = customBlacklist.toSet()
+    fun getCustomWhitelist(): Set<String> = customWhitelist.toSet()
+
+    /**
+     * Nạp cấu hình quy tắc web đã lưu trong SharedPreferences khi khởi động
+     */
+    fun loadFromPreferences(context: Context) {
+        try {
+            val prefs = context.getSharedPreferences("cva_web_rules", Context.MODE_PRIVATE)
+            val bl = prefs.getStringSet("custom_blacklist", emptySet()) ?: emptySet()
+            val wl = prefs.getStringSet("custom_whitelist", emptySet()) ?: emptySet()
+            val sm = prefs.getBoolean("study_mode", false)
+            updateCustomRules(bl, wl, sm)
+        } catch (_: Exception) {}
+    }
+
+    /**
+     * Lưu cấu hình quy tắc web vào SharedPreferences để dùng offline
+     */
+    fun saveToPreferences(context: Context) {
+        try {
+            val prefs = context.getSharedPreferences("cva_web_rules", Context.MODE_PRIVATE)
+            prefs.edit()
+                .putStringSet("custom_blacklist", customBlacklist)
+                .putStringSet("custom_whitelist", customWhitelist)
+                .putBoolean("study_mode", isStudyMode)
+                .apply()
+        } catch (_: Exception) {}
+    }
+
     /**
      * Kiểm tra một URL hoặc tên miền xem có thuộc danh mục bị chặn hay không
      */
@@ -92,7 +155,42 @@ object WebFilterList {
         // Trích xuất hostname từ URL
         val host = extractHostname(cleanUrl)
 
-        // 1. Kiểm tra chính xác tên miền hoặc tên miền cha (Domain & Subdomain Matching)
+        // 0. NẾU ĐANG BẬT CHẾ ĐỘ GIỜ HỌC: CHỈ CHO PHÉP TRUY CẬP TRANG HỌC TẬP
+        if (isStudyMode) {
+            val isEducational = DEFAULT_STUDY_WHITELIST.any { edu -> host == edu || host.endsWith(".$edu") } ||
+                    customWhitelist.any { wl -> host == wl || host.endsWith(".$wl") }
+
+            if (!isEducational) {
+                return FilterResult(
+                    isBlocked = true,
+                    category = WebCategory.STUDY_RESTRICTED,
+                    reason = "Đang trong Chế độ Giờ Học. Thiết bị chỉ cho phép truy cập các trang web học tập do nhà trường và phụ huynh quy định.",
+                    matchedDomainOrKeyword = host
+                )
+            }
+            return FilterResult(false, WebCategory.SAFE, "An toàn (Trang web học tập)")
+        }
+
+        // 1. ƯU TIÊN DANH SÁCH NGOẠI LỆ AN TOÀN CỦA PHỤ HUYNH (CUSTOM WHITELIST OVERRIDE)
+        for (whiteDomain in customWhitelist) {
+            if (host == whiteDomain || host.endsWith(".$whiteDomain")) {
+                return FilterResult(false, WebCategory.SAFE, "Được cho phép bởi phụ huynh", whiteDomain)
+            }
+        }
+
+        // 2. KIỂM TRA DANH SÁCH CHẶN TÙY CHỈNH CỦA PHỤ HUYNH (CUSTOM BLACKLIST)
+        for (blackDomain in customBlacklist) {
+            if (host == blackDomain || host.endsWith(".$blackDomain")) {
+                return FilterResult(
+                    isBlocked = true,
+                    category = WebCategory.BLOCKED_BY_PARENT,
+                    reason = "Trang web đã bị phụ huynh đưa vào danh sách hạn chế truy cập của gia đình.",
+                    matchedDomainOrKeyword = blackDomain
+                )
+            }
+        }
+
+        // 3. Kiểm tra chính xác tên miền hoặc tên miền cha (Domain & Subdomain Matching)
         for ((domain, category) in BLOCKED_DOMAINS) {
             if (host == domain || host.endsWith(".$domain")) {
                 return FilterResult(
@@ -104,7 +202,7 @@ object WebFilterList {
             }
         }
 
-        // 2. Phân tích ngữ nghĩa từ khóa trong đường dẫn URL (Keyword Inspection)
+        // 4. Phân tích ngữ nghĩa từ khóa trong đường dẫn URL (Keyword Inspection)
         for (kw in ADULT_KEYWORDS) {
             if (cleanUrl.contains(kw)) {
                 return FilterResult(

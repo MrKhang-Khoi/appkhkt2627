@@ -21,6 +21,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import vn.edu.cva.smartguardian.data.AppCategory
 import vn.edu.cva.smartguardian.data.AppClassifier
+import vn.edu.cva.smartguardian.data.WebFilterList
 import vn.edu.cva.smartguardian.ui.MainActivity
 import android.provider.Settings
 import android.util.Log
@@ -170,6 +171,90 @@ class UsageTrackerService : Service() {
                     }
                 } catch (e: Exception) {
                     Log.w("UsageTrackerService", "checkLocationRequest error: ${e.message}")
+                }
+            }
+        }
+
+        fun syncWebRules(context: Context) {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val pairedCode = prefs.getString("paired_code", "") ?: ""
+            if (pairedCode.isEmpty()) return
+            val androidId = prefs.getString("device_id", "")?.takeIf { it.isNotEmpty() }
+                ?: Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+                ?: "UNKNOWN"
+
+            syncScope.launch {
+                try {
+                    var rulesJsonStr: String? = null
+                    val reqDev = okhttp3.Request.Builder()
+                        .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId/web_rules.json")
+                        .build()
+
+                    sharedHttpClient.newCall(reqDev).execute().use { resDev ->
+                        if (resDev.isSuccessful) {
+                            val b = resDev.body?.string()
+                            if (!b.isNullOrEmpty() && b != "null") {
+                                rulesJsonStr = b
+                            }
+                        }
+                    }
+
+                    if (rulesJsonStr == null) {
+                        val reqFam = okhttp3.Request.Builder()
+                            .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/web_rules.json")
+                            .build()
+                        sharedHttpClient.newCall(reqFam).execute().use { resFam ->
+                            if (resFam.isSuccessful) {
+                                val b = resFam.body?.string()
+                                if (!b.isNullOrEmpty() && b != "null") {
+                                    rulesJsonStr = b
+                                }
+                            }
+                        }
+                    }
+
+                    if (!rulesJsonStr.isNullOrEmpty() && rulesJsonStr != "null") {
+                        val json = JSONObject(rulesJsonStr)
+                        val blacklistSet = mutableSetOf<String>()
+                        val whitelistSet = mutableSetOf<String>()
+
+                        val blArray = json.optJSONArray("custom_blacklist")
+                        if (blArray != null) {
+                            for (i in 0 until blArray.length()) {
+                                val d = blArray.optString(i, "").trim().lowercase()
+                                if (d.isNotEmpty()) blacklistSet.add(d)
+                            }
+                        } else if (json.has("custom_blacklist") && json.get("custom_blacklist") is JSONObject) {
+                            val blObj = json.getJSONObject("custom_blacklist")
+                            val keys = blObj.keys()
+                            while (keys.hasNext()) {
+                                val d = keys.next().trim().lowercase()
+                                if (d.isNotEmpty()) blacklistSet.add(d)
+                            }
+                        }
+
+                        val wlArray = json.optJSONArray("custom_whitelist")
+                        if (wlArray != null) {
+                            for (i in 0 until wlArray.length()) {
+                                val d = wlArray.optString(i, "").trim().lowercase()
+                                if (d.isNotEmpty()) whitelistSet.add(d)
+                            }
+                        } else if (json.has("custom_whitelist") && json.get("custom_whitelist") is JSONObject) {
+                            val wlObj = json.getJSONObject("custom_whitelist")
+                            val keys = wlObj.keys()
+                            while (keys.hasNext()) {
+                                val d = keys.next().trim().lowercase()
+                                if (d.isNotEmpty()) whitelistSet.add(d)
+                            }
+                        }
+
+                        val studyMode = json.optBoolean("study_mode", false)
+
+                        WebFilterList.updateCustomRules(blacklistSet, whitelistSet, studyMode)
+                        WebFilterList.saveToPreferences(context)
+                    }
+                } catch (e: Exception) {
+                    Log.w("UsageTrackerService", "syncWebRules error: ${e.message}")
                 }
             }
         }
@@ -600,6 +685,7 @@ class UsageTrackerService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        WebFilterList.loadFromPreferences(this)
         createNotificationChannel()
         startForegroundNotification()
 
@@ -688,7 +774,10 @@ class UsageTrackerService : Service() {
                 // 2. Kiểm tra lệnh định vị tức thì từ phụ huynh
                 checkLocationRequest(this@UsageTrackerService)
 
-                // 3. Thu thập thống kê chi tiết nếu được cấp quyền
+                // 3. Đồng bộ quy tắc lọc web (blacklist/whitelist/study_mode) từ phụ huynh
+                syncWebRules(this@UsageTrackerService)
+
+                // 4. Thu thập thống kê chi tiết nếu được cấp quyền
                 try {
                     collectAndSave(this@UsageTrackerService)
                 } catch (_: Exception) {}

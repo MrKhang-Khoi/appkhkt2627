@@ -1282,6 +1282,53 @@
               <div style="font-size: 0.72rem; color: #94a3b8; word-break: break-all;" id="liveWebUrl">Học sinh chưa truy cập web bằng trình duyệt</div>
             </div>
 
+            <!-- BẢNG QUY TẮC LỌC WEB & DANH SÁCH CHẶN 2 CHIỀU CỦA PHỤ HUYNH -->
+            <div id="parentWebRulesPanel" style="background: rgba(15, 23, 42, 0.75); border: 1.5px solid rgba(56, 189, 248, 0.25); border-radius: 12px; padding: 12px; margin-bottom: 12px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span style="font-size: 1.1rem;">🛡️</span>
+                  <div>
+                    <div style="font-size: 0.82rem; font-weight: 800; color: #f8fafc;">Bảng Quy Tắc Lọc Web Phụ Huynh</div>
+                    <div style="font-size: 0.68rem; color: #94a3b8;">Đồng bộ tức thời xuống thiết bị con qua Firebase RTDB</div>
+                  </div>
+                </div>
+                <button type="button" id="btnToggleStudyWebMode" style="background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.15); color: #cbd5e1; font-size: 0.7rem; font-weight: 700; padding: 5px 10px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                  <span id="studyWebModeDot" style="width: 7px; height: 7px; border-radius: 50%; background: #64748b; display: inline-block;"></span>
+                  <span id="studyWebModeText">Chế Độ Giờ Học: TẮT</span>
+                </button>
+              </div>
+
+              <!-- Ô NHẬP TÊN MIỀN CẦN CHẶN HOẶC CHO PHÉP -->
+              <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+                <input type="text" id="inputCustomWebDomain" placeholder="Nhập tên miền (vd: gamebai68.club, tiktok.com)..." style="flex: 1; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 8px; padding: 7px 10px; color: #fff; font-size: 0.74rem; outline: none;" />
+                <button type="button" id="btnAddBlacklistDomain" style="background: #ef4444; color: #fff; border: none; font-size: 0.72rem; font-weight: 700; padding: 7px 12px; border-radius: 8px; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 4px;">
+                  <span>⛔</span> Chặn Domain
+                </button>
+                <button type="button" id="btnAddWhitelistDomain" style="background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); font-size: 0.72rem; font-weight: 700; padding: 7px 12px; border-radius: 8px; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 4px;">
+                  <span>🟢</span> Cho Phép
+                </button>
+              </div>
+
+              <!-- KHU VỰC DANH SÁCH CHIP TÊN MIỀN -->
+              <div style="display: flex; flex-direction: column; gap: 6px;">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                  <span style="font-size: 0.68rem; font-weight: 700; color: #f87171;">Danh Sách Chặn Riêng Của Gia Đình:</span>
+                  <span style="font-size: 0.65rem; color: #94a3b8;" id="blacklistCountBadge">0 domain</span>
+                </div>
+                <div id="blacklistChipContainer" style="display: flex; flex-wrap: wrap; gap: 6px; min-height: 24px;">
+                  <span style="font-size: 0.68rem; color: #64748b; font-style: italic;">Chưa có tên miền tùy chỉnh nào bị chặn.</span>
+                </div>
+
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 4px;">
+                  <span style="font-size: 0.68rem; font-weight: 700; color: #34d399;">Ngoại Lệ An Toàn (Whitelist):</span>
+                  <span style="font-size: 0.65rem; color: #94a3b8;" id="whitelistCountBadge">0 domain</span>
+                </div>
+                <div id="whitelistChipContainer" style="display: flex; flex-wrap: wrap; gap: 6px; min-height: 24px;">
+                  <span style="font-size: 0.68rem; color: #64748b; font-style: italic;">Mặc định cho phép các cổng học tập (Azota, OLM, Hocmai...).</span>
+                </div>
+              </div>
+            </div>
+
             <!-- DANH SÁCH LỊCH SỬ DUYỆT WEB -->
             <div style="font-size: 0.74rem; font-weight: 700; color: #cbd5e1; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
               <span>🕒 Lịch Sử Truy Cập Gần Đây:</span>
@@ -2499,7 +2546,270 @@
         });
       }
 
+      // ==================== BỘ QUY TẮC LỌC WEB 2 CHIỀU (PARENT WEB RULES ENGINE) ====================
+      let currentWebRules = {
+        custom_blacklist: [],
+        custom_whitelist: [],
+        study_mode: false
+      };
+      let webRulesLoadedOnce = false;
+
+      function renderWebRulesUI() {
+        const btnToggleStudyWebMode = document.getElementById('btnToggleStudyWebMode');
+        const studyWebModeDot = document.getElementById('studyWebModeDot');
+        const studyWebModeText = document.getElementById('studyWebModeText');
+        const blacklistCountBadge = document.getElementById('blacklistCountBadge');
+        const whitelistCountBadge = document.getElementById('whitelistCountBadge');
+        const blacklistChipContainer = document.getElementById('blacklistChipContainer');
+        const whitelistChipContainer = document.getElementById('whitelistChipContainer');
+
+        if (btnToggleStudyWebMode && studyWebModeDot && studyWebModeText) {
+          if (currentWebRules.study_mode) {
+            studyWebModeDot.style.background = '#10b981';
+            studyWebModeDot.style.boxShadow = '0 0 8px #10b981';
+            studyWebModeText.textContent = 'Chế Độ Giờ Học: ĐANG BẬT';
+            studyWebModeText.style.color = '#34d399';
+            btnToggleStudyWebMode.style.background = 'rgba(16, 185, 129, 0.2)';
+            btnToggleStudyWebMode.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+          } else {
+            studyWebModeDot.style.background = '#64748b';
+            studyWebModeDot.style.boxShadow = 'none';
+            studyWebModeText.textContent = 'Chế Độ Giờ Học: TẮT';
+            studyWebModeText.style.color = '#cbd5e1';
+            btnToggleStudyWebMode.style.background = 'rgba(255, 255, 255, 0.08)';
+            btnToggleStudyWebMode.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+          }
+        }
+
+        if (blacklistCountBadge) {
+          blacklistCountBadge.textContent = `${currentWebRules.custom_blacklist.length} domain`;
+        }
+        if (whitelistCountBadge) {
+          whitelistCountBadge.textContent = `${currentWebRules.custom_whitelist.length} domain`;
+        }
+
+        if (blacklistChipContainer) {
+          blacklistChipContainer.replaceChildren();
+          if (currentWebRules.custom_blacklist.length === 0) {
+            const emptySpan = document.createElement('span');
+            emptySpan.style.fontSize = '0.68rem';
+            emptySpan.style.color = '#64748b';
+            emptySpan.style.fontStyle = 'italic';
+            emptySpan.textContent = 'Chưa có tên miền tùy chỉnh nào bị chặn.';
+            blacklistChipContainer.appendChild(emptySpan);
+          } else {
+            currentWebRules.custom_blacklist.forEach(d => {
+              const chip = document.createElement('div');
+              chip.style.display = 'inline-flex';
+              chip.style.alignItems = 'center';
+              chip.style.gap = '5px';
+              chip.style.background = 'rgba(239, 68, 68, 0.15)';
+              chip.style.border = '1px solid rgba(239, 68, 68, 0.35)';
+              chip.style.borderRadius = '999px';
+              chip.style.padding = '2px 8px';
+              chip.style.fontSize = '0.68rem';
+              chip.style.color = '#fca5a5';
+
+              const text = document.createElement('span');
+              text.textContent = d;
+
+              const delBtn = document.createElement('button');
+              delBtn.type = 'button';
+              delBtn.textContent = '✕';
+              delBtn.style.background = 'transparent';
+              delBtn.style.border = 'none';
+              delBtn.style.color = '#f87171';
+              delBtn.style.cursor = 'pointer';
+              delBtn.style.padding = '0';
+              delBtn.style.marginLeft = '2px';
+              delBtn.style.fontSize = '0.7rem';
+              delBtn.style.lineHeight = '1';
+              delBtn.title = 'Bỏ chặn tên miền này';
+              delBtn.onclick = () => removeBlacklistDomain(d);
+
+              chip.appendChild(text);
+              chip.appendChild(delBtn);
+              blacklistChipContainer.appendChild(chip);
+            });
+          }
+        }
+
+        if (whitelistChipContainer) {
+          whitelistChipContainer.replaceChildren();
+          if (currentWebRules.custom_whitelist.length === 0) {
+            const emptySpan = document.createElement('span');
+            emptySpan.style.fontSize = '0.68rem';
+            emptySpan.style.color = '#64748b';
+            emptySpan.style.fontStyle = 'italic';
+            emptySpan.textContent = 'Mặc định cho phép các cổng học tập (Azota, OLM, Hocmai...).';
+            whitelistChipContainer.appendChild(emptySpan);
+          } else {
+            currentWebRules.custom_whitelist.forEach(d => {
+              const chip = document.createElement('div');
+              chip.style.display = 'inline-flex';
+              chip.style.alignItems = 'center';
+              chip.style.gap = '5px';
+              chip.style.background = 'rgba(16, 185, 129, 0.15)';
+              chip.style.border = '1px solid rgba(16, 185, 129, 0.35)';
+              chip.style.borderRadius = '999px';
+              chip.style.padding = '2px 8px';
+              chip.style.fontSize = '0.68rem';
+              chip.style.color = '#6ee7b7';
+
+              const text = document.createElement('span');
+              text.textContent = d;
+
+              const delBtn = document.createElement('button');
+              delBtn.type = 'button';
+              delBtn.textContent = '✕';
+              delBtn.style.background = 'transparent';
+              delBtn.style.border = 'none';
+              delBtn.style.color = '#34d399';
+              delBtn.style.cursor = 'pointer';
+              delBtn.style.padding = '0';
+              delBtn.style.marginLeft = '2px';
+              delBtn.style.fontSize = '0.7rem';
+              delBtn.style.lineHeight = '1';
+              delBtn.title = 'Xóa khỏi danh sách an toàn';
+              delBtn.onclick = () => removeWhitelistDomain(d);
+
+              chip.appendChild(text);
+              chip.appendChild(delBtn);
+              whitelistChipContainer.appendChild(chip);
+            });
+          }
+        }
+      }
+
+      function cleanDomainInput(raw) {
+        if (!raw) return '';
+        let d = raw.trim().toLowerCase();
+        d = d.replace(/^https?:\/\//, '');
+        d = d.split('/')[0];
+        d = d.split(':')[0];
+        d = d.replace(/^www\./, '');
+        return d;
+      }
+
+      async function saveWebRules() {
+        if (!currentFamilyCode) return;
+        const targetDevId = currentSelectedDeviceId || currentFamilyCode;
+        const payload = JSON.stringify({
+          custom_blacklist: currentWebRules.custom_blacklist,
+          custom_whitelist: currentWebRules.custom_whitelist,
+          study_mode: currentWebRules.study_mode,
+          updatedAt: Date.now()
+        });
+
+        renderWebRulesUI();
+        if (window.lastRenderedDeviceData) {
+          renderWebBrowsingBreakdown(window.lastRenderedDeviceData);
+        }
+
+        try {
+          await Promise.all([
+            fetch(`${FIREBASE_BASE}/families/${currentFamilyCode}/web_rules.json`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: payload
+            }),
+            fetch(`${FIREBASE_BASE}/families/${currentFamilyCode}/devices/${targetDevId}/web_rules.json`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: payload
+            }),
+            fetch(`${FIREBASE_BASE}/devices/${targetDevId}/web_rules.json`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: payload
+            })
+          ]);
+        } catch (e) {
+          console.warn('saveWebRules error:', e);
+        }
+      }
+
+      function addBlacklistDomain(rawDomain) {
+        const domain = cleanDomainInput(rawDomain);
+        if (!domain || !domain.includes('.')) {
+          alert('Vui lòng nhập tên miền hợp lệ (vd: tiktok.com, gamebai68.club)');
+          return;
+        }
+        if (!currentWebRules.custom_blacklist.includes(domain)) {
+          currentWebRules.custom_blacklist.push(domain);
+        }
+        currentWebRules.custom_whitelist = currentWebRules.custom_whitelist.filter(d => d !== domain);
+        saveWebRules();
+      }
+
+      function removeBlacklistDomain(rawDomain) {
+        const domain = cleanDomainInput(rawDomain);
+        currentWebRules.custom_blacklist = currentWebRules.custom_blacklist.filter(d => d !== domain);
+        saveWebRules();
+      }
+
+      function addWhitelistDomain(rawDomain) {
+        const domain = cleanDomainInput(rawDomain);
+        if (!domain || !domain.includes('.')) {
+          alert('Vui lòng nhập tên miền hợp lệ (vd: azota.vn, khanacademy.org)');
+          return;
+        }
+        if (!currentWebRules.custom_whitelist.includes(domain)) {
+          currentWebRules.custom_whitelist.push(domain);
+        }
+        currentWebRules.custom_blacklist = currentWebRules.custom_blacklist.filter(d => d !== domain);
+        saveWebRules();
+      }
+
+      function removeWhitelistDomain(rawDomain) {
+        const domain = cleanDomainInput(rawDomain);
+        currentWebRules.custom_whitelist = currentWebRules.custom_whitelist.filter(d => d !== domain);
+        saveWebRules();
+      }
+
+      function toggleStudyWebMode() {
+        currentWebRules.study_mode = !currentWebRules.study_mode;
+        saveWebRules();
+      }
+
+      function loadWebRules(devData) {
+        if (devData && devData.web_rules && typeof devData.web_rules === 'object') {
+          const r = devData.web_rules;
+          currentWebRules.custom_blacklist = Array.isArray(r.custom_blacklist) ? r.custom_blacklist : (r.custom_blacklist && typeof r.custom_blacklist === 'object' ? Object.keys(r.custom_blacklist) : []);
+          currentWebRules.custom_whitelist = Array.isArray(r.custom_whitelist) ? r.custom_whitelist : (r.custom_whitelist && typeof r.custom_whitelist === 'object' ? Object.keys(r.custom_whitelist) : []);
+          currentWebRules.study_mode = Boolean(r.study_mode);
+          webRulesLoadedOnce = true;
+          renderWebRulesUI();
+          return;
+        }
+
+        if (!webRulesLoadedOnce && currentFamilyCode) {
+          const targetDevId = currentSelectedDeviceId || currentFamilyCode;
+          fetch(`${FIREBASE_BASE}/families/${currentFamilyCode}/devices/${targetDevId}/web_rules.json`, { cache: 'no-cache' })
+            .then(res => res.ok ? res.json() : null)
+            .then(data => {
+              if (!data) {
+                return fetch(`${FIREBASE_BASE}/families/${currentFamilyCode}/web_rules.json`, { cache: 'no-cache' }).then(res => res.ok ? res.json() : null);
+              }
+              return data;
+            })
+            .then(rules => {
+              if (rules && typeof rules === 'object') {
+                currentWebRules.custom_blacklist = Array.isArray(rules.custom_blacklist) ? rules.custom_blacklist : (rules.custom_blacklist && typeof rules.custom_blacklist === 'object' ? Object.keys(rules.custom_blacklist) : []);
+                currentWebRules.custom_whitelist = Array.isArray(rules.custom_whitelist) ? rules.custom_whitelist : (rules.custom_whitelist && typeof rules.custom_whitelist === 'object' ? Object.keys(rules.custom_whitelist) : []);
+                currentWebRules.study_mode = Boolean(rules.study_mode);
+              }
+              webRulesLoadedOnce = true;
+              renderWebRulesUI();
+            })
+            .catch(() => {});
+        }
+      }
+
       function renderWebBrowsingBreakdown(devData) {
+        window.lastRenderedDeviceData = devData;
+        loadWebRules(devData);
+
         const listWebHistory = document.getElementById('listWebHistory');
         const dashWebHistoryCount = document.getElementById('dashWebHistoryCount');
         const dashWebCount = document.getElementById('dashWebCount');
@@ -2573,7 +2883,12 @@
           card.style.display = 'flex';
           card.style.flexDirection = 'column';
           card.style.gap = '6px';
-          card.style.border = entry.isBlocked ? '1px solid rgba(239, 68, 68, 0.4)' : '1px solid rgba(255, 255, 255, 0.06)';
+
+          const domainClean = (entry.domain || '').replace(/^https?:\/\//, '').split('/')[0].toLowerCase();
+          const isDomainInBlacklist = domainClean && currentWebRules.custom_blacklist.includes(domainClean);
+          const isEntryBlocked = entry.isBlocked || isDomainInBlacklist;
+
+          card.style.border = isEntryBlocked ? '1px solid rgba(239, 68, 68, 0.4)' : '1px solid rgba(255, 255, 255, 0.06)';
 
           const topRow = document.createElement('div');
           topRow.style.display = 'flex';
@@ -2593,7 +2908,6 @@
           iconBox.style.alignItems = 'center';
           iconBox.style.justifyContent = 'center';
 
-          const domainClean = (entry.domain || '').replace(/^https?:\/\//, '').split('/')[0];
           if (domainClean) {
             const favImg = document.createElement('img');
             favImg.src = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domainClean)}&sz=64`;
@@ -2630,8 +2944,13 @@
           idBox.appendChild(iconBox);
           idBox.appendChild(metaBox);
 
+          const rightBox = document.createElement('div');
+          rightBox.style.display = 'flex';
+          rightBox.style.alignItems = 'center';
+          rightBox.style.gap = '6px';
+
           const badgeBox = document.createElement('div');
-          if (entry.isBlocked) {
+          if (isEntryBlocked) {
             badgeBox.className = 'neon-capsule-badge offline';
             badgeBox.style.color = '#f87171';
             badgeBox.style.borderColor = 'rgba(239, 68, 68, 0.4)';
@@ -2640,9 +2959,48 @@
             badgeBox.className = 'neon-capsule-badge online';
             badgeBox.textContent = '🟢 An toàn';
           }
+          rightBox.appendChild(badgeBox);
+
+          // NÚT HÀNH ĐỘNG 1-CHẠM: CHẶN WEB / MỞ CHẶN
+          if (domainClean) {
+            const actionBtn = document.createElement('button');
+            actionBtn.type = 'button';
+            if (isDomainInBlacklist) {
+              actionBtn.style.background = 'rgba(16, 185, 129, 0.15)';
+              actionBtn.style.border = '1px solid rgba(16, 185, 129, 0.4)';
+              actionBtn.style.color = '#34d399';
+              actionBtn.style.fontSize = '0.65rem';
+              actionBtn.style.fontWeight = '700';
+              actionBtn.style.padding = '2px 8px';
+              actionBtn.style.borderRadius = '6px';
+              actionBtn.style.cursor = 'pointer';
+              actionBtn.textContent = '🔓 Mở chặn';
+              actionBtn.title = 'Bỏ chặn tên miền này';
+              actionBtn.onclick = (e) => {
+                e.stopPropagation();
+                removeBlacklistDomain(domainClean);
+              };
+            } else {
+              actionBtn.style.background = 'rgba(239, 68, 68, 0.15)';
+              actionBtn.style.border = '1px solid rgba(239, 68, 68, 0.4)';
+              actionBtn.style.color = '#f87171';
+              actionBtn.style.fontSize = '0.65rem';
+              actionBtn.style.fontWeight = '700';
+              actionBtn.style.padding = '2px 8px';
+              actionBtn.style.borderRadius = '6px';
+              actionBtn.style.cursor = 'pointer';
+              actionBtn.textContent = '⛔ Chặn web';
+              actionBtn.title = 'Chặn ngay website này';
+              actionBtn.onclick = (e) => {
+                e.stopPropagation();
+                addBlacklistDomain(domainClean);
+              };
+            }
+            rightBox.appendChild(actionBtn);
+          }
 
           topRow.appendChild(idBox);
-          topRow.appendChild(badgeBox);
+          topRow.appendChild(rightBox);
 
           const urlRow = document.createElement('div');
           urlRow.style.fontSize = '0.70rem';
@@ -3436,6 +3794,55 @@
         } finally {
           btnSendParentMessage.disabled = false;
           btnSendParentMessage.textContent = 'Gửi Tin 🚀';
+        }
+      });
+    }
+
+    // Xử lý các nút trong Bảng Quy Tắc Lọc Web Phụ Huynh
+    const btnToggleStudyWebMode = document.getElementById('btnToggleStudyWebMode');
+    const btnAddBlacklistDomain = document.getElementById('btnAddBlacklistDomain');
+    const btnAddWhitelistDomain = document.getElementById('btnAddWhitelistDomain');
+    const inputCustomWebDomain = document.getElementById('inputCustomWebDomain');
+
+    if (btnToggleStudyWebMode) {
+      btnToggleStudyWebMode.addEventListener('click', () => {
+        toggleStudyWebMode();
+      });
+    }
+
+    if (btnAddBlacklistDomain) {
+      btnAddBlacklistDomain.addEventListener('click', () => {
+        const val = inputCustomWebDomain ? inputCustomWebDomain.value : '';
+        if (val) {
+          addBlacklistDomain(val);
+          if (inputCustomWebDomain) inputCustomWebDomain.value = '';
+        } else {
+          alert('Vui lòng nhập tên miền muốn chặn (vd: gamebai68.club, tiktok.com)');
+        }
+      });
+    }
+
+    if (btnAddWhitelistDomain) {
+      btnAddWhitelistDomain.addEventListener('click', () => {
+        const val = inputCustomWebDomain ? inputCustomWebDomain.value : '';
+        if (val) {
+          addWhitelistDomain(val);
+          if (inputCustomWebDomain) inputCustomWebDomain.value = '';
+        } else {
+          alert('Vui lòng nhập tên miền an toàn muốn cho phép (vd: azota.vn, khanacademy.org)');
+        }
+      });
+    }
+
+    if (inputCustomWebDomain) {
+      inputCustomWebDomain.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const val = inputCustomWebDomain.value;
+          if (val) {
+            addBlacklistDomain(val);
+            inputCustomWebDomain.value = '';
+          }
         }
       });
     }
