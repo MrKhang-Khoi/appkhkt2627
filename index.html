@@ -520,7 +520,7 @@
     /* CATEGORY PILL SELECTOR & HIGH-FIDELITY APP CARDS (APPLE/DRIBBLE 2026 EDTECH SPEC) */
     .category-pill-bar {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 6px;
       margin-bottom: 12px;
     }
@@ -530,18 +530,25 @@
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
       border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 999px;
-      padding: 7px 6px;
+      border-radius: 12px;
+      padding: 6px 3px;
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 4px;
+      gap: 3px;
       cursor: pointer;
       transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
       user-select: none;
       color: #94a3b8;
-      font-size: 0.72rem;
+      font-size: 0.67rem;
       font-weight: 700;
+      text-align: center;
+    }
+    .pill-btn-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
       white-space: nowrap;
     }
     .category-pill-btn:hover {
@@ -568,13 +575,20 @@
       color: #fde68a;
       box-shadow: 0 0 16px rgba(251, 191, 36, 0.25);
     }
+    .category-pill-btn.active.tab-web {
+      background: rgba(16, 185, 129, 0.18);
+      border-color: rgba(16, 185, 129, 0.6);
+      color: #6ee7b7;
+      box-shadow: 0 0 16px rgba(16, 185, 129, 0.25);
+    }
     .pill-time-tag {
-      font-size: 0.62rem;
+      font-size: 0.58rem;
       font-weight: 800;
       padding: 1px 5px;
       border-radius: 999px;
       background: rgba(255, 255, 255, 0.08);
       color: inherit;
+      line-height: 1.1;
     }
     .category-showcase-panel {
       background: rgba(15, 23, 42, 0.75);
@@ -952,11 +966,11 @@
 
       <!-- KHỐI TẢI / CẬP NHẬT TÁCH RỜI CÂN ĐỐI BÊN DƯỚI -->
       <div style="text-align: center; margin-top: 4px;">
-        <a href="./apk/CVA-SmartGuardian-v1.0.apk" download class="btn-pill" style="text-decoration: none; background: rgba(30, 41, 59, 0.75); border: 1px solid rgba(255, 255, 255, 0.1); font-size: 0.82rem; min-height: 46px; color: #94a3b8;">
-          <span>⬇️</span> Tải / Cập Nhật App Android (v1.1.8)
+        <a href="./apk/CVA-SmartGuardian-v1.1.9.apk" download class="btn-pill" style="text-decoration: none; background: rgba(30, 41, 59, 0.75); border: 1px solid rgba(255, 255, 255, 0.1); font-size: 0.82rem; min-height: 46px; color: #38bdf8;">
+          <span>⬇️</span> Tải / Cập Nhật App Android (v1.1.9)
         </a>
         <div style="margin-top: 8px; font-size: 0.72rem; color: #64748b;">
-          Phiên bản v1.1.8 đã ký số Keystore • Tự động đồng bộ thời gian thực
+          Phiên bản v1.1.9 đã ký số Keystore • Tự động bóc tách URL & Giám sát Web đa trình duyệt
         </div>
       </div>
     </main>
@@ -1073,19 +1087,20 @@
         <!-- PILL SELECTOR BAR -->
         <div class="category-pill-bar">
           <button type="button" class="category-pill-btn active tab-social" id="btnPillSocial" data-cat="social" title="Xem thống kê Mạng xã hội & Video">
-            <span>💬</span>
-            <span>Mạng Xã Hội</span>
+            <span class="pill-btn-label"><span>💬</span> Mạng XH</span>
             <span class="pill-time-tag" id="dashSocialTime">--</span>
           </button>
           <button type="button" class="category-pill-btn tab-study" id="btnPillStudy" data-cat="study" title="Xem thống kê Ứng dụng học tập">
-            <span>📚</span>
-            <span>Học Tập</span>
+            <span class="pill-btn-label"><span>📚</span> Học Tập</span>
             <span class="pill-time-tag" id="dashStudyTime">--</span>
           </button>
           <button type="button" class="category-pill-btn tab-game" id="btnPillGame" data-cat="game" title="Xem thống kê Trò chơi & Game">
-            <span>🎮</span>
-            <span>Trò Chơi</span>
+            <span class="pill-btn-label"><span>🎮</span> Trò Chơi</span>
             <span class="pill-time-tag" id="dashGameTime">--</span>
+          </button>
+          <button type="button" class="category-pill-btn tab-web" id="btnPillWeb" data-cat="web" title="Xem hoạt động duyệt web đa trình duyệt">
+            <span class="pill-btn-label"><span>🌐</span> Duyệt Web</span>
+            <span class="pill-time-tag" id="dashWebCount">0 web</span>
           </button>
         </div>
 
@@ -1130,6 +1145,38 @@
             </div>
             <div id="listGameApps" style="display: flex; flex-direction: column; gap: 6px;">
               <div style="text-align: center; color: #94a3b8; font-size: 0.74rem; padding: 12px;">Đang tải danh sách...</div>
+            </div>
+          </div>
+          <!-- WEB BROWSING VIEW PANE -->
+          <div class="category-view-pane" id="panelWebDetail">
+            <div class="showcase-header">
+              <div class="showcase-title-box">
+                <span class="showcase-indicator-dot" style="background: #10b981; box-shadow: 0 0 8px #10b981;"></span>
+                <span class="showcase-title-text" style="color: #6ee7b7;">Giám Sát Mở Web Đa Trình Duyệt</span>
+              </div>
+              <span class="showcase-counter-badge" id="dashWebHistoryCount">0 trang web</span>
+            </div>
+
+            <!-- THẺ TRANG WEB ĐANG MỞ THỜI GIAN THỰC -->
+            <div id="liveWebCard" style="background: rgba(16, 185, 129, 0.08); border: 1.5px solid rgba(16, 185, 129, 0.35); border-radius: 12px; padding: 12px; margin-bottom: 12px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span class="live-pulse-dot"></span>
+                  <span style="font-size: 0.72rem; font-weight: 800; color: #34d399; text-transform: uppercase; letter-spacing: 0.04em;">Đang Mở Trực Tiếp</span>
+                </div>
+                <span id="liveWebBrowserBadge" style="font-size: 0.65rem; font-weight: 700; padding: 2px 7px; border-radius: 999px; background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3);">Google Chrome</span>
+              </div>
+              <div style="font-size: 0.88rem; font-weight: 800; color: #fff; margin-bottom: 2px; word-break: break-all;" id="liveWebTitle">Chưa phát hiện trang web đang mở</div>
+              <div style="font-size: 0.72rem; color: #94a3b8; word-break: break-all;" id="liveWebUrl">Học sinh chưa truy cập web bằng trình duyệt</div>
+            </div>
+
+            <!-- DANH SÁCH LỊCH SỬ DUYỆT WEB -->
+            <div style="font-size: 0.74rem; font-weight: 700; color: #cbd5e1; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
+              <span>🕒 Lịch Sử Truy Cập Gần Đây:</span>
+              <span style="font-size: 0.68rem; color: #94a3b8;" id="webHistoryTimeRange">Hôm nay</span>
+            </div>
+            <div id="listWebHistory" style="display: flex; flex-direction: column; gap: 6px;">
+              <div style="text-align: center; color: #94a3b8; font-size: 0.74rem; padding: 12px;">Chưa có nhật ký truy cập web</div>
             </div>
           </div>
         </div>
@@ -1765,6 +1812,39 @@
           const path = document.createElementNS(ns, 'path');
           path.setAttribute('d', 'M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 4h5v8l-2.5-1.5L6 12V4z');
           svg.appendChild(path);
+        } else if (type === 'chrome') {
+          const circle = document.createElementNS(ns, 'circle');
+          circle.setAttribute('cx', '12');
+          circle.setAttribute('cy', '12');
+          circle.setAttribute('r', '10');
+          circle.setAttribute('fill', '#ea4335');
+          const innerCircle = document.createElementNS(ns, 'circle');
+          innerCircle.setAttribute('cx', '12');
+          innerCircle.setAttribute('cy', '12');
+          innerCircle.setAttribute('r', '5');
+          innerCircle.setAttribute('fill', '#4285f4');
+          svg.appendChild(circle);
+          svg.appendChild(innerCircle);
+        } else if (type === 'coccoc') {
+          const path = document.createElementNS(ns, 'path');
+          path.setAttribute('d', 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z');
+          path.setAttribute('fill', '#10b981');
+          svg.appendChild(path);
+        } else if (type === 'edge') {
+          const path = document.createElementNS(ns, 'path');
+          path.setAttribute('d', 'M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 17.93V18a1 1 0 0 0-1-1h-2a1 1 0 0 1-1-1v-1a2 2 0 0 1 2-2h1a1 1 0 0 0 1-1V9a1 1 0 0 1 1-1h1.5a1 1 0 0 0 .9-.55l.6-.9A8 8 0 0 1 19.9 12a8 8 0 0 1-6.9 7.93z');
+          path.setAttribute('fill', '#0284c7');
+          svg.appendChild(path);
+        } else if (type === 'firefox') {
+          const path = document.createElementNS(ns, 'path');
+          path.setAttribute('d', 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4 11a4 4 0 1 1-8 0 4 4 0 0 1 8 0z');
+          path.setAttribute('fill', '#f97316');
+          svg.appendChild(path);
+        } else if (type === 'web') {
+          const path = document.createElementNS(ns, 'path');
+          path.setAttribute('d', 'M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 17.93V18a1 1 0 0 0-1-1h-2a1 1 0 0 1-1-1v-1a2 2 0 0 1 2-2h1a1 1 0 0 0 1-1V9a1 1 0 0 1 1-1h1.5a1 1 0 0 0 .9-.55l.6-.9A8 8 0 0 1 19.9 12a8 8 0 0 1-6.9 7.93z');
+          path.setAttribute('fill', '#34d399');
+          svg.appendChild(path);
         } else if (type === 'game') {
           const path = document.createElementNS(ns, 'path');
           path.setAttribute('d', 'M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-10 7H8v3H6v-3H3v-2h3V8h2v3h3v2zm4.5 2c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm3-3c-.83 0-1.5-.67-1.5-1.5S17.67 9 18.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z');
@@ -1781,7 +1861,8 @@
         const tabs = [
           { name: 'social', btn: document.getElementById('btnPillSocial'), pane: document.getElementById('panelSocialDetail') },
           { name: 'study', btn: document.getElementById('btnPillStudy'), pane: document.getElementById('panelStudyDetail') },
-          { name: 'game', btn: document.getElementById('btnPillGame'), pane: document.getElementById('panelGameDetail') }
+          { name: 'game', btn: document.getElementById('btnPillGame'), pane: document.getElementById('panelGameDetail') },
+          { name: 'web', btn: document.getElementById('btnPillWeb'), pane: document.getElementById('panelWebDetail') }
         ];
         tabs.forEach(t => {
           if (t.btn && t.pane) {
@@ -1812,6 +1893,11 @@
         if (btnGame && !btnGame.dataset.bound) {
           btnGame.dataset.bound = 'true';
           btnGame.addEventListener('click', () => switchCategoryTab('game'));
+        }
+        const btnWeb = document.getElementById('btnPillWeb');
+        if (btnWeb && !btnWeb.dataset.bound) {
+          btnWeb.dataset.bound = 'true';
+          btnWeb.addEventListener('click', () => switchCategoryTab('web'));
         }
       }
 
@@ -2282,6 +2368,163 @@
         });
       }
 
+      function renderWebBrowsingBreakdown(devData) {
+        const listWebHistory = document.getElementById('listWebHistory');
+        const dashWebHistoryCount = document.getElementById('dashWebHistoryCount');
+        const dashWebCount = document.getElementById('dashWebCount');
+        const liveWebCard = document.getElementById('liveWebCard');
+        const liveWebBrowserBadge = document.getElementById('liveWebBrowserBadge');
+        const liveWebTitle = document.getElementById('liveWebTitle');
+        const liveWebUrl = document.getElementById('liveWebUrl');
+
+        if (!listWebHistory) return;
+
+        // 1. Cập nhật trang web đang mở thời gian thực
+        const activeWeb = devData.web_activity;
+        const now = Date.now();
+        const isWebActiveNow = activeWeb && activeWeb.timestamp && (now - Number(activeWeb.timestamp) < 180000);
+
+        if (liveWebCard) {
+          if (isWebActiveNow && activeWeb.url) {
+            liveWebCard.style.display = 'block';
+            if (liveWebBrowserBadge) liveWebBrowserBadge.textContent = activeWeb.browserName || 'Trình duyệt Web';
+            if (liveWebTitle) liveWebTitle.textContent = activeWeb.title || activeWeb.domain || 'Đang duyệt web';
+            if (liveWebUrl) liveWebUrl.textContent = activeWeb.url;
+          } else {
+            if (liveWebTitle) liveWebTitle.textContent = 'Chưa phát hiện trang web đang mở';
+            if (liveWebUrl) liveWebUrl.textContent = 'Học sinh đang dùng app khác hoặc chưa duyệt web';
+            if (liveWebBrowserBadge) liveWebBrowserBadge.textContent = 'Ngoại tuyến';
+          }
+        }
+
+        // 2. Thu thập lịch sử duyệt web
+        const historyObj = devData.web_history || {};
+        const historyList = [];
+
+        if (typeof historyObj === 'object') {
+          for (const key of Object.keys(historyObj)) {
+            const item = historyObj[key];
+            if (item && typeof item === 'object' && item.url) {
+              historyList.push(item);
+            }
+          }
+        }
+
+        // Sắp xếp thời gian mới nhất lên đầu
+        historyList.sort((a, b) => (Number(b.timestamp) || 0) - (Number(a.timestamp) || 0));
+
+        if (dashWebHistoryCount) {
+          dashWebHistoryCount.textContent = `${historyList.length} trang web`;
+        }
+        if (dashWebCount) {
+          dashWebCount.textContent = `${historyList.length} web`;
+        }
+
+        listWebHistory.replaceChildren();
+
+        if (historyList.length === 0) {
+          const emptyDiv = document.createElement('div');
+          emptyDiv.style.textAlign = 'center';
+          emptyDiv.style.color = '#94a3b8';
+          emptyDiv.style.fontSize = '0.74rem';
+          emptyDiv.style.padding = '12px';
+          emptyDiv.textContent = 'Chưa có nhật ký duyệt web nào được ghi nhận hôm nay.';
+          listWebHistory.appendChild(emptyDiv);
+          return;
+        }
+
+        historyList.slice(0, 50).forEach(entry => {
+          const card = document.createElement('div');
+          card.className = 'squircle-app-card';
+          card.style.background = 'rgba(30, 41, 59, 0.55)';
+          card.style.borderRadius = '10px';
+          card.style.padding = '10px 12px';
+          card.style.display = 'flex';
+          card.style.flexDirection = 'column';
+          card.style.gap = '6px';
+          card.style.border = entry.isBlocked ? '1px solid rgba(239, 68, 68, 0.4)' : '1px solid rgba(255, 255, 255, 0.06)';
+
+          const topRow = document.createElement('div');
+          topRow.style.display = 'flex';
+          topRow.style.alignItems = 'center';
+          topRow.style.justifyContent = 'space-between';
+
+          const idBox = document.createElement('div');
+          idBox.style.display = 'flex';
+          idBox.style.alignItems = 'center';
+          idBox.style.gap = '8px';
+
+          const iconBox = document.createElement('div');
+          iconBox.style.width = '32px';
+          iconBox.style.height = '32px';
+          iconBox.style.borderRadius = '8px';
+          iconBox.style.display = 'flex';
+          iconBox.style.alignItems = 'center';
+          iconBox.style.justifyContent = 'center';
+
+          const bPkg = (entry.browserPkg || '').toLowerCase();
+          if (bPkg.includes('chrome')) {
+            iconBox.style.background = '#1e293b';
+            iconBox.appendChild(createBrandSvg('chrome'));
+          } else if (bPkg.includes('coccoc')) {
+            iconBox.style.background = '#064e3b';
+            iconBox.appendChild(createBrandSvg('coccoc'));
+          } else if (bPkg.includes('edge')) {
+            iconBox.style.background = '#0c4a6e';
+            iconBox.appendChild(createBrandSvg('edge'));
+          } else if (bPkg.includes('firefox')) {
+            iconBox.style.background = '#431407';
+            iconBox.appendChild(createBrandSvg('firefox'));
+          } else {
+            iconBox.style.background = '#1e293b';
+            iconBox.appendChild(createBrandSvg('web'));
+          }
+
+          const metaBox = document.createElement('div');
+          const titleBox = document.createElement('div');
+          titleBox.style.fontSize = '0.82rem';
+          titleBox.style.fontWeight = '700';
+          titleBox.style.color = '#f8fafc';
+          titleBox.textContent = entry.domain || entry.title || 'Trang web';
+
+          const timeBox = document.createElement('div');
+          timeBox.style.fontSize = '0.68rem';
+          timeBox.style.color = '#94a3b8';
+          const timeStr = entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : 'Vừa xong';
+          timeBox.textContent = `${entry.browserName || 'Trình duyệt'} • ${timeStr}`;
+
+          metaBox.appendChild(titleBox);
+          metaBox.appendChild(timeBox);
+          idBox.appendChild(iconBox);
+          idBox.appendChild(metaBox);
+
+          const badgeBox = document.createElement('div');
+          if (entry.isBlocked) {
+            badgeBox.className = 'neon-capsule-badge offline';
+            badgeBox.style.color = '#f87171';
+            badgeBox.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+            badgeBox.textContent = '⛔ Đã chặn';
+          } else {
+            badgeBox.className = 'neon-capsule-badge online';
+            badgeBox.textContent = '🟢 An toàn';
+          }
+
+          topRow.appendChild(idBox);
+          topRow.appendChild(badgeBox);
+
+          const urlRow = document.createElement('div');
+          urlRow.style.fontSize = '0.70rem';
+          urlRow.style.color = '#64748b';
+          urlRow.style.wordBreak = 'break-all';
+          urlRow.textContent = entry.url || '';
+
+          card.appendChild(topRow);
+          card.appendChild(urlRow);
+          listWebHistory.appendChild(card);
+        });
+      }
+
+
 
 
     function updateChildDashboardLive(deviceData, status) {
@@ -2596,6 +2839,7 @@
       renderSocialAppBreakdown(deviceData);
       renderStudyAppBreakdown(deviceData);
       renderGameAppBreakdown(deviceData);
+      renderWebBrowsingBreakdown(deviceData);
 
       // Tự động kích hoạt tab phù hợp với ứng dụng con đang mở
       const currentCat = (deviceData.active_app && deviceData.active_app.category) ? deviceData.active_app.category.toLowerCase() : '';
@@ -2690,6 +2934,7 @@
     window.renderSocialAppBreakdown = renderSocialAppBreakdown;
     window.renderStudyAppBreakdown = renderStudyAppBreakdown;
     window.renderGameAppBreakdown = renderGameAppBreakdown;
+    window.renderWebBrowsingBreakdown = renderWebBrowsingBreakdown;
 
     // 5. BẢNG GIÁM SÁT & ĐỒNG HÀNH THỜI GIAN THỰC (KHI PHỤ HUYNH BẤM VÀO THIẾT BỊ CON)
     const childDashboardModal = document.getElementById('childDashboardModal');

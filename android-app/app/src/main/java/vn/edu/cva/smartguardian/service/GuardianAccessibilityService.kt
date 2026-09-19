@@ -18,8 +18,12 @@ class GuardianAccessibilityService : AccessibilityService() {
         "org.mozilla.firefox",
         "com.microsoft.emmx",
         "com.opera.browser",
+        "com.opera.mini.native",
         "com.brave.browser",
+        "com.mi.globalbrowser",
         "com.duckduckgo.mobile.android",
+        "com.vivaldi.browser",
+        "com.kiwibrowser.browser",
         "com.google.android.googlequicksearchbox"
     )
 
@@ -28,6 +32,7 @@ class GuardianAccessibilityService : AccessibilityService() {
     private var lastHeartbeatTimestamp: Long = 0L
     private var lastActivePackage: String = ""
     private var lastActiveUploadTimestamp: Long = 0L
+    private var lastWebActivityReportTimestamp: Long = 0L
     private var currentForegroundPackage: String = ""
     private var currentForegroundStartTime: Long = 0L
 
@@ -48,10 +53,10 @@ class GuardianAccessibilityService : AccessibilityService() {
             handleWindowStateChanged(packageName)
         }
 
-        // 2. Chỉ xử lý khi sự kiện đến từ các ứng dụng duyệt web để lọc web độc hại
+        // 2. Chỉ xử lý khi sự kiện đến từ các ứng dụng duyệt web để giám sát và lọc web độc hại
         if (BROWSER_PACKAGES.contains(packageName)) {
             val rootNode = rootInActiveWindow ?: return
-            inspectBrowserNodeForUrl(rootNode)
+            inspectBrowserNodeForUrl(rootNode, packageName)
         }
     }
 
@@ -176,18 +181,55 @@ class GuardianAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun inspectBrowserNodeForUrl(node: AccessibilityNodeInfo) {
+    private fun getBrowserName(packageName: String): String {
+        return when (packageName) {
+            "com.android.chrome" -> "Google Chrome"
+            "com.coccoc.trinhduyet" -> "Cốc Cốc"
+            "com.sec.android.app.sbrowser" -> "Samsung Internet"
+            "org.mozilla.firefox" -> "Mozilla Firefox"
+            "com.microsoft.emmx" -> "Microsoft Edge"
+            "com.opera.browser", "com.opera.mini.native" -> "Opera"
+            "com.brave.browser" -> "Brave Browser"
+            "com.mi.globalbrowser" -> "Mi Browser"
+            "com.duckduckgo.mobile.android" -> "DuckDuckGo"
+            "com.vivaldi.browser" -> "Vivaldi"
+            "com.kiwibrowser.browser" -> "Kiwi Browser"
+            else -> "Trình duyệt Web"
+        }
+    }
+
+    private fun inspectBrowserNodeForUrl(node: AccessibilityNodeInfo, packageName: String) {
         val extractedUrl = findUrlFromNodeHierarchy(node)
 
         if (!extractedUrl.isNullOrBlank() && extractedUrl != lastCheckedUrl) {
+            val now = System.currentTimeMillis()
+            // Tránh spam ghi đè liên tục khi đang gõ từng ký tự (debounce 1.5s)
+            if (now - lastWebActivityReportTimestamp < 1500L && extractedUrl.startsWith(lastCheckedUrl)) {
+                return
+            }
+
             lastCheckedUrl = extractedUrl
+            lastWebActivityReportTimestamp = now
+
+            val browserName = getBrowserName(packageName)
+            val pageTitle = findPageTitleFromNodeHierarchy(node) ?: ""
 
             // Kiểm tra qua bộ lọc WebFilterList
             val result = WebFilterList.checkUrl(extractedUrl)
+
+            // Ghi nhận và đồng bộ hoạt động web lên Firebase (Kênh thời gian thực & Kênh nhật ký)
+            UsageTrackerService.reportWebActivity(
+                context = this,
+                browserPkg = packageName,
+                browserName = browserName,
+                url = extractedUrl,
+                title = pageTitle,
+                isBlocked = result.isBlocked
+            )
+
             if (result.isBlocked) {
-                val now = System.currentTimeMillis()
                 // Ngăn chặn lặp vô hạn màn hình khóa (debounce 1.5s)
-                if (now - lastBlockTimestamp > 1500) {
+                if (now - lastBlockTimestamp > 1500L) {
                     lastBlockTimestamp = now
                     triggerBlockScreen(extractedUrl, result.category.title, result.reason)
                 }
@@ -201,14 +243,37 @@ class GuardianAccessibilityService : AccessibilityService() {
         val viewId = node.viewIdResourceName?.lowercase() ?: ""
         val text = node.text?.toString()?.trim()
 
-        // Tìm kiếm các ID thanh địa chỉ phổ biến của Chrome, Cốc Cốc, Samsung Internet
-        if (viewId.contains("url_bar") ||
-            viewId.contains("search_box") ||
-            viewId.contains("location_bar") ||
-            viewId.contains("address_bar") ||
-            viewId.contains("url_box")
-        ) {
-            if (!text.isNullOrBlank() && (text.contains(".") || text.contains("/"))) {
+        // Bỏ qua các chuỗi gợi ý / placeholder mặc định của trình duyệt
+        val isPlaceholder = text.isNullOrBlank() ||
+                text.equals("search or type url", ignoreCase = true) ||
+                text.equals("search or type web address", ignoreCase = true) ||
+                text.equals("tìm kiếm hoặc nhập địa chỉ web", ignoreCase = true) ||
+                text.equals("tìm kiếm hoặc nhập url", ignoreCase = true) ||
+                text.equals("tìm kiếm hoặc nhập tên web", ignoreCase = true) ||
+                text.equals("search", ignoreCase = true) ||
+                text.equals("tìm kiếm", ignoreCase = true)
+
+        if (!isPlaceholder && text != null) {
+            // Kiểm tra viewId thanh địa chỉ phổ biến của Chrome, Cốc Cốc, Samsung, Firefox, Edge, Opera, Mi Browser
+            val isAddressBarId = viewId.contains("url_bar") ||
+                    viewId.contains("search_box") ||
+                    viewId.contains("location_bar") ||
+                    viewId.contains("address_bar") ||
+                    viewId.contains("url_box") ||
+                    viewId.contains("omnibar") ||
+                    viewId.contains("url_field") ||
+                    viewId.contains("toolbar_url")
+
+            if (isAddressBarId && (text.contains(".") || text.contains("/"))) {
+                return text
+            }
+
+            // Heuristic dự phòng: Nếu là EditText/TextView và chuỗi bắt đầu bằng http://, https:// hoặc domain hợp lệ
+            val isUrlPattern = text.startsWith("http://", ignoreCase = true) ||
+                    text.startsWith("https://", ignoreCase = true) ||
+                    text.matches(Regex("^[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}(/.*)?$"))
+
+            if (isUrlPattern && !text.contains(" ") && text.length >= 4) {
                 return text
             }
         }
@@ -220,6 +285,21 @@ class GuardianAccessibilityService : AccessibilityService() {
             if (found != null) return found
         }
 
+        return null
+    }
+
+    private fun findPageTitleFromNodeHierarchy(node: AccessibilityNodeInfo?): String? {
+        if (node == null) return null
+        val viewId = node.viewIdResourceName?.lowercase() ?: ""
+        if (viewId.contains("title") || viewId.contains("tab_title") || viewId.contains("page_title")) {
+            val t = node.text?.toString()?.trim()
+            if (!t.isNullOrBlank()) return t
+        }
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i)
+            val found = findPageTitleFromNodeHierarchy(child)
+            if (found != null) return found
+        }
         return null
     }
 

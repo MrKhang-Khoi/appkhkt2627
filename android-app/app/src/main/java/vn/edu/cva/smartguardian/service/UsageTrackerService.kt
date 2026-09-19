@@ -219,6 +219,76 @@ class UsageTrackerService : Service() {
             }
         }
 
+        fun reportWebActivity(
+            context: Context,
+            browserPkg: String,
+            browserName: String,
+            url: String,
+            title: String,
+            isBlocked: Boolean
+        ) {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val pairedCode = prefs.getString("paired_code", "") ?: ""
+            if (pairedCode.isEmpty()) return
+            val androidId = prefs.getString("device_id", "")?.takeIf { it.isNotEmpty() }
+                ?: Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+                ?: "UNKNOWN"
+
+            syncScope.launch {
+                try {
+                    val mediaType = "application/json; charset=utf-8".toMediaType()
+                    val now = System.currentTimeMillis()
+
+                    val domain = try {
+                        val cleanUrl = if (!url.startsWith("http://") && !url.startsWith("https://")) "https://$url" else url
+                        val uri = java.net.URI(cleanUrl)
+                        uri.host?.lowercase() ?: url.substringBefore("/").substringBefore("?").lowercase()
+                    } catch (e: Exception) {
+                        url.substringBefore("/").substringBefore("?").lowercase()
+                    }
+
+                    val webJson = JSONObject().apply {
+                        put("url", url)
+                        put("domain", domain)
+                        put("title", title.ifEmpty { domain })
+                        put("browserPkg", browserPkg)
+                        put("browserName", browserName)
+                        put("timestamp", now)
+                        put("isBlocked", isBlocked)
+                    }
+                    val body = webJson.toString().toRequestBody(mediaType)
+
+                    // 1. Cập nhật trang web đang mở thời gian thực: /web_activity.json
+                    val reqFam = okhttp3.Request.Builder()
+                        .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId/web_activity.json")
+                        .put(body)
+                        .build()
+                    sharedHttpClient.newCall(reqFam).execute().close()
+
+                    val reqDev = okhttp3.Request.Builder()
+                        .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$androidId/web_activity.json")
+                        .put(body)
+                        .build()
+                    sharedHttpClient.newCall(reqDev).execute().close()
+
+                    // 2. Ghi nhật ký vào /web_history/$now.json (lịch sử duyệt web)
+                    val reqHistFam = okhttp3.Request.Builder()
+                        .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId/web_history/$now.json")
+                        .put(body)
+                        .build()
+                    sharedHttpClient.newCall(reqHistFam).execute().close()
+
+                    val reqHistDev = okhttp3.Request.Builder()
+                        .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$androidId/web_history/$now.json")
+                        .put(body)
+                        .build()
+                    sharedHttpClient.newCall(reqHistDev).execute().close()
+                } catch (e: Exception) {
+                    Log.w("UsageTrackerService", "reportWebActivity failed: ${e.message}")
+                }
+            }
+        }
+
         fun recordAppSession(context: Context, packageName: String, durationMs: Long) {
             if (durationMs < 1000L) return
             val isSystemOrSelf = packageName == context.packageName ||
