@@ -908,11 +908,11 @@
           <div style="display: flex; align-items: center; gap: 8px;">
             <span style="font-size: 1.1rem;">🚀</span>
             <div>
-              <div style="font-size: 0.78rem; font-weight: 700; color: #fff;">Bản Cập Nhật v1.2.4 (Mới nhất)</div>
+              <div style="font-size: 0.78rem; font-weight: 700; color: #fff;">Bản Cập Nhật v1.2.5 (Mới nhất)</div>
               <div style="font-size: 0.68rem; color: #94a3b8;">Tối ưu nhận diện app trên Xiaomi HyperOS</div>
             </div>
           </div>
-          <a href="https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.2.4.apk" target="_blank" style="display: inline-flex; align-items: center; gap: 4px; background: rgba(14, 165, 233, 0.2); border: 1px solid rgba(14, 165, 233, 0.4); border-radius: 8px; padding: 4px 10px; color: #38bdf8; font-size: 0.72rem; font-weight: 700; text-decoration: none;">
+          <a href="https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.2.5.apk" target="_blank" style="display: inline-flex; align-items: center; gap: 4px; background: rgba(14, 165, 233, 0.2); border: 1px solid rgba(14, 165, 233, 0.4); border-radius: 8px; padding: 4px 10px; color: #38bdf8; font-size: 0.72rem; font-weight: 700; text-decoration: none;">
             <span>📥</span> Tải APK
           </a>
         </div>
@@ -1170,6 +1170,20 @@
         <div style="font-size: 0.72rem; color: #cbd5e1; margin-top: 4px; line-height: 1.4;" id="dashOfflineNoticeDetail">
           Không nhận được nhịp tim (Heartbeat) từ máy học sinh. Số liệu bên dưới là bản ghi gần nhất trước khi tắt mạng.
         </div>
+      </div>
+
+      <!-- CẢNH BÁO / NÚT CẬP NHẬT BẢN MỚI CHO THIẾT BỊ NÀY TRONG MODAL -->
+      <div id="dashOtaNotice" style="background: rgba(14, 165, 233, 0.12); border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 12px; padding: 10px 14px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 1.15rem;">🚀</span>
+          <div>
+            <div style="font-size: 0.78rem; font-weight: 700; color: #fff;">Bản Cập Nhật v1.2.5 (Mới nhất)</div>
+            <div style="font-size: 0.68rem; color: #94a3b8;" id="dashOtaNoticeDetail">Tối ưu nhận diện app trên Xiaomi HyperOS</div>
+          </div>
+        </div>
+        <a href="https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.2.5.apk" target="_blank" style="display: inline-flex; align-items: center; gap: 4px; background: rgba(14, 165, 233, 0.25); border: 1px solid rgba(56, 189, 248, 0.5); border-radius: 8px; padding: 5px 12px; color: #38bdf8; font-size: 0.74rem; font-weight: 700; text-decoration: none;">
+          <span>📥</span> Tải APK
+        </a>
       </div>
 
       <!-- 0. THẺ ỨNG DỤNG ĐANG MỞ THỜI GIAN THỰC (LIVE FOREGROUND APP) -->
@@ -3077,6 +3091,16 @@
         dashOfflineNotice.style.display = status.isOnline ? 'none' : 'block';
         if (dashOfflineNoticeDetail && !status.isOnline) {
           dashOfflineNoticeDetail.textContent = `Thiết bị học sinh hiện không có kết nối internet (${status.text}). Toàn bộ lệnh can thiệp và số liệu sẽ được cập nhật đồng bộ ngay khi máy kết nối mạng trở lại.`;
+        }
+      }
+
+      const dashOtaNoticeDetail = document.getElementById('dashOtaNoticeDetail');
+      if (dashOtaNoticeDetail) {
+        const appVer = deviceData.appVersion ? `v${deviceData.appVersion}` : 'Bản cũ (chưa rõ)';
+        if (deviceData.appVersion === '1.2.5') {
+          dashOtaNoticeDetail.textContent = `Máy con: v1.2.5 (Mới nhất) - Đã tối ưu nhận diện app`;
+        } else {
+          dashOtaNoticeDetail.textContent = `Máy con đang chạy: ${appVer} → Cần nâng cấp v1.2.5 để nhận diện app`;
         }
       }
 

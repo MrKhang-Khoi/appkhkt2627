@@ -197,12 +197,23 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+    }
+
     override fun onResume() {
         super.onResume()
         checkAllPermissions()
 
-        // Kiểm tra cập nhật mỗi khi mở lại ứng dụng
-        performUpdateCheck(userInitiated = false)
+        val isFromUpdateNotification = intent?.getBooleanExtra("EXTRA_SHOW_UPDATE", false) == true
+        if (isFromUpdateNotification) {
+            intent?.removeExtra("EXTRA_SHOW_UPDATE")
+            performUpdateCheck(userInitiated = true)
+        } else {
+            // Kiểm tra cập nhật mỗi khi mở lại ứng dụng
+            performUpdateCheck(userInitiated = false)
+        }
 
         val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
         val isPaired = prefs.getBoolean("is_paired", false)

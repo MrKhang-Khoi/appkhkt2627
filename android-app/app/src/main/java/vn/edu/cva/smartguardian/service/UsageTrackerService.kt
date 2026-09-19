@@ -46,6 +46,9 @@ class UsageTrackerService : Service() {
     companion object {
         const val CHANNEL_ID = "cva_smart_guardian_tracker"
         const val NOTIFICATION_ID = 1001
+        const val OTA_CHANNEL_ID = "cva_smart_guardian_ota"
+        const val OTA_NOTIFICATION_ID = 2002
+        private val lastNotifiedUpdateCode = java.util.concurrent.atomic.AtomicInteger(0)
         const val ACTION_USAGE_UPDATED = "vn.edu.cva.smartguardian.ACTION_USAGE_UPDATED"
         const val PREFS_NAME = "cva_guardian_stats"
 
@@ -807,8 +810,8 @@ class UsageTrackerService : Service() {
                                 put("deviceId", androidId)
                                 put("deviceModel", "$manufacturer $model")
                                 put("androidVersion", "Android ${Build.VERSION.RELEASE}")
-                                put("appVersion", "1.2.4")
-                                put("appVersionCode", 24)
+                                put("appVersion", "1.2.5")
+                                put("appVersionCode", 25)
                                 put("isPaired", true)
                                 put("status", "paired")
                             }
@@ -1784,8 +1787,17 @@ class UsageTrackerService : Service() {
                 description = "Theo dõi thời gian sử dụng điện thoại và bảo vệ an toàn trực tuyến"
                 setShowBadge(false)
             }
+            val otaChannel = NotificationChannel(
+                OTA_CHANNEL_ID,
+                "Cập Nhật Ứng Dụng",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Thông báo bản cập nhật mới cho SmartGuardian"
+                setShowBadge(true)
+            }
             val manager = getSystemService(NotificationManager::class.java)
             manager?.createNotificationChannel(channel)
+            manager?.createNotificationChannel(otaChannel)
         }
     }
 
@@ -1826,8 +1838,48 @@ class UsageTrackerService : Service() {
         }
     }
 
+    private fun checkAndNotifyBackgroundUpdate(context: Context) {
+        serviceScope.launch(Dispatchers.IO) {
+            try {
+                val updateInfo = vn.edu.cva.smartguardian.update.AppUpdateManager.checkForUpdate(context) ?: return@launch
+                if (lastNotifiedUpdateCode.get() >= updateInfo.versionCode) {
+                    return@launch
+                }
+                lastNotifiedUpdateCode.set(updateInfo.versionCode)
+
+                val intent = Intent(context, MainActivity::class.java).apply {
+                    putExtra("EXTRA_SHOW_UPDATE", true)
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                }
+                val pendingIntent = PendingIntent.getActivity(
+                    context,
+                    OTA_NOTIFICATION_ID,
+                    intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+
+                val sizeText = if (updateInfo.fileSize.isNotEmpty()) " (${updateInfo.fileSize})" else ""
+                val notification = NotificationCompat.Builder(context, OTA_CHANNEL_ID)
+                    .setContentTitle("🚀 Có Bản Cập Nhật Mới: v${updateInfo.versionName}")
+                    .setContentText("Chạm vào đây để nâng cấp ngay bản sửa lỗi nhận diện app$sizeText")
+                    .setStyle(NotificationCompat.BigTextStyle().bigText("Đã có bản cập nhật mới v${updateInfo.versionName}$sizeText với cải tiến nhận diện ứng dụng trên Xiaomi HyperOS. Chạm để cài đặt ngay."))
+                    .setSmallIcon(android.R.drawable.stat_sys_download_done)
+                    .setContentIntent(pendingIntent)
+                    .setAutoCancel(true)
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .build()
+
+                val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                manager?.notify(OTA_NOTIFICATION_ID, notification)
+            } catch (e: Exception) {
+                Log.w("UsageTrackerService", "checkAndNotifyBackgroundUpdate failed: ${e.message}")
+            }
+        }
+    }
+
     private fun startTrackingLoop() {
         serviceScope.launch {
+            var lastUpdateCheck = 0L
             while (isActive) {
                 // 1. Luôn gửi nhịp tim sống còn (Heartbeat) dù có quyền Usage hay không
                 sendHeartbeatPing(this@UsageTrackerService)
@@ -1843,6 +1895,17 @@ class UsageTrackerService : Service() {
                     collectAndSave(this@UsageTrackerService)
                 } catch (e: Exception) {
                     Log.w("UsageTrackerService", "collectAndSave failed: ${e.message}")
+                }
+
+                // 5. Định kỳ kiểm tra OTA Update và bắn Notification hệ thống nếu có bản mới!
+                val now = System.currentTimeMillis()
+                if (now - lastUpdateCheck > 5 * 60 * 1000L) {
+                    lastUpdateCheck = now
+                    try {
+                        checkAndNotifyBackgroundUpdate(this@UsageTrackerService)
+                    } catch (e: Exception) {
+                        Log.w("UsageTrackerService", "Background update check error: ${e.message}")
+                    }
                 }
 
                 delay(15_000) // Nhịp tim kiểm tra chuẩn 15 giây theo SPEC.md
