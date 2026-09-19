@@ -1721,313 +1721,6 @@
       return { isOnline: false, diffSeconds, text: `Ngoại tuyến (${timeText})`, color: '#ef4444' };
     }
 
-    function updateChildDashboardLive(deviceData, status) {
-      if (!deviceData) return;
-      const dashChildName = document.getElementById('dashChildName');
-      const dashChildStatus = document.getElementById('dashChildStatus');
-      const dashOfflineNotice = document.getElementById('dashOfflineNotice');
-      const dashOfflineNoticeDetail = document.getElementById('dashOfflineNoticeDetail');
-      const dashBalanceScore = document.getElementById('dashBalanceScore');
-      const dashBalanceBadge = document.getElementById('dashBalanceBadge');
-      const dashBalanceSub = document.getElementById('dashBalanceSub');
-      const dashStudyTime = document.getElementById('dashStudyTime');
-      const dashGameTime = document.getElementById('dashGameTime');
-      const dashSocialTime = document.getElementById('dashSocialTime');
-
-      if (dashChildName) dashChildName.textContent = deviceData.deviceModel || 'Điện thoại học sinh';
-
-      if (dashChildStatus) {
-        dashChildStatus.replaceChildren();
-        const statusSpan = document.createElement('span');
-        statusSpan.style.color = status.color;
-        statusSpan.style.fontWeight = '700';
-        statusSpan.textContent = `● ${status.text}`;
-        dashChildStatus.appendChild(statusSpan);
-      }
-
-      if (dashOfflineNotice) {
-        dashOfflineNotice.style.display = status.isOnline ? 'none' : 'block';
-        if (dashOfflineNoticeDetail && !status.isOnline) {
-          dashOfflineNoticeDetail.textContent = `Thiết bị học sinh hiện không có kết nối internet (${status.text}). Toàn bộ lệnh can thiệp và số liệu sẽ được cập nhật đồng bộ ngay khi máy kết nối mạng trở lại.`;
-        }
-      }
-
-      // Cập nhật thẻ Ứng Dụng Đang Mở Trực Tiếp (Foreground App)
-      const dashActiveAppName = document.getElementById('dashActiveAppName');
-      const dashActiveAppBadge = document.getElementById('dashActiveAppBadge');
-      const dashActiveAppTime = document.getElementById('dashActiveAppTime');
-      const dashActiveAppDot = document.getElementById('dashActiveAppDot');
-
-      const activeApp = deviceData.active_app;
-      if (activeApp && activeApp.appName) {
-        if (dashActiveAppName) dashActiveAppName.textContent = activeApp.appName;
-        if (dashActiveAppBadge) {
-          const cat = activeApp.category || 'other';
-          if (cat === 'study') {
-            dashActiveAppBadge.textContent = '📚 Học Tập';
-            dashActiveAppBadge.style.color = '#38bdf8';
-            dashActiveAppBadge.style.borderColor = 'rgba(56, 189, 248, 0.4)';
-            dashActiveAppBadge.style.background = 'rgba(56, 189, 248, 0.15)';
-          } else if (cat === 'game') {
-            dashActiveAppBadge.textContent = '🎮 Trò Chơi';
-            dashActiveAppBadge.style.color = '#fbbf24';
-            dashActiveAppBadge.style.borderColor = 'rgba(251, 191, 36, 0.4)';
-            dashActiveAppBadge.style.background = 'rgba(251, 191, 36, 0.15)';
-          } else if (cat === 'social') {
-            dashActiveAppBadge.textContent = '💬 Mạng Xã Hội';
-            dashActiveAppBadge.style.color = '#f87171';
-            dashActiveAppBadge.style.borderColor = 'rgba(248, 113, 113, 0.4)';
-            dashActiveAppBadge.style.background = 'rgba(248, 113, 113, 0.15)';
-          } else if (cat === 'launcher') {
-            dashActiveAppBadge.textContent = '🏠 Màn Hình Chính';
-            dashActiveAppBadge.style.color = '#94a3b8';
-            dashActiveAppBadge.style.borderColor = 'rgba(148, 163, 184, 0.4)';
-            dashActiveAppBadge.style.background = 'rgba(148, 163, 184, 0.15)';
-          } else {
-            dashActiveAppBadge.textContent = activeApp.categoryLabel ? `⚙️ ${activeApp.categoryLabel}` : '⚙️ Tiện Ích';
-            dashActiveAppBadge.style.color = '#a78bfa';
-            dashActiveAppBadge.style.borderColor = 'rgba(167, 139, 250, 0.4)';
-            dashActiveAppBadge.style.background = 'rgba(167, 139, 250, 0.15)';
-          }
-        }
-        if (dashActiveAppTime) {
-          if (activeApp.timestamp) {
-            const diffSec = Math.max(0, Math.round((Date.now() - activeApp.timestamp) / 1000));
-            if (diffSec < 60) {
-              dashActiveAppTime.textContent = 'Đang mở (vừa xong)';
-            } else if (diffSec < 3600) {
-              dashActiveAppTime.textContent = `Mở lúc ${new Date(activeApp.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`;
-            } else {
-              dashActiveAppTime.textContent = `${Math.floor(diffSec / 3600)}h trước`;
-            }
-          } else {
-            dashActiveAppTime.textContent = '--';
-          }
-        }
-        if (dashActiveAppDot) {
-          if (status.isOnline && activeApp.isForeground !== false) {
-            dashActiveAppDot.style.background = '#10b981';
-            dashActiveAppDot.style.boxShadow = '0 0 10px #10b981';
-          } else {
-            dashActiveAppDot.style.background = '#94a3b8';
-            dashActiveAppDot.style.boxShadow = 'none';
-          }
-        }
-      } else {
-        if (dashActiveAppName) dashActiveAppName.textContent = 'Màn hình chính / Chờ mở app';
-        if (dashActiveAppBadge) {
-          dashActiveAppBadge.textContent = status.isOnline ? '🟢 Trực Tuyến' : '🔴 Ngoại Tuyến';
-          dashActiveAppBadge.style.color = status.color;
-          dashActiveAppBadge.style.borderColor = status.color;
-          dashActiveAppBadge.style.background = 'rgba(148, 163, 184, 0.1)';
-        }
-        if (dashActiveAppTime) dashActiveAppTime.textContent = status.isOnline ? 'Sẵn sàng theo dõi' : 'Mất kết nối';
-        if (dashActiveAppDot) {
-          dashActiveAppDot.style.background = status.color;
-          dashActiveAppDot.style.boxShadow = status.isOnline ? `0 0 10px ${status.color}` : 'none';
-        }
-      }
-
-      if (deviceData.usage) {
-        const u = deviceData.usage;
-        const score = typeof u.balanceScore === 'number' ? u.balanceScore : 88;
-        if (dashBalanceScore) {
-          dashBalanceScore.replaceChildren();
-          dashBalanceScore.appendChild(document.createTextNode(String(score)));
-          const subSpan = document.createElement('span');
-          subSpan.style.fontSize = '0.9rem';
-          subSpan.style.color = '#94a3b8';
-          subSpan.textContent = '/100';
-          dashBalanceScore.appendChild(subSpan);
-        }
-        
-        if (dashBalanceBadge) {
-          if (score >= 80) {
-            dashBalanceBadge.textContent = '🟢 Lành Mạnh';
-            dashBalanceBadge.style.color = '#10b981';
-            dashBalanceBadge.style.borderColor = '#10b981';
-            dashBalanceBadge.style.background = 'rgba(16, 185, 129, 0.15)';
-          } else if (score >= 50) {
-            dashBalanceBadge.textContent = '🟡 Cân Bằng';
-            dashBalanceBadge.style.color = '#f59e0b';
-            dashBalanceBadge.style.borderColor = '#f59e0b';
-            dashBalanceBadge.style.background = 'rgba(245, 158, 11, 0.15)';
-          } else {
-            dashBalanceBadge.textContent = '🔴 Cần Chú Ý';
-            dashBalanceBadge.style.color = '#ef4444';
-            dashBalanceBadge.style.borderColor = '#ef4444';
-            dashBalanceBadge.style.background = 'rgba(239, 68, 68, 0.15)';
-          }
-        }
-        if (dashBalanceSub) dashBalanceSub.textContent = 'Đạt chuẩn an toàn số CVA';
-
-        const studyM = Number(u.studyTimeMinutes) || 0;
-        const gameM = Number(u.gameTimeMinutes) || 0;
-        const socialM = Number(u.socialTimeMinutes) || 0;
-
-        const formatCompactTime = (m) => {
-          if (!m || m <= 0) return '0m';
-          const h = Math.floor(m / 60);
-          const rem = m % 60;
-          return h > 0 ? `${h}h${rem > 0 ? ` ${rem}m` : ''}` : `${rem}m`;
-        };
-
-        if (dashStudyTime) dashStudyTime.textContent = formatCompactTime(studyM);
-        if (dashGameTime) dashGameTime.textContent = formatCompactTime(gameM);
-        if (dashSocialTime) dashSocialTime.textContent = formatCompactTime(socialM);
-      } else {
-        // Tuyệt đối không hiển thị số liệu giả nếu chưa có dữ liệu đo đạc
-        if (dashBalanceScore) {
-          dashBalanceScore.replaceChildren();
-          dashBalanceScore.appendChild(document.createTextNode('--'));
-          const subSpan = document.createElement('span');
-          subSpan.style.fontSize = '0.9rem';
-          subSpan.style.color = '#94a3b8';
-          subSpan.textContent = '/100';
-          dashBalanceScore.appendChild(subSpan);
-        }
-        if (dashBalanceBadge) {
-          dashBalanceBadge.textContent = '⚪ Chờ đồng bộ';
-          dashBalanceBadge.style.color = '#94a3b8';
-          dashBalanceBadge.style.borderColor = '#94a3b8';
-          dashBalanceBadge.style.background = 'rgba(148, 163, 184, 0.15)';
-        }
-        if (dashBalanceSub) dashBalanceSub.textContent = 'Chưa có bản ghi sử dụng hôm nay';
-        if (dashStudyTime) dashStudyTime.textContent = '--';
-        if (dashGameTime) dashGameTime.textContent = '--';
-        if (dashSocialTime) dashSocialTime.textContent = '--';
-      }
-
-      // Cập nhật Nhật Ký Ứng Dụng Đã Sử Dụng Hôm Nay (App Usage History Timeline)
-      const dashAppHistoryList = document.getElementById('dashAppHistoryList');
-      const dashAppHistoryCount = document.getElementById('dashAppHistoryCount');
-      if (dashAppHistoryList) {
-        const historyRaw = deviceData.app_history || (deviceData.usage && deviceData.usage.appHistory) || null;
-        let historyArr = [];
-        if (Array.isArray(historyRaw)) {
-          historyArr = historyRaw;
-        } else if (historyRaw && typeof historyRaw === 'object') {
-          historyArr = Object.values(historyRaw);
-        }
-
-        const validList = historyArr.filter(item => item && (Number(item.durationMinutes) > 0 || Number(item.totalTimeMs) >= 10000));
-        validList.sort((a, b) => (Number(b.totalTimeMs) || Number(b.durationMinutes) * 60000) - (Number(a.totalTimeMs) || Number(a.durationMinutes) * 60000));
-
-        if (dashAppHistoryCount) {
-          dashAppHistoryCount.textContent = `${validList.length} ứng dụng`;
-        }
-
-        dashAppHistoryList.replaceChildren();
-
-        if (validList.length === 0) {
-          const emptyDiv = document.createElement('div');
-          emptyDiv.style.background = 'rgba(30, 41, 59, 0.4)';
-          emptyDiv.style.borderRadius = '10px';
-          emptyDiv.style.padding = '12px';
-          emptyDiv.style.textAlign = 'center';
-          emptyDiv.style.color = '#94a3b8';
-          emptyDiv.style.fontSize = '0.75rem';
-          emptyDiv.textContent = 'Chưa có nhật ký ứng dụng hôm nay (hoặc máy đang chờ cấp quyền)';
-          dashAppHistoryList.appendChild(emptyDiv);
-        } else {
-          const maxTimeMs = Math.max(1, Number(validList[0].totalTimeMs) || (Number(validList[0].durationMinutes) * 60000));
-
-          for (const item of validList) {
-            const itemRow = document.createElement('div');
-            itemRow.style.background = 'rgba(30, 41, 59, 0.55)';
-            itemRow.style.borderRadius = '10px';
-            itemRow.style.padding = '10px 12px';
-            itemRow.style.display = 'flex';
-            itemRow.style.flexDirection = 'column';
-            itemRow.style.gap = '6px';
-            itemRow.style.border = '1px solid rgba(255, 255, 255, 0.05)';
-
-            const topRow = document.createElement('div');
-            topRow.style.display = 'flex';
-            topRow.style.alignItems = 'center';
-            topRow.style.justifyContent = 'space-between';
-
-            const nameBox = document.createElement('div');
-            nameBox.style.display = 'flex';
-            nameBox.style.alignItems = 'center';
-            nameBox.style.gap = '8px';
-
-            const iconSpan = document.createElement('span');
-            iconSpan.style.fontSize = '1.1rem';
-            let catColor = '#a78bfa';
-            if (item.category === 'study') {
-              iconSpan.textContent = '📚';
-              catColor = '#38bdf8';
-            } else if (item.category === 'game') {
-              iconSpan.textContent = '🎮';
-              catColor = '#fbbf24';
-            } else if (item.category === 'social') {
-              iconSpan.textContent = '💬';
-              catColor = '#f87171';
-            } else {
-              iconSpan.textContent = '📱';
-              catColor = '#94a3b8';
-            }
-
-            const titleWrap = document.createElement('div');
-            const nameEl = document.createElement('div');
-            nameEl.style.fontSize = '0.82rem';
-            nameEl.style.fontWeight = '700';
-            nameEl.style.color = '#f8fafc';
-            nameEl.textContent = item.appName || item.packageName || 'Ứng dụng';
-
-            const subEl = document.createElement('div');
-            subEl.style.fontSize = '0.68rem';
-            subEl.style.color = catColor;
-            const lastTimeStr = item.lastTimeUsed ? new Date(item.lastTimeUsed).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '';
-            subEl.textContent = `${item.categoryLabel || 'Ứng dụng'}${lastTimeStr ? ` • Lần cuối: ${lastTimeStr}` : ''}`;
-
-            titleWrap.appendChild(nameEl);
-            titleWrap.appendChild(subEl);
-            nameBox.appendChild(iconSpan);
-            nameBox.appendChild(titleWrap);
-
-            const durationEl = document.createElement('div');
-            durationEl.style.fontSize = '0.84rem';
-            durationEl.style.fontWeight = '800';
-            durationEl.style.color = '#f1f5f9';
-
-            const totalMs = Number(item.totalTimeMs) || (Number(item.durationMinutes) * 60000);
-            const totalMinutes = Math.round(totalMs / 60000);
-            if (totalMinutes >= 60) {
-              durationEl.textContent = `${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}m`;
-            } else if (totalMinutes > 0) {
-              durationEl.textContent = `${totalMinutes} phút`;
-            } else {
-              durationEl.textContent = '< 1 phút';
-            }
-
-            topRow.appendChild(nameBox);
-            topRow.appendChild(durationEl);
-
-            const progressBg = document.createElement('div');
-            progressBg.style.width = '100%';
-            progressBg.style.height = '4px';
-            progressBg.style.borderRadius = '9999px';
-            progressBg.style.background = 'rgba(255, 255, 255, 0.08)';
-            progressBg.style.overflow = 'hidden';
-
-            const progressFill = document.createElement('div');
-            const pct = Math.min(100, Math.max(5, Math.round((totalMs / maxTimeMs) * 100)));
-            progressFill.style.width = `${pct}%`;
-            progressFill.style.height = '100%';
-            progressFill.style.borderRadius = '9999px';
-            progressFill.style.background = catColor;
-            progressFill.style.transition = 'width 0.3s ease';
-            progressBg.appendChild(progressFill);
-
-            itemRow.appendChild(topRow);
-            itemRow.appendChild(progressBg);
-            dashAppHistoryList.appendChild(itemRow);
-          }
-        }
-      }
-
       // ======================================================================
       // BỘ KHỞI TẠO VÀ RENDER DANH MỤC ỨNG DỤNG (PILL SELECTOR & SQUIRCLE CARDS)
       // ======================================================================
@@ -2589,6 +2282,315 @@
         });
       }
 
+
+
+    function updateChildDashboardLive(deviceData, status) {
+      if (!deviceData) return;
+      const dashChildName = document.getElementById('dashChildName');
+      const dashChildStatus = document.getElementById('dashChildStatus');
+      const dashOfflineNotice = document.getElementById('dashOfflineNotice');
+      const dashOfflineNoticeDetail = document.getElementById('dashOfflineNoticeDetail');
+      const dashBalanceScore = document.getElementById('dashBalanceScore');
+      const dashBalanceBadge = document.getElementById('dashBalanceBadge');
+      const dashBalanceSub = document.getElementById('dashBalanceSub');
+      const dashStudyTime = document.getElementById('dashStudyTime');
+      const dashGameTime = document.getElementById('dashGameTime');
+      const dashSocialTime = document.getElementById('dashSocialTime');
+
+      if (dashChildName) dashChildName.textContent = deviceData.deviceModel || 'Điện thoại học sinh';
+
+      if (dashChildStatus) {
+        dashChildStatus.replaceChildren();
+        const statusSpan = document.createElement('span');
+        statusSpan.style.color = status.color;
+        statusSpan.style.fontWeight = '700';
+        statusSpan.textContent = `● ${status.text}`;
+        dashChildStatus.appendChild(statusSpan);
+      }
+
+      if (dashOfflineNotice) {
+        dashOfflineNotice.style.display = status.isOnline ? 'none' : 'block';
+        if (dashOfflineNoticeDetail && !status.isOnline) {
+          dashOfflineNoticeDetail.textContent = `Thiết bị học sinh hiện không có kết nối internet (${status.text}). Toàn bộ lệnh can thiệp và số liệu sẽ được cập nhật đồng bộ ngay khi máy kết nối mạng trở lại.`;
+        }
+      }
+
+      // Cập nhật thẻ Ứng Dụng Đang Mở Trực Tiếp (Foreground App)
+      const dashActiveAppName = document.getElementById('dashActiveAppName');
+      const dashActiveAppBadge = document.getElementById('dashActiveAppBadge');
+      const dashActiveAppTime = document.getElementById('dashActiveAppTime');
+      const dashActiveAppDot = document.getElementById('dashActiveAppDot');
+
+      const activeApp = deviceData.active_app;
+      if (activeApp && activeApp.appName) {
+        if (dashActiveAppName) dashActiveAppName.textContent = activeApp.appName;
+        if (dashActiveAppBadge) {
+          const cat = activeApp.category || 'other';
+          if (cat === 'study') {
+            dashActiveAppBadge.textContent = '📚 Học Tập';
+            dashActiveAppBadge.style.color = '#38bdf8';
+            dashActiveAppBadge.style.borderColor = 'rgba(56, 189, 248, 0.4)';
+            dashActiveAppBadge.style.background = 'rgba(56, 189, 248, 0.15)';
+          } else if (cat === 'game') {
+            dashActiveAppBadge.textContent = '🎮 Trò Chơi';
+            dashActiveAppBadge.style.color = '#fbbf24';
+            dashActiveAppBadge.style.borderColor = 'rgba(251, 191, 36, 0.4)';
+            dashActiveAppBadge.style.background = 'rgba(251, 191, 36, 0.15)';
+          } else if (cat === 'social') {
+            dashActiveAppBadge.textContent = '💬 Mạng Xã Hội';
+            dashActiveAppBadge.style.color = '#f87171';
+            dashActiveAppBadge.style.borderColor = 'rgba(248, 113, 113, 0.4)';
+            dashActiveAppBadge.style.background = 'rgba(248, 113, 113, 0.15)';
+          } else if (cat === 'launcher') {
+            dashActiveAppBadge.textContent = '🏠 Màn Hình Chính';
+            dashActiveAppBadge.style.color = '#94a3b8';
+            dashActiveAppBadge.style.borderColor = 'rgba(148, 163, 184, 0.4)';
+            dashActiveAppBadge.style.background = 'rgba(148, 163, 184, 0.15)';
+          } else {
+            dashActiveAppBadge.textContent = activeApp.categoryLabel ? `⚙️ ${activeApp.categoryLabel}` : '⚙️ Tiện Ích';
+            dashActiveAppBadge.style.color = '#a78bfa';
+            dashActiveAppBadge.style.borderColor = 'rgba(167, 139, 250, 0.4)';
+            dashActiveAppBadge.style.background = 'rgba(167, 139, 250, 0.15)';
+          }
+        }
+        if (dashActiveAppTime) {
+          if (activeApp.timestamp) {
+            const diffSec = Math.max(0, Math.round((Date.now() - activeApp.timestamp) / 1000));
+            if (diffSec < 60) {
+              dashActiveAppTime.textContent = 'Đang mở (vừa xong)';
+            } else if (diffSec < 3600) {
+              dashActiveAppTime.textContent = `Mở lúc ${new Date(activeApp.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`;
+            } else {
+              dashActiveAppTime.textContent = `${Math.floor(diffSec / 3600)}h trước`;
+            }
+          } else {
+            dashActiveAppTime.textContent = '--';
+          }
+        }
+        if (dashActiveAppDot) {
+          if (status.isOnline && activeApp.isForeground !== false) {
+            dashActiveAppDot.style.background = '#10b981';
+            dashActiveAppDot.style.boxShadow = '0 0 10px #10b981';
+          } else {
+            dashActiveAppDot.style.background = '#94a3b8';
+            dashActiveAppDot.style.boxShadow = 'none';
+          }
+        }
+      } else {
+        if (dashActiveAppName) dashActiveAppName.textContent = 'Màn hình chính / Chờ mở app';
+        if (dashActiveAppBadge) {
+          dashActiveAppBadge.textContent = status.isOnline ? '🟢 Trực Tuyến' : '🔴 Ngoại Tuyến';
+          dashActiveAppBadge.style.color = status.color;
+          dashActiveAppBadge.style.borderColor = status.color;
+          dashActiveAppBadge.style.background = 'rgba(148, 163, 184, 0.1)';
+        }
+        if (dashActiveAppTime) dashActiveAppTime.textContent = status.isOnline ? 'Sẵn sàng theo dõi' : 'Mất kết nối';
+        if (dashActiveAppDot) {
+          dashActiveAppDot.style.background = status.color;
+          dashActiveAppDot.style.boxShadow = status.isOnline ? `0 0 10px ${status.color}` : 'none';
+        }
+      }
+
+      if (deviceData.usage) {
+        const u = deviceData.usage;
+        const score = typeof u.balanceScore === 'number' ? u.balanceScore : 88;
+        if (dashBalanceScore) {
+          dashBalanceScore.replaceChildren();
+          dashBalanceScore.appendChild(document.createTextNode(String(score)));
+          const subSpan = document.createElement('span');
+          subSpan.style.fontSize = '0.9rem';
+          subSpan.style.color = '#94a3b8';
+          subSpan.textContent = '/100';
+          dashBalanceScore.appendChild(subSpan);
+        }
+        
+        if (dashBalanceBadge) {
+          if (score >= 80) {
+            dashBalanceBadge.textContent = '🟢 Lành Mạnh';
+            dashBalanceBadge.style.color = '#10b981';
+            dashBalanceBadge.style.borderColor = '#10b981';
+            dashBalanceBadge.style.background = 'rgba(16, 185, 129, 0.15)';
+          } else if (score >= 50) {
+            dashBalanceBadge.textContent = '🟡 Cân Bằng';
+            dashBalanceBadge.style.color = '#f59e0b';
+            dashBalanceBadge.style.borderColor = '#f59e0b';
+            dashBalanceBadge.style.background = 'rgba(245, 158, 11, 0.15)';
+          } else {
+            dashBalanceBadge.textContent = '🔴 Cần Chú Ý';
+            dashBalanceBadge.style.color = '#ef4444';
+            dashBalanceBadge.style.borderColor = '#ef4444';
+            dashBalanceBadge.style.background = 'rgba(239, 68, 68, 0.15)';
+          }
+        }
+        if (dashBalanceSub) dashBalanceSub.textContent = 'Đạt chuẩn an toàn số CVA';
+
+        const studyM = Number(u.studyTimeMinutes) || 0;
+        const gameM = Number(u.gameTimeMinutes) || 0;
+        const socialM = Number(u.socialTimeMinutes) || 0;
+
+        const formatCompactTime = (m) => {
+          if (!m || m <= 0) return '0m';
+          const h = Math.floor(m / 60);
+          const rem = m % 60;
+          return h > 0 ? `${h}h${rem > 0 ? ` ${rem}m` : ''}` : `${rem}m`;
+        };
+
+        if (dashStudyTime) dashStudyTime.textContent = formatCompactTime(studyM);
+        if (dashGameTime) dashGameTime.textContent = formatCompactTime(gameM);
+        if (dashSocialTime) dashSocialTime.textContent = formatCompactTime(socialM);
+      } else {
+        // Tuyệt đối không hiển thị số liệu giả nếu chưa có dữ liệu đo đạc
+        if (dashBalanceScore) {
+          dashBalanceScore.replaceChildren();
+          dashBalanceScore.appendChild(document.createTextNode('--'));
+          const subSpan = document.createElement('span');
+          subSpan.style.fontSize = '0.9rem';
+          subSpan.style.color = '#94a3b8';
+          subSpan.textContent = '/100';
+          dashBalanceScore.appendChild(subSpan);
+        }
+        if (dashBalanceBadge) {
+          dashBalanceBadge.textContent = '⚪ Chờ đồng bộ';
+          dashBalanceBadge.style.color = '#94a3b8';
+          dashBalanceBadge.style.borderColor = '#94a3b8';
+          dashBalanceBadge.style.background = 'rgba(148, 163, 184, 0.15)';
+        }
+        if (dashBalanceSub) dashBalanceSub.textContent = 'Chưa có bản ghi sử dụng hôm nay';
+        if (dashStudyTime) dashStudyTime.textContent = '--';
+        if (dashGameTime) dashGameTime.textContent = '--';
+        if (dashSocialTime) dashSocialTime.textContent = '--';
+      }
+
+      // Cập nhật Nhật Ký Ứng Dụng Đã Sử Dụng Hôm Nay (App Usage History Timeline)
+      const dashAppHistoryList = document.getElementById('dashAppHistoryList');
+      const dashAppHistoryCount = document.getElementById('dashAppHistoryCount');
+      if (dashAppHistoryList) {
+        const historyRaw = deviceData.app_history || (deviceData.usage && deviceData.usage.appHistory) || null;
+        let historyArr = [];
+        if (Array.isArray(historyRaw)) {
+          historyArr = historyRaw;
+        } else if (historyRaw && typeof historyRaw === 'object') {
+          historyArr = Object.values(historyRaw);
+        }
+
+        const validList = historyArr.filter(item => item && (Number(item.durationMinutes) > 0 || Number(item.totalTimeMs) >= 10000));
+        validList.sort((a, b) => (Number(b.totalTimeMs) || Number(b.durationMinutes) * 60000) - (Number(a.totalTimeMs) || Number(a.durationMinutes) * 60000));
+
+        if (dashAppHistoryCount) {
+          dashAppHistoryCount.textContent = `${validList.length} ứng dụng`;
+        }
+
+        dashAppHistoryList.replaceChildren();
+
+        if (validList.length === 0) {
+          const emptyDiv = document.createElement('div');
+          emptyDiv.style.background = 'rgba(30, 41, 59, 0.4)';
+          emptyDiv.style.borderRadius = '10px';
+          emptyDiv.style.padding = '12px';
+          emptyDiv.style.textAlign = 'center';
+          emptyDiv.style.color = '#94a3b8';
+          emptyDiv.style.fontSize = '0.75rem';
+          emptyDiv.textContent = 'Chưa có nhật ký ứng dụng hôm nay (hoặc máy đang chờ cấp quyền)';
+          dashAppHistoryList.appendChild(emptyDiv);
+        } else {
+          const maxTimeMs = Math.max(1, Number(validList[0].totalTimeMs) || (Number(validList[0].durationMinutes) * 60000));
+
+          for (const item of validList) {
+            const itemRow = document.createElement('div');
+            itemRow.style.background = 'rgba(30, 41, 59, 0.55)';
+            itemRow.style.borderRadius = '10px';
+            itemRow.style.padding = '10px 12px';
+            itemRow.style.display = 'flex';
+            itemRow.style.flexDirection = 'column';
+            itemRow.style.gap = '6px';
+            itemRow.style.border = '1px solid rgba(255, 255, 255, 0.05)';
+
+            const topRow = document.createElement('div');
+            topRow.style.display = 'flex';
+            topRow.style.alignItems = 'center';
+            topRow.style.justifyContent = 'space-between';
+
+            const nameBox = document.createElement('div');
+            nameBox.style.display = 'flex';
+            nameBox.style.alignItems = 'center';
+            nameBox.style.gap = '8px';
+
+            const iconSpan = document.createElement('span');
+            iconSpan.style.fontSize = '1.1rem';
+            let catColor = '#a78bfa';
+            if (item.category === 'study') {
+              iconSpan.textContent = '📚';
+              catColor = '#38bdf8';
+            } else if (item.category === 'game') {
+              iconSpan.textContent = '🎮';
+              catColor = '#fbbf24';
+            } else if (item.category === 'social') {
+              iconSpan.textContent = '💬';
+              catColor = '#f87171';
+            } else {
+              iconSpan.textContent = '📱';
+              catColor = '#94a3b8';
+            }
+
+            const titleWrap = document.createElement('div');
+            const nameEl = document.createElement('div');
+            nameEl.style.fontSize = '0.82rem';
+            nameEl.style.fontWeight = '700';
+            nameEl.style.color = '#f8fafc';
+            nameEl.textContent = item.appName || item.packageName || 'Ứng dụng';
+
+            const subEl = document.createElement('div');
+            subEl.style.fontSize = '0.68rem';
+            subEl.style.color = catColor;
+            const lastTimeStr = item.lastTimeUsed ? new Date(item.lastTimeUsed).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '';
+            subEl.textContent = `${item.categoryLabel || 'Ứng dụng'}${lastTimeStr ? ` • Lần cuối: ${lastTimeStr}` : ''}`;
+
+            titleWrap.appendChild(nameEl);
+            titleWrap.appendChild(subEl);
+            nameBox.appendChild(iconSpan);
+            nameBox.appendChild(titleWrap);
+
+            const durationEl = document.createElement('div');
+            durationEl.style.fontSize = '0.84rem';
+            durationEl.style.fontWeight = '800';
+            durationEl.style.color = '#f1f5f9';
+
+            const totalMs = Number(item.totalTimeMs) || (Number(item.durationMinutes) * 60000);
+            const totalMinutes = Math.round(totalMs / 60000);
+            if (totalMinutes >= 60) {
+              durationEl.textContent = `${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}m`;
+            } else if (totalMinutes > 0) {
+              durationEl.textContent = `${totalMinutes} phút`;
+            } else {
+              durationEl.textContent = '< 1 phút';
+            }
+
+            topRow.appendChild(nameBox);
+            topRow.appendChild(durationEl);
+
+            const progressBg = document.createElement('div');
+            progressBg.style.width = '100%';
+            progressBg.style.height = '4px';
+            progressBg.style.borderRadius = '9999px';
+            progressBg.style.background = 'rgba(255, 255, 255, 0.08)';
+            progressBg.style.overflow = 'hidden';
+
+            const progressFill = document.createElement('div');
+            const pct = Math.min(100, Math.max(5, Math.round((totalMs / maxTimeMs) * 100)));
+            progressFill.style.width = `${pct}%`;
+            progressFill.style.height = '100%';
+            progressFill.style.borderRadius = '9999px';
+            progressFill.style.background = catColor;
+            progressFill.style.transition = 'width 0.3s ease';
+            progressBg.appendChild(progressFill);
+
+            itemRow.appendChild(topRow);
+            itemRow.appendChild(progressBg);
+            dashAppHistoryList.appendChild(itemRow);
+          }
+        }
+      }
+
       // Khởi tạo phím Pill Category và kết xuất dữ liệu từng nhóm
       initCategoryPills();
       renderSocialAppBreakdown(deviceData);
@@ -2795,6 +2797,7 @@
         if (btnCheckFirebaseConn) btnCheckFirebaseConn.textContent = '⚠️ Lỗi kết nối';
       }
     }
+    window.openChildDashboard = openChildDashboard;
 
     if (btnCheckFirebaseConn) {
       btnCheckFirebaseConn.addEventListener('click', async () => {
@@ -3197,6 +3200,7 @@
         console.warn('Status check warning:', e);
       }
     }
+    window.checkDevicePairingStatus = checkDevicePairingStatus;
 
     // 7. PHỤ HUYNH NGẮT KẾT NỐI (XÁC THỰC MÃ PIN BẢO MẬT ĐA MÁY)
     if (btnTriggerUnpair) {
