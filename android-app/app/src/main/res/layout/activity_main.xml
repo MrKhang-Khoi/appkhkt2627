@@ -22,29 +22,37 @@
             android:paddingBottom="24dp">
 
             <!-- ========================================================== -->
-            <!-- 1. TOP HEADER BAR: CĂN GIỮA HOÀN HẢO CÂN XỨNG             -->
+            <!-- 1. TOP HEADER BAR: CĂN GIỮA CHUẨN 2D BLUEPRINT            -->
             <!-- ========================================================== -->
             <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
+                android:orientation="vertical"
                 android:gravity="center"
-                android:layout_marginBottom="20dp">
+                android:layout_marginBottom="22dp">
 
                 <ImageView
-                    android:layout_width="28dp"
-                    android:layout_height="28dp"
-                    android:src="@drawable/ic_shield_glow"
-                    android:contentDescription="Shield Logo" />
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:src="@drawable/ic_shield_cyber_lock"
+                    android:contentDescription="Shield Logo"
+                    android:layout_marginBottom="10dp" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="CVA-SmartGuardian"
                     android:textColor="#F8FAFC"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    android:layout_marginStart="10dp" />
+                    android:textSize="20sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Hệ Sinh Thái Đồng Hành Số"
+                    android:textColor="#94A3B8"
+                    android:textSize="12sp"
+                    android:layout_marginTop="3dp" />
             </LinearLayout>
 
             <!-- ========================================================== -->
@@ -66,9 +74,9 @@
                     android:layout_height="match_parent"
                     android:layout_weight="1"
                     android:background="@drawable/bg_tab_inactive"
-                    android:text="👨‍👩‍👧 Phụ Huynh"
+                    android:text="Phụ Huynh"
                     android:textColor="#94A3B8"
-                    android:textSize="13sp"
+                    android:textSize="14sp"
                     android:textStyle="bold"
                     android:gravity="center"
                     android:clickable="true"
@@ -81,9 +89,9 @@
                     android:layout_height="match_parent"
                     android:layout_weight="1"
                     android:background="@drawable/bg_tab_active"
-                    android:text="🎒 Học Sinh"
+                    android:text="Học Sinh"
                     android:textColor="#FFFFFF"
-                    android:textSize="13sp"
+                    android:textSize="14sp"
                     android:textStyle="bold"
                     android:gravity="center"
                     android:clickable="true"
@@ -111,6 +119,13 @@
                     android:gravity="center_horizontal"
                     android:padding="24dp"
                     android:visibility="visible">
+
+                    <ImageView
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:src="@drawable/ic_lock_neon"
+                        android:contentDescription="Security Lock"
+                        android:layout_marginBottom="14dp" />
 
                     <TextView
                         android:layout_width="wrap_content"
@@ -381,13 +396,30 @@
                         </LinearLayout>
                     </LinearLayout>
 
+                    <!-- BIOMETRIC FINGERPRINT & ENCRYPTION BADGE (2D BLUEPRINT) -->
+                    <ImageView
+                        android:id="@+id/ivParentBiometric"
+                        android:layout_width="38dp"
+                        android:layout_height="38dp"
+                        android:src="@drawable/ic_fingerprint_cyber"
+                        android:contentDescription="Biometric Unlock"
+                        android:layout_marginTop="20dp"
+                        android:layout_marginBottom="12dp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="✔ AES-256 Encrypted • v1.2.0"
+                        android:textColor="#64748B"
+                        android:textSize="11sp"
+                        android:layout_marginBottom="4dp" />
+
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="Mã PIN bảo mật mặc định: 1234"
-                        android:textColor="#64748B"
-                        android:textSize="11sp"
-                        android:layout_marginTop="16dp" />
+                        android:textColor="#475569"
+                        android:textSize="10sp" />
                 </LinearLayout>
 
                 <!-- SCREEN 2: PARENT HUB -->

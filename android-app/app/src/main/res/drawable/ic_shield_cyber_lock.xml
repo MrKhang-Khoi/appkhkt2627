@@ -1,0 +1,28 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="44dp"
+    android:height="44dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Shield Outline -->
+    <path
+        android:strokeColor="#00F2FE"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#1500F2FE"
+        android:pathData="M12,22s8,-4 8,-10V5l-8,-3-8,3v7c0,6 8,10 8,10z" />
+    <!-- Lock Body -->
+    <path
+        android:strokeColor="#00F2FE"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#2500F2FE"
+        android:pathData="M9,11h6a1,1 0 0,1 1,1v4a1,1 0 0,1 -1,1H9a1,1 0 0,1 -1,-1v-4a1,1 0 0,1 1,-1z" />
+    <!-- Lock Shackle -->
+    <path
+        android:strokeColor="#00F2FE"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:pathData="M10,11V9a2,2 0 1,1 4,0v2" />
+</vector>
