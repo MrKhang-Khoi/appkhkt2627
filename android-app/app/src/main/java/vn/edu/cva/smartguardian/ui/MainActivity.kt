@@ -231,7 +231,9 @@ class MainActivity : AppCompatActivity() {
         super.onPause()
         try {
             unregisterReceiver(usageUpdateReceiver)
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            android.util.Log.w("MainActivity", "Failed to unregister receiver: ${e.message}")
+        }
     }
 
     override fun onDestroy() {
@@ -719,7 +721,9 @@ class MainActivity : AppCompatActivity() {
                             isCodeValid = true
                         }
                     }
-                } catch (_: Exception) {}
+                } catch (e: Exception) {
+                    android.util.Log.w("MainActivity", "Pairing check error: ${e.message}")
+                }
 
                 if (!isCodeValid && !inputCode.matches(Regex("^CVA-[A-Z0-9]{4}$"))) {
                     withContext(Dispatchers.Main) {
@@ -1709,10 +1713,13 @@ class MainActivity : AppCompatActivity() {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             startActivity(intent)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            android.util.Log.w("MainActivity", "openApplicationDetailsSettings fallback: ${e.message}")
             try {
                 startActivity(Intent(Settings.ACTION_SETTINGS))
-            } catch (_: Exception) {}
+            } catch (ex: Exception) {
+                android.util.Log.w("MainActivity", "Failed to open settings: ${ex.message}")
+            }
         }
     }
 
@@ -1727,10 +1734,13 @@ class MainActivity : AppCompatActivity() {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             startActivity(intent)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            android.util.Log.w("MainActivity", "openAccessibilitySettings fallback: ${e.message}")
             try {
                 startActivity(Intent(Settings.ACTION_SETTINGS))
-            } catch (_: Exception) {}
+            } catch (ex: Exception) {
+                android.util.Log.w("MainActivity", "Failed to open settings: ${ex.message}")
+            }
         }
     }
 
@@ -1746,16 +1756,20 @@ class MainActivity : AppCompatActivity() {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             startActivity(intent)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            android.util.Log.w("MainActivity", "openUsageAccessSettings fallback: ${e.message}")
             try {
                 val fallbackIntent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 startActivity(fallbackIntent)
-            } catch (_: Exception) {
+            } catch (ex: Exception) {
+                android.util.Log.w("MainActivity", "openUsageAccessSettings root fallback: ${ex.message}")
                 try {
                     startActivity(Intent(Settings.ACTION_SETTINGS))
-                } catch (_: Exception) {}
+                } catch (finalEx: Exception) {
+                    android.util.Log.w("MainActivity", "Failed to open settings: ${finalEx.message}")
+                }
             }
         }
     }

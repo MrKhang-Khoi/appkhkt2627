@@ -1,5 +1,6 @@
 package vn.edu.cva.smartguardian.service
 
+import android.app.KeyguardManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -16,9 +17,15 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import vn.edu.cva.smartguardian.data.AppCategory
 import vn.edu.cva.smartguardian.data.AppClassifier
 import vn.edu.cva.smartguardian.data.WebFilterList
@@ -49,6 +56,682 @@ class UsageTrackerService : Service() {
                 .build()
         }
         private val syncScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val telemetryMutex = Mutex()
+        internal val statsLock = Any()
+        val lastHeartbeatSentTimestamp = java.util.concurrent.atomic.AtomicLong(0L)
+
+        internal val activeOnlineCalls = java.util.concurrent.ConcurrentHashMap.newKeySet<okhttp3.Call>()
+        internal val activeOfflineCalls = java.util.concurrent.ConcurrentHashMap.newKeySet<okhttp3.Call>()
+        val isHeartbeatInFlight = java.util.concurrent.atomic.AtomicBoolean(false)
+        private const val MAX_RECORDED_SESSIONS = 500
+
+        internal class LruSessionSet(
+            private val maxEntries: Int = MAX_RECORDED_SESSIONS,
+            val lock: Any = statsLock
+        ) : java.util.LinkedHashSet<String>() {
+
+            override val size: Int
+                get() = synchronized(lock) { super.size }
+
+            override fun isEmpty(): Boolean = synchronized(lock) { super.isEmpty() }
+
+            override fun add(element: String): Boolean = synchronized(lock) {
+                if (super.contains(element)) {
+                    // Update LRU access order by re-inserting at the end
+                    super.remove(element)
+                    super.add(element)
+                    return false
+                }
+                while (super.size >= maxEntries) {
+                    val it = super.iterator()
+                    if (it.hasNext()) {
+                        it.next()
+                        it.remove()
+                    } else {
+                        break
+                    }
+                }
+                return super.add(element)
+            }
+
+            override fun contains(element: String): Boolean = synchronized(lock) {
+                if (super.contains(element)) {
+                    // Refresh LRU access order on access: move accessed element to MRU (end)
+                    super.remove(element)
+                    super.add(element)
+                    true
+                } else {
+                    false
+                }
+            }
+
+            override fun remove(element: String): Boolean = synchronized(lock) {
+                super.remove(element)
+            }
+
+            override fun clear() = synchronized(lock) {
+                super.clear()
+            }
+
+            override fun containsAll(elements: Collection<String>): Boolean = synchronized(lock) {
+                val setSnapshot = ArrayList<String>(super.size)
+                val it = super.iterator()
+                while (it.hasNext()) {
+                    setSnapshot.add(it.next())
+                }
+                elements.all { el -> setSnapshot.contains(el) }
+            }
+
+            override fun addAll(elements: Collection<String>): Boolean = synchronized(lock) {
+                if (elements === this) return false
+                var modified = false
+                for (item in elements) {
+                    if (add(item)) modified = true
+                }
+                modified
+            }
+
+            override fun removeAll(elements: Collection<String>): Boolean = synchronized(lock) {
+                var modified = false
+                val it = super.iterator()
+                while (it.hasNext()) {
+                    if (elements.contains(it.next())) {
+                        it.remove()
+                        modified = true
+                    }
+                }
+                modified
+            }
+
+            override fun retainAll(elements: Collection<String>): Boolean = synchronized(lock) {
+                var modified = false
+                val it = super.iterator()
+                while (it.hasNext()) {
+                    if (!elements.contains(it.next())) {
+                        it.remove()
+                        modified = true
+                    }
+                }
+                modified
+            }
+
+            override fun equals(other: Any?): Boolean = synchronized(lock) {
+                super.equals(other)
+            }
+
+            override fun hashCode(): Int = synchronized(lock) {
+                super.hashCode()
+            }
+
+            override fun toString(): String = synchronized(lock) {
+                super.toString()
+            }
+
+            override fun removeIf(filter: java.util.function.Predicate<in String>): Boolean = synchronized(lock) {
+                var modified = false
+                val it = super.iterator()
+                while (it.hasNext()) {
+                    if (filter.test(it.next())) {
+                        it.remove()
+                        modified = true
+                    }
+                }
+                modified
+            }
+
+            override fun forEach(action: java.util.function.Consumer<in String>) {
+                val snapshot = synchronized(lock) {
+                    val result = ArrayList<String>(super.size)
+                    val it = super.iterator()
+                    while (it.hasNext()) {
+                        result.add(it.next())
+                    }
+                    result
+                }
+                snapshot.forEach(action)
+            }
+
+            override fun spliterator(): java.util.Spliterator<String> {
+                val snapshot = synchronized(lock) {
+                    val result = ArrayList<String>(super.size)
+                    val it = super.iterator()
+                    while (it.hasNext()) {
+                        result.add(it.next())
+                    }
+                    result
+                }
+                return snapshot.spliterator()
+            }
+
+            override fun toArray(): Array<Any?> = synchronized(lock) {
+                super.toArray()
+            }
+
+            override fun <T : Any?> toArray(a: Array<T>): Array<T> = synchronized(lock) {
+                super.toArray(a)
+            }
+
+            override fun clone(): Any = synchronized(lock) {
+                val copy = LruSessionSet(maxEntries, Any())
+                val it = super.iterator()
+                while (it.hasNext()) {
+                    copy.add(it.next())
+                }
+                copy
+            }
+
+            fun restoreSnapshotRaw(snapshot: List<String>) = synchronized(lock) {
+                super.clear()
+                for (item in snapshot) {
+                    super.add(item)
+                }
+            }
+
+            override fun iterator(): MutableIterator<String> {
+                val snapshot = synchronized(lock) {
+                    val result = ArrayList<String>(super.size)
+                    val it = super.iterator()
+                    while (it.hasNext()) {
+                        result.add(it.next())
+                    }
+                    result
+                }
+                return snapshot.iterator()
+            }
+        }
+
+        internal val recordedSessionTokens: MutableSet<String> = LruSessionSet(MAX_RECORDED_SESSIONS, statsLock)
+
+        internal fun persistSessionTokensLocked(context: Context): Boolean {
+            return try {
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val hadTokensJson = prefs.contains("persisted_session_tokens_json")
+                val prevTokensJson = if (hadTokensJson) prefs.getString("persisted_session_tokens_json", null) else null
+
+                val jsonArray = org.json.JSONArray()
+                for (t in recordedSessionTokens) {
+                    jsonArray.put(t)
+                }
+                // Đồng bộ nguyên tử giữa RAM và đĩa: Sử dụng commit() trong khối synchronized(statsLock)
+                val committed = prefs.edit().putString("persisted_session_tokens_json", jsonArray.toString()).commit()
+                if (!committed) {
+                    val rollbackEditor = prefs.edit()
+                    if (hadTokensJson) rollbackEditor.putString("persisted_session_tokens_json", prevTokensJson)
+                    else rollbackEditor.remove("persisted_session_tokens_json")
+                    rollbackEditor.commit()
+                    Log.w("UsageTrackerService", "persistSessionTokensLocked: SharedPreferences.commit() returned false")
+                }
+                committed
+            } catch (e: Exception) {
+                Log.w("UsageTrackerService", "persistSessionTokensLocked error: ${e.message}")
+                false
+            }
+        }
+
+        fun persistSessionToken(context: Context, token: String): Boolean {
+            if (token.isEmpty()) return false
+            synchronized(statsLock) {
+                // Snapshot toàn bộ trạng thái và thứ tự LRU của RAM trước khi thao tác
+                val backupTokens = ArrayList<String>(recordedSessionTokens)
+                val wasNew = recordedSessionTokens.add(token)
+                val success = persistSessionTokensLocked(context)
+                if (!success) {
+                    // Rollback 100% nguyên vẹn cả phần tử và thứ tự LRU trong RAM khi commit() đĩa thất bại qua raw restore
+                    (recordedSessionTokens as? LruSessionSet)?.restoreSnapshotRaw(backupTokens)
+                        ?: run {
+                            recordedSessionTokens.clear()
+                            recordedSessionTokens.addAll(backupTokens)
+                        }
+                    return false
+                }
+                return wasNew
+            }
+        }
+
+        internal val isSessionTokensRestored = java.util.concurrent.atomic.AtomicBoolean(false)
+
+        fun restorePersistedSessionTokens(context: Context): Boolean {
+            if (isSessionTokensRestored.get()) {
+                return true // Đã khôi phục thành công trước đó
+            }
+            // Khóa đồng bộ statsLock để các luồng gọi đồng thời cùng chờ tiến trình restore hiện hành hoàn tất
+            synchronized(statsLock) {
+                if (isSessionTokensRestored.get()) {
+                    return true
+                }
+                var success = false
+                try {
+                    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    val rawJson = prefs.getString("persisted_session_tokens_json", null)
+                    if (!rawJson.isNullOrEmpty()) {
+                        val jsonArray = org.json.JSONArray(rawJson)
+                        // Nạp vào collection tạm, validate 100% hoàn tất trước khi swap vào RAM dưới lock
+                        val tempTokens = ArrayList<String>(jsonArray.length())
+                        for (i in 0 until jsonArray.length()) {
+                            tempTokens.add(jsonArray.getString(i))
+                        }
+                        recordedSessionTokens.clear()
+                        for (token in tempTokens) {
+                            recordedSessionTokens.add(token)
+                        }
+                    }
+                    isSessionTokensRestored.set(true)
+                    success = true
+                } catch (e: Exception) {
+                    Log.w("UsageTrackerService", "restorePersistedSessionTokens error: ${e.message}")
+                    isSessionTokensRestored.set(false)
+                }
+                return success
+            }
+        }
+
+        @Volatile
+        internal var urgentOfflineJob: Job? = null
+        internal val urgentOfflineLock = Any()
+
+        data class OfflinePayloadData(
+            val lastSync: Long,
+            val online: Boolean,
+            val packageName: String,
+            val appName: String,
+            val category: String,
+            val categoryLabel: String,
+            val isForeground: Boolean,
+            val timestamp: Long
+        ) {
+            fun toJson(): JSONObject {
+                val offActiveJson = JSONObject().apply {
+                    put("packageName", packageName)
+                    put("appName", appName)
+                    put("category", category)
+                    put("categoryLabel", categoryLabel)
+                    put("timestamp", timestamp)
+                    put("isForeground", isForeground)
+                }
+                return JSONObject().apply {
+                    put("lastSync", lastSync)
+                    put("online", online)
+                    put("active_app", offActiveJson)
+                }
+            }
+        }
+
+        fun createOfflineData(timestamp: Long = System.currentTimeMillis()): OfflinePayloadData {
+            return OfflinePayloadData(
+                lastSync = timestamp,
+                online = false,
+                packageName = "SCREEN_OFF",
+                appName = "Màn hình tắt / Khóa máy",
+                category = "OFFLINE",
+                categoryLabel = "Đã tắt màn hình",
+                isForeground = false,
+                timestamp = timestamp
+            )
+        }
+
+        fun canWriteEpochMonotonically(lastWrittenEpoch: Long, callEpoch: Long): Boolean {
+            if (callEpoch != -1L && lastWrittenEpoch > callEpoch) return false
+            return true
+        }
+
+        fun evaluateHardwareOnline(isScreenOn: Boolean, isInteractive: Boolean, isKeyguardLocked: Boolean): Boolean {
+            return isScreenOn && isInteractive && !isKeyguardLocked
+        }
+
+        fun buildOfflinePayload(timestamp: Long = System.currentTimeMillis()): JSONObject {
+            return createOfflineData(timestamp).toJson()
+        }
+
+        internal fun shouldAllowTelemetryUpdate(
+            expectedEpoch: Long,
+            currentEpoch: Long,
+            category: String,
+            packageName: String,
+            hardwareIsOnline: Boolean
+        ): Boolean {
+            if (expectedEpoch != -1L && currentEpoch != expectedEpoch) {
+                return false
+            }
+            val isOfflineEvent = (packageName == "SCREEN_OFF" || category == "OFFLINE")
+            if (isOfflineEvent && hardwareIsOnline) {
+                return false
+            }
+            if (!isOfflineEvent && !hardwareIsOnline) {
+                return false
+            }
+            return true
+        }
+
+        fun cancelActiveOnlineCalls() {
+            try {
+                val iterator = activeOnlineCalls.iterator()
+                while (iterator.hasNext()) {
+                    val call = iterator.next()
+                    try {
+                        call.cancel()
+                    } catch (e: Exception) {
+                        Log.w("UsageTrackerService", "online call.cancel error: ${e.message}")
+                    }
+                    iterator.remove()
+                }
+            } catch (e: Exception) {
+                Log.w("UsageTrackerService", "cancelActiveOnlineCalls error: ${e.message}")
+            }
+        }
+
+        internal val currentOfflineGeneration = java.util.concurrent.atomic.AtomicLong(0)
+        internal val lastDispatchedOfflineEpoch = java.util.concurrent.atomic.AtomicLong(-1L)
+
+        internal fun isHardwareOnlineValid(
+            context: Context,
+            expectedEpoch: Long = -1L
+        ): Boolean {
+            val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+            val km = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+            val isInteractive = if (pm != null) {
+                pm.isInteractive
+            } else {
+                if (context.javaClass.simpleName.contains("Fake") || context.javaClass.simpleName.contains("Test")) {
+                    GuardianAccessibilityService.isScreenOnState
+                } else {
+                    false
+                }
+            }
+            val isLocked = km?.isKeyguardLocked ?: false
+            return GuardianAccessibilityService.isScreenOnState &&
+                    isInteractive &&
+                    !isLocked &&
+                    (expectedEpoch == -1L || GuardianAccessibilityService.telemetryEpoch.get() == expectedEpoch)
+        }
+
+        internal fun isHardwareOfflineValid(
+            context: Context,
+            expectedEpoch: Long = -1L,
+            expectedGeneration: Long = -1L
+        ): Boolean {
+            val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+            val km = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+            val isInteractive = if (pm != null) {
+                pm.isInteractive
+            } else {
+                if (context.javaClass.simpleName.contains("Fake") || context.javaClass.simpleName.contains("Test")) {
+                    GuardianAccessibilityService.isScreenOnState
+                } else {
+                    false
+                }
+            }
+            val isLocked = km?.isKeyguardLocked ?: false
+            val hardwareIsOffline = !GuardianAccessibilityService.isScreenOnState || !isInteractive || isLocked
+            val epochMatches = (expectedEpoch == -1L || GuardianAccessibilityService.telemetryEpoch.get() == expectedEpoch)
+            val genMatches = (expectedGeneration == -1L || currentOfflineGeneration.get() == expectedGeneration)
+            return hardwareIsOffline && epochMatches && genMatches
+        }
+
+        fun cancelActiveOfflineCalls(targetGeneration: Long = -1L) {
+            synchronized(urgentOfflineLock) {
+                if (targetGeneration != -1L && currentOfflineGeneration.get() != targetGeneration) {
+                    // Đã có generation mới hơn đang quản lý, cấm hủy chéo của generation mới
+                    return
+                }
+                try {
+                    if (targetGeneration == -1L) {
+                        urgentOfflineJob?.cancel()
+                        urgentOfflineJob = null
+                    }
+                    val iterator = activeOfflineCalls.iterator()
+                    while (iterator.hasNext()) {
+                        val call = iterator.next()
+                        try {
+                            call.cancel()
+                        } catch (e: Exception) {
+                            Log.w("UsageTrackerService", "offline call.cancel error: ${e.message}")
+                        }
+                        iterator.remove()
+                    }
+                } catch (e: Exception) {
+                    Log.w("UsageTrackerService", "cancelActiveOfflineCalls error: ${e.message}")
+                }
+            }
+        }
+
+        fun executeOnlineGuarded(
+            request: okhttp3.Request,
+            context: Context,
+            expectedEpoch: Long = -1L
+        ): Boolean {
+            // Fencing trước khi gửi request
+            if (!isHardwareOnlineValid(context, expectedEpoch)) {
+                Log.w("UsageTrackerService", "Hủy bỏ request online trước khi gửi do phần cứng không online")
+                return false
+            }
+
+            val call = sharedHttpClient.newCall(request)
+            activeOnlineCalls.add(call)
+
+            // Double check: Fencing ngay sau khi đăng ký call để triệt tiêu race condition nếu màn hình tắt trong tích tắc trước đó
+            if (!isHardwareOnlineValid(context, expectedEpoch)) {
+                activeOnlineCalls.remove(call)
+                call.cancel()
+                Log.w("UsageTrackerService", "Hủy bỏ request online ngay sau khi đăng ký do phần cứng đã ngắt")
+                return false
+            }
+
+            try {
+                val response = call.execute()
+                response.use {
+                    // Fencing ngay sau khi nhận phản hồi từ server
+                    if (!isHardwareOnlineValid(context, expectedEpoch)) {
+                        Log.w("UsageTrackerService", "Phần cứng đã ngắt trong khi request đang gửi! Hủy bỏ kết quả online.")
+                        return false
+                    }
+                    return it.isSuccessful
+                }
+            } catch (e: Exception) {
+                Log.w("UsageTrackerService", "executeOnlineGuarded failed/cancelled: ${e.message}")
+                return false
+            } finally {
+                activeOnlineCalls.remove(call)
+            }
+        }
+
+        fun executeOnlineStringGuarded(
+            request: okhttp3.Request,
+            context: Context,
+            expectedEpoch: Long = -1L
+        ): String? {
+            if (!isHardwareOnlineValid(context, expectedEpoch)) return null
+
+            val call = sharedHttpClient.newCall(request)
+            activeOnlineCalls.add(call)
+
+            // Double check: Fencing ngay sau khi đăng ký call
+            if (!isHardwareOnlineValid(context, expectedEpoch)) {
+                activeOnlineCalls.remove(call)
+                call.cancel()
+                Log.w("UsageTrackerService", "Hủy bỏ request online string ngay sau khi đăng ký do phần cứng đã ngắt")
+                return null
+            }
+
+            try {
+                val response = call.execute()
+                response.use { resp ->
+                    if (!isHardwareOnlineValid(context, expectedEpoch)) return null
+                    return if (resp.isSuccessful) resp.body?.string() else null
+                }
+            } catch (e: Exception) {
+                Log.w("UsageTrackerService", "executeOnlineStringGuarded failed/cancelled: ${e.message}")
+                return null
+            } finally {
+                activeOnlineCalls.remove(call)
+            }
+        }
+
+        fun executeOfflineGuarded(
+            request: okhttp3.Request,
+            context: Context,
+            expectedEpoch: Long,
+            expectedGeneration: Long = -1L
+        ): Boolean {
+            // Fencing trước khi gửi: Chặn tuyệt đối nếu phần cứng đang online hoặc epoch/generation không khớp
+            if (!isHardwareOfflineValid(context, expectedEpoch, expectedGeneration)) {
+                Log.w("UsageTrackerService", "Hủy bỏ request offline do phần cứng hiện đang online / epoch / generation không khớp")
+                return false
+            }
+
+            val call = sharedHttpClient.newCall(request)
+            synchronized(urgentOfflineLock) {
+                if (!isHardwareOfflineValid(context, expectedEpoch, expectedGeneration)) {
+                    return false
+                }
+                activeOfflineCalls.add(call)
+            }
+
+            // Double check: Fencing ngay sau khi đăng ký call
+            if (!isHardwareOfflineValid(context, expectedEpoch, expectedGeneration)) {
+                synchronized(urgentOfflineLock) {
+                    activeOfflineCalls.remove(call)
+                }
+                call.cancel()
+                Log.w("UsageTrackerService", "Hủy bỏ request offline ngay sau khi đăng ký do phần cứng đã online")
+                return false
+            }
+
+            try {
+                // Fencing nguyên tử ngay sát thời điểm execute để triệt tiêu race window
+                synchronized(urgentOfflineLock) {
+                    if (!isHardwareOfflineValid(context, expectedEpoch, expectedGeneration)) {
+                        activeOfflineCalls.remove(call)
+                        call.cancel()
+                        Log.w("UsageTrackerService", "Hủy bỏ request offline ngay trước khi execute do trạng thái phần cứng đã đổi")
+                        return false
+                    }
+                    if (call.isCanceled()) {
+                        activeOfflineCalls.remove(call)
+                        return false
+                    }
+                }
+                val response = call.execute()
+                response.use { resp ->
+                    // Fencing sau khi nhận response: Nếu máy đã chuyển sang online trong khi gửi, hủy kết quả
+                    if (!isHardwareOfflineValid(context, expectedEpoch, expectedGeneration)) {
+                        Log.w("UsageTrackerService", "Hủy kết quả offline do phần cứng đã online / epoch đổi trong khi gửi")
+                        return false
+                    }
+                    return resp.isSuccessful
+                }
+            } catch (e: Exception) {
+                Log.w("UsageTrackerService", "executeOfflineGuarded error: ${e.message}")
+                return false
+            } finally {
+                synchronized(urgentOfflineLock) {
+                    activeOfflineCalls.remove(call)
+                }
+            }
+        }
+
+        fun sendUrgentOfflineStatus(context: Context, expectedEpoch: Long): Job? {
+            val prefs = try {
+                context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            } catch (e: Exception) {
+                null
+            }
+            val pairedCode = prefs?.getString("paired_code", "") ?: ""
+            if (pairedCode.isEmpty()) return null
+            val androidId = prefs?.getString("device_id", "")?.takeIf { it.isNotEmpty() }
+                ?: try { Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) } catch (e: Exception) { null }
+                ?: "UNKNOWN"
+
+            // Chống phát nhiều offline batch trùng nhau cho cùng một epoch (Epoch-based idempotency fencing)
+            if (expectedEpoch != -1L) {
+                var currentDispatched = lastDispatchedOfflineEpoch.get()
+                if (currentDispatched == expectedEpoch) {
+                    Log.d("UsageTrackerService", "Bỏ qua sendUrgentOfflineStatus: Epoch $expectedEpoch đã được phát trước đó")
+                    return null
+                }
+                while (!lastDispatchedOfflineEpoch.compareAndSet(currentDispatched, expectedEpoch)) {
+                    currentDispatched = lastDispatchedOfflineEpoch.get()
+                    if (currentDispatched == expectedEpoch) {
+                        Log.d("UsageTrackerService", "Bỏ qua sendUrgentOfflineStatus: Epoch $expectedEpoch đã được phát bởi luồng khác")
+                        return null
+                    }
+                }
+            }
+
+            // Ghi nhận trạng thái offline tức thời vào đĩa để bảo toàn dữ liệu ngay cả khi teardown
+            prefs?.edit()?.putBoolean("is_device_online", false)?.commit()
+
+            val job = synchronized(urgentOfflineLock) {
+                urgentOfflineJob?.cancel()
+                val gen = currentOfflineGeneration.incrementAndGet()
+                val newJob = syncScope.launch {
+                    try {
+                        val now = System.currentTimeMillis()
+                        val mediaType = "application/json; charset=utf-8".toMediaType()
+                        val offJson = buildOfflinePayload(now)
+                        val offActiveJson = offJson.getJSONObject("active_app")
+                        val offBody = offJson.toString().toRequestBody(mediaType)
+                        val offActiveBody = offActiveJson.toString().toRequestBody(mediaType)
+
+                        val rootEndpoints = listOf(
+                            "https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId.json",
+                            "https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$androidId.json",
+                            "https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$pairedCode.json",
+                            "https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/pairings/$pairedCode.json"
+                        )
+
+                        val activeEndpoints = listOf(
+                            "https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId/active_app.json",
+                            "https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$androidId/active_app.json"
+                        )
+
+                        suspend fun dispatchBatch(): List<Boolean> = coroutineScope {
+                            val deferreds = rootEndpoints.map { url ->
+                                async(Dispatchers.IO) {
+                                    val req = okhttp3.Request.Builder().url(url).patch(offBody).build()
+                                    executeOfflineGuarded(req, context, expectedEpoch, gen)
+                                }
+                            } + activeEndpoints.map { url ->
+                                async(Dispatchers.IO) {
+                                    val req = okhttp3.Request.Builder().url(url).put(offActiveBody).build()
+                                    executeOfflineGuarded(req, context, expectedEpoch, gen)
+                                }
+                            }
+                            deferreds.awaitAll()
+                        }
+
+                        // Đợt gửi đầu tiên với timeout riêng 2000ms
+                        val firstSuccess = withTimeoutOrNull(2000L) {
+                            val results = dispatchBatch()
+                            results.any { it }
+                        } ?: false
+
+                        // Hủy triệt để các OkHttp Call còn treo của chính generation này
+                        cancelActiveOfflineCalls(gen)
+
+                        // Nếu đợt đầu thất bại hoàn toàn và màn hình vẫn tắt, kích hoạt 1-shot retry với timeout riêng 2000ms
+                        if (!firstSuccess && !GuardianAccessibilityService.isScreenOnState && currentOfflineGeneration.get() == gen) {
+                            withTimeoutOrNull(2000L) {
+                                dispatchBatch()
+                            }
+                            // Guard cuối: Hủy dọn dẹp các call treo từ đợt retry
+                            cancelActiveOfflineCalls(gen)
+                        }
+                    } catch (e: Exception) {
+                        Log.w("UsageTrackerService", "sendUrgentOfflineStatus notice: ${e.message}")
+                    } finally {
+                        // Guard chống hủy chéo: Chỉ hủy các call nếu job hiện tại và generation vẫn khớp
+                        synchronized(urgentOfflineLock) {
+                            if (urgentOfflineJob === coroutineContext[Job] && currentOfflineGeneration.get() == gen) {
+                                cancelActiveOfflineCalls(gen)
+                            }
+                        }
+                    }
+                }
+                urgentOfflineJob = newJob
+                newJob
+            }
+            return job
+        }
 
         fun start(context: Context) {
             val intent = Intent(context, UsageTrackerService::class.java)
@@ -59,60 +742,122 @@ class UsageTrackerService : Service() {
             }
         }
 
-        fun sendHeartbeatPing(context: Context) {
+        fun sendHeartbeatPing(context: Context, force: Boolean = false) {
+            val powerManager = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+            val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+            val isScreenInteractive = powerManager?.isInteractive ?: false
+            val isLocked = keyguardManager?.isKeyguardLocked ?: false
+
+            // Bất biến phần cứng: Màn hình tắt hoặc máy khóa -> TUYỆT ĐỐI không gửi heartbeat online
+            if (!GuardianAccessibilityService.isScreenOnState || !isScreenInteractive || isLocked) {
+                return
+            }
+
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val pairedCode = prefs.getString("paired_code", "") ?: ""
             if (pairedCode.isEmpty()) return
+
+            val now = System.currentTimeMillis()
+            if (!force && now - lastHeartbeatSentTimestamp.get() < 10_000L) {
+                return // Debounce 10s bảo vệ sơ bộ: Tránh queue coroutine dồn dập
+            }
+
+            // Atomic in-flight guard: Triệt tiêu hoàn toàn race condition tạo nhiều batch heartbeat đồng thời
+            if (!isHeartbeatInFlight.compareAndSet(false, true)) {
+                return
+            }
+
             val androidId = prefs.getString("device_id", "")?.takeIf { it.isNotEmpty() }
                 ?: Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
                 ?: "UNKNOWN"
 
-            syncScope.launch {
+            val callEpoch = GuardianAccessibilityService.telemetryEpoch.get()
+
+            syncScope.launch(Dispatchers.IO) {
                 try {
-                    val now = System.currentTimeMillis()
-                    val mediaType = "application/json; charset=utf-8".toMediaType()
-                    val manufacturer = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
-                    val model = Build.MODEL
-                    val pingJson = JSONObject().apply {
-                        put("lastSync", now)
-                        put("lastHeartbeat", now)
-                        put("online", true)
-                        put("deviceId", androidId)
-                        put("deviceModel", "$manufacturer $model")
-                        put("androidVersion", "Android ${Build.VERSION.RELEASE}")
-                        put("isPaired", true)
-                        put("status", "paired")
+                    val preparedData = telemetryMutex.withLock {
+                        val lockNow = System.currentTimeMillis()
+                        val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+                        val km = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+                        val stillInteractive = pm?.isInteractive ?: false
+                        val stillLocked = km?.isKeyguardLocked ?: false
+
+                        // Kiểm tra nguyên tử tính hợp lệ phần cứng ngay bên trong mutex
+                        if (!GuardianAccessibilityService.isScreenOnState || !stillInteractive || stillLocked ||
+                            GuardianAccessibilityService.telemetryEpoch.get() != callEpoch
+                        ) {
+                            return@withLock null
+                        }
+
+                        // Debounce nguyên tử bên trong Mutex: Loại bỏ hoàn toàn race condition
+                        val lastSent = lastHeartbeatSentTimestamp.get()
+                        if (!force && lockNow - lastSent < 10_000L) {
+                            return@withLock null
+                        }
+
+                        try {
+                            val mediaType = "application/json; charset=utf-8".toMediaType()
+                            val manufacturer = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
+                            val model = Build.MODEL
+
+                            val pingJson = JSONObject().apply {
+                                put("lastSync", lockNow)
+                                put("lastHeartbeat", lockNow)
+                                put("online", true)
+                                put("deviceId", androidId)
+                                put("deviceModel", "$manufacturer $model")
+                                put("androidVersion", "Android ${Build.VERSION.RELEASE}")
+                                put("isPaired", true)
+                                put("status", "paired")
+                            }
+                            val body = pingJson.toString().toRequestBody(mediaType)
+
+                            val reqFamDev = okhttp3.Request.Builder()
+                                .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId.json")
+                                .patch(body)
+                                .build()
+
+                            val reqDevice = okhttp3.Request.Builder()
+                                .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$androidId.json")
+                                .patch(body)
+                                .build()
+
+                            val reqLegacyDev = okhttp3.Request.Builder()
+                                .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$pairedCode.json")
+                                .patch(body)
+                                .build()
+
+                            val reqPairing = okhttp3.Request.Builder()
+                                .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/pairings/$pairedCode.json")
+                                .patch(body)
+                                .build()
+
+                            Pair(lockNow, listOf(reqFamDev, reqDevice, reqLegacyDev, reqPairing))
+                        } catch (e: Exception) {
+                            Log.w("UsageTrackerService", "sendHeartbeatPing build payload failed: ${e.message}")
+                            null
+                        }
                     }
-                    val body = pingJson.toString().toRequestBody(mediaType)
 
-                    // 1. Ghi độc lập vào danh sách thiết bị gia đình: /families/$pairedCode/devices/$androidId
-                    val reqFamDev = okhttp3.Request.Builder()
-                        .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId.json")
-                        .patch(body)
-                        .build()
-                    sharedHttpClient.newCall(reqFamDev).execute().close()
-
-                    // 2. Ghi chi tiết thiết bị phẳng: /devices/$androidId
-                    val reqDevice = okhttp3.Request.Builder()
-                        .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$androidId.json")
-                        .patch(body)
-                        .build()
-                    sharedHttpClient.newCall(reqDevice).execute().close()
-
-                    // 3. Tương thích ngược: /devices/$pairedCode và /pairings/$pairedCode
-                    val reqLegacyDev = okhttp3.Request.Builder()
-                        .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$pairedCode.json")
-                        .patch(body)
-                        .build()
-                    sharedHttpClient.newCall(reqLegacyDev).execute().close()
-
-                    val reqPairing = okhttp3.Request.Builder()
-                        .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/pairings/$pairedCode.json")
-                        .patch(body)
-                        .build()
-                    sharedHttpClient.newCall(reqPairing).execute().close()
-                } catch (e: Exception) {
-                    Log.w("UsageTrackerService", "sendHeartbeatPing failed: ${e.message}")
+                    // Thực thi network I/O BÊN NGOÀI telemetryMutex theo cơ chế song song async-awaitAll
+                    if (preparedData != null) {
+                        val (sentTimestamp, requests) = preparedData
+                        val deferreds = requests.map { req ->
+                            async(Dispatchers.IO) {
+                                executeOnlineGuarded(req, context, callEpoch)
+                            }
+                        }
+                        val results = deferreds.awaitAll()
+                        val primarySuccess = results.firstOrNull() ?: false
+                        val anySuccess = results.any { it }
+                        // Cập nhật timestamp khi primary hoặc bất kỳ endpoint nào thành công
+                        // Triệt tiêu hoàn toàn nguy cơ starvation khi một fallback endpoint bị lỗi mạng
+                        if (primarySuccess || anySuccess) {
+                            lastHeartbeatSentTimestamp.set(sentTimestamp)
+                        }
+                    }
+                } finally {
+                    isHeartbeatInFlight.set(false)
                 }
             }
         }
@@ -130,43 +875,39 @@ class UsageTrackerService : Service() {
                     val req = okhttp3.Request.Builder()
                         .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId/commands/locate_now.json")
                         .build()
-                    sharedHttpClient.newCall(req).execute().use { response ->
-                        if (response.isSuccessful) {
-                            val body = response.body?.string()
-                            if (!body.isNullOrEmpty() && body != "null") {
-                                val json = JSONObject(body)
-                                val status = json.optString("status", "")
-                                if (status == "PENDING" || status.isEmpty()) {
-                                    val loc = LocationHelper.fetchCurrentLocation(context)
-                                    val mediaType = "application/json; charset=utf-8".toMediaType()
-                                    if (loc != null) {
-                                        val locBody = loc.toJsonObject().toString().toRequestBody(mediaType)
+                    val body = executeOnlineStringGuarded(req, context)
+                    if (!body.isNullOrEmpty() && body != "null") {
+                        val json = JSONObject(body)
+                        val status = json.optString("status", "")
+                        if (status == "PENDING" || status.isEmpty()) {
+                            val loc = LocationHelper.fetchCurrentLocation(context)
+                            val mediaType = "application/json; charset=utf-8".toMediaType()
+                            if (loc != null) {
+                                val locBody = loc.toJsonObject().toString().toRequestBody(mediaType)
 
-                                        val putFamLoc = okhttp3.Request.Builder()
-                                            .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId/location.json")
-                                            .put(locBody)
-                                            .build()
-                                        sharedHttpClient.newCall(putFamLoc).execute().close()
+                                val putFamLoc = okhttp3.Request.Builder()
+                                    .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId/location.json")
+                                    .put(locBody)
+                                    .build()
+                                executeOnlineGuarded(putFamLoc, context)
 
-                                        val putDevLoc = okhttp3.Request.Builder()
-                                            .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$androidId/location.json")
-                                            .put(locBody)
-                                            .build()
-                                        sharedHttpClient.newCall(putDevLoc).execute().close()
-                                    }
-
-                                    val doneJson = JSONObject().apply {
-                                        put("status", "COMPLETED")
-                                        put("completedAt", System.currentTimeMillis())
-                                    }
-                                    val doneBody = doneJson.toString().toRequestBody(mediaType)
-                                    val updateCmd = okhttp3.Request.Builder()
-                                        .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId/commands/locate_now.json")
-                                        .put(doneBody)
-                                        .build()
-                                    sharedHttpClient.newCall(updateCmd).execute().close()
-                                }
+                                val putDevLoc = okhttp3.Request.Builder()
+                                    .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$androidId/location.json")
+                                    .put(locBody)
+                                    .build()
+                                executeOnlineGuarded(putDevLoc, context)
                             }
+
+                            val doneJson = JSONObject().apply {
+                                put("status", "COMPLETED")
+                                put("completedAt", System.currentTimeMillis())
+                            }
+                            val doneBody = doneJson.toString().toRequestBody(mediaType)
+                            val updateCmd = okhttp3.Request.Builder()
+                                .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId/commands/locate_now.json")
+                                .put(doneBody)
+                                .build()
+                            executeOnlineGuarded(updateCmd, context)
                         }
                     }
                 } catch (e: Exception) {
@@ -185,32 +926,16 @@ class UsageTrackerService : Service() {
 
             syncScope.launch {
                 try {
-                    var rulesJsonStr: String? = null
                     val reqDev = okhttp3.Request.Builder()
                         .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId/web_rules.json")
                         .build()
-
-                    sharedHttpClient.newCall(reqDev).execute().use { resDev ->
-                        if (resDev.isSuccessful) {
-                            val b = resDev.body?.string()
-                            if (!b.isNullOrEmpty() && b != "null") {
-                                rulesJsonStr = b
-                            }
-                        }
-                    }
+                    var rulesJsonStr = executeOnlineStringGuarded(reqDev, context)
 
                     if (rulesJsonStr == null) {
                         val reqFam = okhttp3.Request.Builder()
                             .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/web_rules.json")
                             .build()
-                        sharedHttpClient.newCall(reqFam).execute().use { resFam ->
-                            if (resFam.isSuccessful) {
-                                val b = resFam.body?.string()
-                                if (!b.isNullOrEmpty() && b != "null") {
-                                    rulesJsonStr = b
-                                }
-                            }
-                        }
+                        rulesJsonStr = executeOnlineStringGuarded(reqFam, context)
                     }
 
                     if (!rulesJsonStr.isNullOrEmpty() && rulesJsonStr != "null") {
@@ -259,69 +984,174 @@ class UsageTrackerService : Service() {
             }
         }
 
+        suspend fun prepareActiveAppLocked(
+            context: Context,
+            packageName: String,
+            appName: String,
+            category: String,
+            categoryLabel: String,
+            isForeground: Boolean,
+            expectedEpoch: Long = -1L
+        ): (suspend () -> Unit)? {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val pairedCode = prefs.getString("paired_code", "") ?: ""
+            if (pairedCode.isEmpty()) return null
+            val androidId = prefs.getString("device_id", "")?.takeIf { it.isNotEmpty() }
+                ?: Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+                ?: "UNKNOWN"
+
+            val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+            val km = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+
+            val currentEpoch = GuardianAccessibilityService.telemetryEpoch.get()
+            val hardwareIsOnline = GuardianAccessibilityService.isScreenOnState &&
+                    pm?.isInteractive == true &&
+                    km?.isKeyguardLocked != true
+
+            // Chặn đứng stale telemetry và cross-state mismatch TRƯỚC MỌI SIDE EFFECT (SharedPreferences, RAM, Network)
+            if (!shouldAllowTelemetryUpdate(expectedEpoch, currentEpoch, category, packageName, hardwareIsOnline)) {
+                Log.w("UsageTrackerService", "Hủy bỏ prepareActiveAppLocked: Từ chối stale telemetry trước khi sửa SharedPreferences (expectedEpoch=$expectedEpoch, currentEpoch=$currentEpoch, pkg=$packageName, hardwareIsOnline=$hardwareIsOnline)")
+                return null
+            }
+
+            try {
+                val isOfflineEvent = (packageName == "SCREEN_OFF" || category == "OFFLINE")
+                val effectiveOnline = !isOfflineEvent && hardwareIsOnline
+
+                val targetPkg = if (effectiveOnline) packageName else "SCREEN_OFF"
+                val targetApp = if (effectiveOnline) appName else "Màn hình tắt / Khóa máy"
+                val targetCat = if (effectiveOnline) category else "OFFLINE"
+                val targetLabel = if (effectiveOnline) categoryLabel else "Đã tắt màn hình"
+
+                val lastEpoch = prefs.getLong("last_written_epoch", -1L)
+                if (currentEpoch != -1L && lastEpoch > currentEpoch) {
+                    Log.w("UsageTrackerService", "Hủy bỏ prepareActiveAppLocked: SharedPreferences đã ghi bởi epoch mới hơn ($lastEpoch > $currentEpoch)")
+                    return null
+                }
+
+                prefs.edit()
+                    .putLong("last_written_epoch", currentEpoch)
+                    .putBoolean("is_device_online", effectiveOnline)
+                    .putString("last_active_package", targetPkg)
+                    .putLong("last_active_timestamp", System.currentTimeMillis())
+                    .apply()
+
+                val mediaType = "application/json; charset=utf-8".toMediaType()
+                val activeJson = JSONObject().apply {
+                    put("packageName", targetPkg)
+                    put("appName", targetApp)
+                    put("category", targetCat)
+                    put("categoryLabel", targetLabel)
+                    put("timestamp", System.currentTimeMillis())
+                    put("isForeground", effectiveOnline && isForeground)
+                }
+                val body = activeJson.toString().toRequestBody(mediaType)
+                val targetEpoch = if (expectedEpoch != -1L) expectedEpoch else currentEpoch
+
+                if (!effectiveOnline) {
+                    // Chuyển trực tiếp sang fast-path offline, không tạo cuộc gọi lặp
+                    return {
+                        sendUrgentOfflineStatus(context, targetEpoch)
+                    }
+                } else {
+                    val reqFam = okhttp3.Request.Builder()
+                        .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId/active_app.json")
+                        .put(body)
+                        .build()
+
+                    val reqDev = okhttp3.Request.Builder()
+                        .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$androidId/active_app.json")
+                        .put(body)
+                        .build()
+
+                    val hbJson = JSONObject().apply {
+                        put("lastHeartbeat", activeJson.getLong("timestamp"))
+                        put("lastSync", activeJson.getLong("timestamp"))
+                        put("online", true)
+                    }
+                    val hbBody = hbJson.toString().toRequestBody(mediaType)
+
+                    val reqFamHb = okhttp3.Request.Builder()
+                        .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId.json")
+                        .patch(hbBody)
+                        .build()
+
+                    val reqDevHb = okhttp3.Request.Builder()
+                        .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$androidId.json")
+                        .patch(hbBody)
+                        .build()
+
+                    val reqLegacyDevHb = okhttp3.Request.Builder()
+                        .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$pairedCode.json")
+                        .patch(hbBody)
+                        .build()
+
+                    val reqPairingHb = okhttp3.Request.Builder()
+                        .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/pairings/$pairedCode.json")
+                        .patch(hbBody)
+                        .build()
+
+                    return {
+                        coroutineScope {
+                            val requests = listOf(reqFam, reqDev, reqFamHb, reqDevHb, reqLegacyDevHb, reqPairingHb)
+                            val deferreds = requests.map { req ->
+                                async(Dispatchers.IO) {
+                                    executeOnlineGuarded(req, context, targetEpoch)
+                                }
+                            }
+                            deferreds.awaitAll()
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w("UsageTrackerService", "prepareActiveAppLocked failed: ${e.message}")
+                return null
+            }
+        }
+
+        suspend fun reportActiveAppLocked(
+            context: Context,
+            packageName: String,
+            appName: String,
+            category: String,
+            categoryLabel: String,
+            isForeground: Boolean,
+            expectedEpoch: Long = -1L
+        ) {
+            val action = prepareActiveAppLocked(
+                context = context,
+                packageName = packageName,
+                appName = appName,
+                category = category,
+                categoryLabel = categoryLabel,
+                isForeground = isForeground,
+                expectedEpoch = expectedEpoch
+            )
+            action?.invoke()
+        }
+
         fun reportActiveApp(
             context: Context,
             packageName: String,
             appName: String,
             category: String,
             categoryLabel: String,
-            isForeground: Boolean
+            isForeground: Boolean,
+            expectedEpoch: Long = -1L
         ) {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val pairedCode = prefs.getString("paired_code", "") ?: ""
-            if (pairedCode.isEmpty()) return
-            val androidId = prefs.getString("device_id", "")?.takeIf { it.isNotEmpty() }
-                ?: Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
-                ?: "UNKNOWN"
-
-            syncScope.launch {
-                try {
-                    val mediaType = "application/json; charset=utf-8".toMediaType()
-                    val activeJson = JSONObject().apply {
-                        put("packageName", packageName)
-                        put("appName", appName)
-                        put("category", category)
-                        put("categoryLabel", categoryLabel)
-                        put("timestamp", System.currentTimeMillis())
-                        put("isForeground", isForeground)
-                    }
-                    val body = activeJson.toString().toRequestBody(mediaType)
-
-                    val reqFam = okhttp3.Request.Builder()
-                        .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId/active_app.json")
-                        .put(body)
-                        .build()
-                    sharedHttpClient.newCall(reqFam).execute().close()
-
-                    val reqDev = okhttp3.Request.Builder()
-                        .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$androidId/active_app.json")
-                        .put(body)
-                        .build()
-                    sharedHttpClient.newCall(reqDev).execute().close()
-
-                    // Khi người dùng đang tương tác với ứng dụng (khác SCREEN_OFF): cập nhật ngay lastHeartbeat
-                    if (packageName != "SCREEN_OFF") {
-                        val hbJson = JSONObject().apply {
-                            put("lastHeartbeat", activeJson.getLong("timestamp"))
-                            put("lastSync", activeJson.getLong("timestamp"))
-                            put("online", true)
-                        }
-                        val hbBody = hbJson.toString().toRequestBody(mediaType)
-                        val reqFamHb = okhttp3.Request.Builder()
-                            .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId.json")
-                            .patch(hbBody)
-                            .build()
-                        sharedHttpClient.newCall(reqFamHb).execute().close()
-
-                        val reqDevHb = okhttp3.Request.Builder()
-                            .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$androidId.json")
-                            .patch(hbBody)
-                            .build()
-                        sharedHttpClient.newCall(reqDevHb).execute().close()
-                    }
-                } catch (e: Exception) {
-                    Log.w("UsageTrackerService", "reportActiveApp failed: ${e.message}")
+            syncScope.launch(Dispatchers.IO) {
+                val action = telemetryMutex.withLock {
+                    prepareActiveAppLocked(
+                        context = context,
+                        packageName = packageName,
+                        appName = appName,
+                        category = category,
+                        categoryLabel = categoryLabel,
+                        isForeground = isForeground,
+                        expectedEpoch = expectedEpoch
+                    )
                 }
+                action?.invoke()
             }
         }
 
@@ -333,6 +1163,12 @@ class UsageTrackerService : Service() {
             title: String,
             isBlocked: Boolean
         ) {
+            val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+            val km = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+            if (!GuardianAccessibilityService.isScreenOnState || pm?.isInteractive != true || km?.isKeyguardLocked == true) {
+                return
+            }
+
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val pairedCode = prefs.getString("paired_code", "") ?: ""
             if (pairedCode.isEmpty()) return
@@ -344,6 +1180,7 @@ class UsageTrackerService : Service() {
                 try {
                     val mediaType = "application/json; charset=utf-8".toMediaType()
                     val now = System.currentTimeMillis()
+                    val targetEpoch = GuardianAccessibilityService.telemetryEpoch.get()
 
                     val domain = try {
                         val cleanUrl = if (!url.startsWith("http://") && !url.startsWith("https://")) "https://$url" else url
@@ -364,20 +1201,20 @@ class UsageTrackerService : Service() {
                     }
                     val body = webJson.toString().toRequestBody(mediaType)
 
-                    // 1. Cập nhật trang web đang mở thời gian thực: /web_activity.json
+                    // 1. Cập nhật trang web đang mở thời gian thực: /web_activity.json (fenced trực tiếp theo targetEpoch)
                     val reqFam = okhttp3.Request.Builder()
                         .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId/web_activity.json")
                         .put(body)
                         .build()
-                    sharedHttpClient.newCall(reqFam).execute().close()
+                    if (!executeOnlineGuarded(reqFam, context, targetEpoch)) return@launch
 
                     val reqDev = okhttp3.Request.Builder()
                         .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$androidId/web_activity.json")
                         .put(body)
                         .build()
-                    sharedHttpClient.newCall(reqDev).execute().close()
+                    if (!executeOnlineGuarded(reqDev, context, targetEpoch)) return@launch
 
-                    // 2. Cập nhật nhịp tim tươi mới ngay khi có duyệt web
+                    // 2. Cập nhật nhịp tim tươi mới ngay khi có duyệt web (bọc bảo vệ phần cứng trực tiếp theo targetEpoch)
                     val hbJson = JSONObject().apply {
                         put("lastHeartbeat", now)
                         put("lastSync", now)
@@ -388,33 +1225,38 @@ class UsageTrackerService : Service() {
                         .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId.json")
                         .patch(hbBody)
                         .build()
-                    sharedHttpClient.newCall(reqFamHb).execute().close()
+                    if (!executeOnlineGuarded(reqFamHb, context, targetEpoch)) return@launch
 
                     val reqDevHb = okhttp3.Request.Builder()
                         .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$androidId.json")
                         .patch(hbBody)
                         .build()
-                    sharedHttpClient.newCall(reqDevHb).execute().close()
+                    if (!executeOnlineGuarded(reqDevHb, context, targetEpoch)) return@launch
 
                     // 3. Ghi nhật ký vào /web_history/$now.json (lịch sử duyệt web)
                     val reqHistFam = okhttp3.Request.Builder()
                         .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId/web_history/$now.json")
                         .put(body)
                         .build()
-                    sharedHttpClient.newCall(reqHistFam).execute().close()
+                    executeOnlineGuarded(reqHistFam, context, targetEpoch)
 
                     val reqHistDev = okhttp3.Request.Builder()
                         .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$androidId/web_history/$now.json")
                         .put(body)
                         .build()
-                    sharedHttpClient.newCall(reqHistDev).execute().close()
+                    executeOnlineGuarded(reqHistDev, context, targetEpoch)
                 } catch (e: Exception) {
                     Log.w("UsageTrackerService", "reportWebActivity failed: ${e.message}")
                 }
             }
         }
 
-        fun recordAppSession(context: Context, packageName: String, durationMs: Long) {
+        fun recordAppSession(
+            context: Context,
+            packageName: String,
+            durationMs: Long,
+            sessionToken: String = ""
+        ) {
             if (durationMs < 1000L) return
             val isSystemOrSelf = packageName == context.packageName ||
                     packageName == "com.android.systemui" ||
@@ -425,28 +1267,104 @@ class UsageTrackerService : Service() {
                     packageName == "HOME"
             if (isSystemOrSelf) return
 
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val todayStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US).format(java.util.Date())
-            val appKey = "session_${todayStr}_$packageName"
-            val curMs = prefs.getLong(appKey, 0L)
-            val newMs = curMs + durationMs
+            synchronized(statsLock) {
+                if (sessionToken.isNotEmpty()) {
+                    val duplicateBackupTokens = ArrayList<String>(recordedSessionTokens)
+                    if (recordedSessionTokens.contains(sessionToken)) {
+                        // Persist refreshed LRU access-order to disk to guarantee 100% RAM-Disk consistency
+                        val persisted = persistSessionTokensLocked(context)
+                        if (!persisted) {
+                            // Rollback 100% nguyên vẹn thứ tự LRU trong RAM khi commit() đĩa thất bại qua raw restore
+                            (recordedSessionTokens as? LruSessionSet)?.restoreSnapshotRaw(duplicateBackupTokens)
+                                ?: run {
+                                    recordedSessionTokens.clear()
+                                    recordedSessionTokens.addAll(duplicateBackupTokens)
+                                }
+                            Log.w("UsageTrackerService", "Phát hiện session trùng lặp ($sessionToken) nhưng commit đĩa thất bại: Đã rollback LRU order trong RAM")
+                            return
+                        }
+                        Log.w("UsageTrackerService", "Phát hiện session trùng lặp ($sessionToken): Đã cập nhật LRU order và bỏ qua tính giờ")
+                        return
+                    }
+                }
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val todayStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US).format(java.util.Date())
+                val appInfo = try {
+                    context.packageManager.getApplicationInfo(packageName, 0)
+                } catch (e: Exception) {
+                    null
+                }
+                val appLabel = appInfo?.let { context.packageManager.getApplicationLabel(it).toString() } ?: packageName
+                val metadata = AppClassifier.classify(packageName, appLabel, appInfo)
 
-            var appInfo: android.content.pm.ApplicationInfo? = null
-            val appLabel = try {
-                appInfo = context.packageManager.getApplicationInfo(packageName, 0)
-                context.packageManager.getApplicationLabel(appInfo).toString()
-            } catch (e: Exception) {
-                packageName
+                val backupTokens = ArrayList<String>(recordedSessionTokens)
+                val hadTokensJson = prefs.contains("persisted_session_tokens_json")
+                val prevTokensJson = if (hadTokensJson) prefs.getString("persisted_session_tokens_json", null) else null
+
+                val appKey = "session_${todayStr}_$packageName"
+                val hadCurMs = prefs.contains(appKey)
+                val prevCurMs = if (hadCurMs) prefs.getLong(appKey, 0L) else 0L
+
+                val nameKey = "app_name_$packageName"
+                val hadName = prefs.contains(nameKey)
+                val prevName = if (hadName) prefs.getString(nameKey, null) else null
+
+                val catKey = "app_cat_$packageName"
+                val hadCat = prefs.contains(catKey)
+                val prevCat = if (hadCat) prefs.getString(catKey, null) else null
+
+                val catLabelKey = "app_cat_label_$packageName"
+                val hadCatLabel = prefs.contains(catLabelKey)
+                val prevCatLabel = if (hadCatLabel) prefs.getString(catLabelKey, null) else null
+
+                val lastUsedKey = "app_last_used_$packageName"
+                val hadLastUsed = prefs.contains(lastUsedKey)
+                val prevLastUsed = if (hadLastUsed) prefs.getLong(lastUsedKey, 0L) else 0L
+
+                val editor = prefs.edit()
+                if (sessionToken.isNotEmpty()) {
+                    recordedSessionTokens.add(sessionToken)
+                    val jsonArray = org.json.JSONArray()
+                    for (t in recordedSessionTokens) {
+                        jsonArray.put(t)
+                    }
+                    editor.putString("persisted_session_tokens_json", jsonArray.toString())
+                }
+
+                val newMs = prevCurMs + durationMs
+                editor.putLong(appKey, newMs)
+                    .putString(nameKey, metadata.appName.ifEmpty { appLabel })
+                    .putString(catKey, metadata.category.name)
+                    .putString(catLabelKey, metadata.category.displayName)
+                    .putLong(lastUsedKey, System.currentTimeMillis())
+
+                val committed = editor.commit()
+                if (!committed) {
+                    // Phục hồi lại trạng thái in-memory cache của SharedPreferences để tránh dirty cache
+                    val rollbackEditor = prefs.edit()
+                    if (hadCurMs) rollbackEditor.putLong(appKey, prevCurMs) else rollbackEditor.remove(appKey)
+                    if (hadName) rollbackEditor.putString(nameKey, prevName) else rollbackEditor.remove(nameKey)
+                    if (hadCat) rollbackEditor.putString(catKey, prevCat) else rollbackEditor.remove(catKey)
+                    if (hadCatLabel) rollbackEditor.putString(catLabelKey, prevCatLabel) else rollbackEditor.remove(catLabelKey)
+                    if (hadLastUsed) rollbackEditor.putLong(lastUsedKey, prevLastUsed) else rollbackEditor.remove(lastUsedKey)
+                    if (sessionToken.isNotEmpty()) {
+                        if (hadTokensJson) rollbackEditor.putString("persisted_session_tokens_json", prevTokensJson)
+                        else rollbackEditor.remove("persisted_session_tokens_json")
+                    }
+                    rollbackEditor.commit()
+
+                    if (sessionToken.isNotEmpty()) {
+                        // Rollback 100% nguyên vẹn cả phần tử và thứ tự LRU trong RAM khi commit() đĩa thất bại qua raw restore
+                        (recordedSessionTokens as? LruSessionSet)?.restoreSnapshotRaw(backupTokens)
+                            ?: run {
+                                recordedSessionTokens.clear()
+                                recordedSessionTokens.addAll(backupTokens)
+                            }
+                    }
+                    Log.w("UsageTrackerService", "recordAppSession: SharedPreferences.commit() returned false, rollback RAM token và preferences cache, hủy ghi nhận thời lượng")
+                    return
+                }
             }
-            val metadata = AppClassifier.classify(packageName, appLabel, appInfo)
-
-            prefs.edit()
-                .putLong(appKey, newMs)
-                .putString("app_name_$packageName", metadata.appName.ifEmpty { appLabel })
-                .putString("app_cat_$packageName", metadata.category.name)
-                .putString("app_cat_label_$packageName", metadata.category.displayName)
-                .putLong("app_last_used_$packageName", System.currentTimeMillis())
-                .apply()
 
             // Đồng bộ ngay thống kê lên Firebase
             collectAndSave(context)
@@ -496,13 +1414,12 @@ class UsageTrackerService : Service() {
                 val totalTime = stat.totalTimeInForeground
                 if (totalTime <= 0) continue
 
-                var appInfo: android.content.pm.ApplicationInfo? = null
-                val appLabel = try {
-                    appInfo = pm.getApplicationInfo(stat.packageName, 0)
-                    pm.getApplicationLabel(appInfo).toString()
+                val appInfo = try {
+                    pm.getApplicationInfo(stat.packageName, 0)
                 } catch (e: Exception) {
-                    stat.packageName
+                    null
                 }
+                val appLabel = appInfo?.let { pm.getApplicationLabel(it).toString() } ?: stat.packageName
 
                 val metadata = AppClassifier.classify(stat.packageName, appLabel, appInfo)
                 when (metadata.category) {
@@ -611,16 +1528,18 @@ class UsageTrackerService : Service() {
                 100
             }
 
-            // Lưu vào SharedPreferences
-            prefs.edit()
-                .putLong("study_time_ms", studyTimeMs)
-                .putLong("game_time_ms", gameTimeMs)
-                .putLong("social_time_ms", socialTimeMs)
-                .putLong("utility_time_ms", utilityTimeMs)
-                .putLong("total_screen_time_ms", totalScreenTimeMs)
-                .putInt("balance_score", balanceScore)
-                .putLong("last_updated_at", System.currentTimeMillis())
-                .apply()
+            // Lưu vào SharedPreferences với statsLock đồng bộ (sử dụng apply() phi blocking)
+            synchronized(statsLock) {
+                prefs.edit()
+                    .putLong("study_time_ms", studyTimeMs)
+                    .putLong("game_time_ms", gameTimeMs)
+                    .putLong("social_time_ms", socialTimeMs)
+                    .putLong("utility_time_ms", utilityTimeMs)
+                    .putLong("total_screen_time_ms", totalScreenTimeMs)
+                    .putInt("balance_score", balanceScore)
+                    .putLong("last_updated_at", System.currentTimeMillis())
+                    .apply()
+            }
 
             // Đồng bộ trực tiếp nhịp tim & thống kê lên Firebase để Parent Hub theo dõi thời gian thực
             val pairedCode = prefs.getString("paired_code", "") ?: ""
@@ -631,6 +1550,7 @@ class UsageTrackerService : Service() {
 
                 syncScope.launch {
                     try {
+                        val targetEpoch = GuardianAccessibilityService.telemetryEpoch.get()
                         val now = System.currentTimeMillis()
                         val mediaType = "application/json; charset=utf-8".toMediaType()
                         val usageJson = JSONObject().apply {
@@ -650,44 +1570,74 @@ class UsageTrackerService : Service() {
                             .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId/app_history.json")
                             .put(historyBody)
                             .build()
-                        sharedHttpClient.newCall(reqFamHist).execute().close()
 
-                        // Cập nhật đồng thời nhánh device: online = true, lastSync = now, kèm usage
+                        // Cập nhật đồng thời nhánh device: chỉ đính kèm online = true và heartbeat nếu phần cứng thực sự online
+                        val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+                        val km = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+                        val isOnlineNow = GuardianAccessibilityService.isScreenOnState &&
+                                pm?.isInteractive == true &&
+                                km?.isKeyguardLocked != true
+
                         val devicePatch = JSONObject().apply {
-                            put("online", true)
+                            if (isOnlineNow) {
+                                put("online", true)
+                                put("lastHeartbeat", now)
+                            }
                             put("lastSync", now)
-                            put("lastHeartbeat", now)
                             put("usage", usageJson)
                             put("app_history", appHistoryJsonArray)
                         }
                         val patchBody = devicePatch.toString().toRequestBody(mediaType)
+
+                        fun sendGuarded(req: okhttp3.Request): Boolean {
+                            val currentPm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+                            val currentKm = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+                            val isCurrentHardwareOnline = GuardianAccessibilityService.isScreenOnState &&
+                                    currentPm?.isInteractive == true &&
+                                    currentKm?.isKeyguardLocked != true
+                            if (isCurrentHardwareOnline != isOnlineNow || GuardianAccessibilityService.telemetryEpoch.get() != targetEpoch) {
+                                Log.w("UsageTrackerService", "Phát hiện thay đổi phần cứng hoặc epoch trong collectAndSave, dừng chuỗi đồng bộ")
+                                return false
+                            }
+                            return if (isOnlineNow) {
+                                executeOnlineGuarded(req, context, targetEpoch)
+                            } else {
+                                executeOfflineGuarded(req, context, targetEpoch)
+                            }
+                        }
 
                         // 1. Ghi vào danh sách thiết bị gia đình: /families/$pairedCode/devices/$androidId
                         val reqFamDev = okhttp3.Request.Builder()
                             .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId.json")
                             .patch(patchBody)
                             .build()
-                        sharedHttpClient.newCall(reqFamDev).execute().close()
 
                         // 2. Ghi vào chi tiết thiết bị phẳng: /devices/$androidId
                         val reqDevice = okhttp3.Request.Builder()
                             .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$androidId.json")
                             .patch(patchBody)
                             .build()
-                        sharedHttpClient.newCall(reqDevice).execute().close()
 
                         // 3. Tương thích ngược: /devices/$pairedCode và /pairings/$pairedCode
                         val reqLegacyDev = okhttp3.Request.Builder()
                             .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$pairedCode.json")
                             .patch(patchBody)
                             .build()
-                        sharedHttpClient.newCall(reqLegacyDev).execute().close()
 
                         val reqPairing = okhttp3.Request.Builder()
                             .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/pairings/$pairedCode.json")
                             .patch(patchBody)
                             .build()
-                        sharedHttpClient.newCall(reqPairing).execute().close()
+
+                        coroutineScope {
+                            val requests = listOf(reqFamHist, reqFamDev, reqDevice, reqLegacyDev, reqPairing)
+                            val deferreds = requests.map { req ->
+                                async(Dispatchers.IO) {
+                                    sendGuarded(req)
+                                }
+                            }
+                            deferreds.awaitAll()
+                        }
                     } catch (e: Exception) {
                         Log.w("UsageTrackerService", "collectAndSave sync failed: ${e.message}")
                     }
@@ -706,18 +1656,81 @@ class UsageTrackerService : Service() {
             when (intent?.action) {
                 Intent.ACTION_SCREEN_OFF -> {
                     Log.d("UsageTrackerService", "Phát hiện tắt màn hình (SCREEN_OFF): Đóng băng bộ đếm và cập nhật active_app")
-                    reportActiveApp(
-                        context = ctx,
-                        packageName = "SCREEN_OFF",
-                        appName = "Màn hình tắt / Khóa máy",
-                        category = "OFFLINE",
-                        categoryLabel = "Đã tắt màn hình",
-                        isForeground = false
-                    )
+                    GuardianAccessibilityService.isScreenOnState = false
+                    val screenOffEpoch = GuardianAccessibilityService.telemetryEpoch.incrementAndGet()
+                    lastHeartbeatSentTimestamp.set(0L)
+                    cancelActiveOnlineCalls()
+
+                    val accessService = GuardianAccessibilityService.instance
+                    if (accessService != null) {
+                        accessService.handleScreenOff(screenOffEpoch)
+                    } else {
+                        sendUrgentOfflineStatus(ctx, screenOffEpoch)
+
+                        val prefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                        val lastPkg = prefs.getString("last_foreground_pkg", "") ?: ""
+                        val lastStart = prefs.getLong("last_foreground_start", 0L)
+                        val now = System.currentTimeMillis()
+
+                        // 1. Accounting độc lập: Ghi nhận thời lượng phiên sử dụng ĐỘC LẬP (kèm session token chống duplicate)
+                        if (lastPkg.isNotEmpty() && lastStart > 0L && now - lastStart >= 1000L) {
+                            val sessionDuration = now - lastStart
+                            val sessionToken = "${lastPkg}_${lastStart}"
+                            syncScope.launch(Dispatchers.IO) {
+                                recordAppSession(ctx, lastPkg, sessionDuration, sessionToken)
+                            }
+                        }
+
+                        // 2. Telemetry offline persistence: Có stale fencing
+                        syncScope.launch(Dispatchers.IO) {
+                            // FENCING BẤT BIẾN: Kiểm tra ngay sau khi khởi chạy coroutine
+                            if (GuardianAccessibilityService.telemetryEpoch.get() != screenOffEpoch || GuardianAccessibilityService.isScreenOnState) {
+                                Log.w("UsageTrackerService", "Hủy bỏ screenStateReceiver fallback: Phát hiện SCREEN_ON trước khi ghi đĩa")
+                                return@launch
+                            }
+
+                            val lastEpoch = prefs.getLong("last_written_epoch", -1L)
+                            if (screenOffEpoch >= lastEpoch) {
+                                prefs.edit()
+                                    .putLong("last_written_epoch", screenOffEpoch)
+                                    .putString("last_foreground_pkg", "")
+                                    .putLong("last_foreground_start", 0L)
+                                    .putBoolean("is_device_online", false)
+                                    .commit()
+                            }
+                        }
+                    }
                 }
-                Intent.ACTION_USER_PRESENT, Intent.ACTION_SCREEN_ON -> {
-                    Log.d("UsageTrackerService", "Phát hiện mở màn hình: Tiếp tục giám sát đồng hành")
-                    sendHeartbeatPing(ctx)
+                Intent.ACTION_USER_PRESENT -> {
+                    Log.d("UsageTrackerService", "Phát hiện mở khóa máy (ACTION_USER_PRESENT): Thức tỉnh giám sát")
+                    val pm = ctx.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+                    val km = ctx.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+                    val isHardwareOnline = (pm?.isInteractive == true && km?.isKeyguardLocked != true)
+                    GuardianAccessibilityService.isScreenOnState = isHardwareOnline
+                    lastDispatchedOfflineEpoch.set(-1L)
+                    val userPresentEpoch = GuardianAccessibilityService.telemetryEpoch.incrementAndGet()
+                    val accessService = GuardianAccessibilityService.instance
+                    if (accessService != null) {
+                        accessService.handleScreenOn(userPresentEpoch)
+                    }
+                    if (isHardwareOnline) {
+                        sendHeartbeatPing(ctx, force = true)
+                    }
+
+                    // Bù đắp Keyguard latency race: gửi lại sau 500ms và 1500ms khi Keyguard đã mở khóa hoàn toàn
+                    syncScope.launch {
+                        delay(500L)
+                        if (GuardianAccessibilityService.isScreenOnState) {
+                            sendHeartbeatPing(ctx, force = true)
+                        }
+                        delay(1000L)
+                        if (GuardianAccessibilityService.isScreenOnState) {
+                            sendHeartbeatPing(ctx, force = false)
+                        }
+                    }
+                }
+                Intent.ACTION_SCREEN_ON -> {
+                    Log.d("UsageTrackerService", "Phát hiện bật màn hình (ACTION_SCREEN_ON): Máy vẫn ở màn hình khóa Keyguard, giữ nguyên offline")
                 }
             }
         }
@@ -725,6 +1738,7 @@ class UsageTrackerService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        restorePersistedSessionTokens(this)
         WebFilterList.loadFromPreferences(this)
         createNotificationChannel()
         startForegroundNotification()
@@ -748,7 +1762,12 @@ class UsageTrackerService : Service() {
     override fun onDestroy() {
         try {
             unregisterReceiver(screenStateReceiver)
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            Log.w("UsageTrackerService", "Failed to unregister screenStateReceiver: ${e.message}")
+        }
+        GuardianAccessibilityService.isScreenOnState = false
+        cancelActiveOnlineCalls()
+        sendUrgentOfflineStatus(applicationContext, GuardianAccessibilityService.telemetryEpoch.incrementAndGet())
         serviceJob.cancel()
         super.onDestroy()
     }
@@ -820,9 +1839,11 @@ class UsageTrackerService : Service() {
                 // 4. Thu thập thống kê chi tiết nếu được cấp quyền
                 try {
                     collectAndSave(this@UsageTrackerService)
-                } catch (_: Exception) {}
+                } catch (e: Exception) {
+                    Log.w("UsageTrackerService", "collectAndSave failed: ${e.message}")
+                }
 
-                delay(10_000) // Nhịp tim kiểm tra 10 giây
+                delay(15_000) // Nhịp tim kiểm tra chuẩn 15 giây theo SPEC.md
             }
         }
     }

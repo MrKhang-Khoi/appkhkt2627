@@ -11,8 +11,8 @@ android {
         applicationId = "vn.edu.cva.smartguardian"
         minSdk = 26
         targetSdk = 35
-        versionCode = 23
-        versionName = "1.2.3"
+        versionCode = 24
+        versionName = "1.2.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -57,6 +57,10 @@ android {
     buildFeatures {
         viewBinding = true
     }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {
@@ -69,4 +73,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.okhttp)
     implementation("com.google.android.gms:play-services-location:21.3.0")
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation("org.json:json:20240303")
 }

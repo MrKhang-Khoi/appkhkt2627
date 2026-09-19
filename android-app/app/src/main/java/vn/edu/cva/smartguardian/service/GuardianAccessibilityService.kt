@@ -1,6 +1,8 @@
 package vn.edu.cva.smartguardian.service
 
 import android.accessibilityservice.AccessibilityService
+import android.app.ActivityManager
+import android.app.KeyguardManager
 import android.content.Context
 import android.content.Intent
 import android.os.PowerManager
@@ -14,11 +16,65 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import vn.edu.cva.smartguardian.data.AppClassifier
 import vn.edu.cva.smartguardian.data.WebFilterList
 import vn.edu.cva.smartguardian.ui.BlockedActivity
 
 class GuardianAccessibilityService : AccessibilityService() {
+
+    companion object {
+        @Volatile
+        var instance: GuardianAccessibilityService? = null
+            private set
+
+        @Volatile
+        var isScreenOnState: Boolean = true
+
+        val telemetryEpoch = java.util.concurrent.atomic.AtomicLong(0L)
+        internal val sessionLock = Any()
+
+        fun evaluateForegroundEvidence(
+            activeRootPkg: String?,
+            foregroundProcessPkg: String?,
+            processImportance: Int?,
+            usageStatsLastResumedPkg: String?,
+            targetPkg: String
+        ): Boolean {
+            if (targetPkg.isEmpty()) return false
+
+            // Xung đột cửa sổ: Nếu activeRootPkg thuộc về ứng dụng KHÁC, tuyệt đối không được nhận diện là targetPkg
+            if (!activeRootPkg.isNullOrEmpty() && activeRootPkg != targetPkg) {
+                return false
+            }
+
+            // 1. Accessibility Window Hierarchy (Cửa sổ tiền cảnh đang hiển thị khớp chính xác)
+            if (!activeRootPkg.isNullOrEmpty() && activeRootPkg == targetPkg) {
+                return true
+            }
+
+            // 2. ActivityManager (BẮT BUỘC: foregroundProcessPkg khớp targetPkg hoặc là named process của targetPkg VÀ importance là 100)
+            val matchesTargetProcess = !foregroundProcessPkg.isNullOrEmpty() &&
+                (foregroundProcessPkg == targetPkg || foregroundProcessPkg.startsWith("$targetPkg:"))
+            if (matchesTargetProcess &&
+                processImportance != null &&
+                processImportance == android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
+            ) {
+                return true
+            }
+
+            // 3. UsageStatsManager: Chỉ chấp nhận khi activeRootPkg là null (không có xung đột cửa sổ)
+            if (activeRootPkg.isNullOrEmpty() &&
+                !usageStatsLastResumedPkg.isNullOrEmpty() &&
+                usageStatsLastResumedPkg == targetPkg
+            ) {
+                return true
+            }
+
+            return false
+        }
+    }
 
     private val BROWSER_PACKAGES = setOf(
         "com.android.chrome",
@@ -51,23 +107,147 @@ class GuardianAccessibilityService : AccessibilityService() {
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
+        val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
+        val km = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+        val isHardwareOnline = (pm?.isInteractive == true && km?.isKeyguardLocked != true)
+        isScreenOnState = isHardwareOnline
+
         WebFilterList.loadFromPreferences(this)
         try {
             UsageTrackerService.start(this)
         } catch (e: Exception) {
             Log.w("GuardianAccess", "Failed to start UsageTrackerService: ${e.message}")
         }
-        startPeriodicHeartbeat()
+
+        if (isHardwareOnline) {
+            startPeriodicHeartbeat()
+        } else {
+            handleScreenOff()
+        }
     }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        instance = this
+        val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
+        val km = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+        val isHardwareOnline = (pm?.isInteractive == true && km?.isKeyguardLocked != true)
+        isScreenOnState = isHardwareOnline
+
         try {
+            UsageTrackerService.restorePersistedSessionTokens(this)
             UsageTrackerService.start(this)
         } catch (e: Exception) {
             Log.w("GuardianAccess", "Failed to start UsageTrackerService on connect: ${e.message}")
         }
+
+        if (isHardwareOnline) {
+            startPeriodicHeartbeat()
+        } else {
+            handleScreenOff()
+        }
+    }
+
+    fun handleScreenOff(passedEpoch: Long = -1L) {
+        // 1. NGAY LẬP TỨC và ĐỒNG BỘ: Ngắt cờ phần cứng, hủy heartbeat, xác lập epoch duy nhất và ngắt socket mạng online in-flight
+        isScreenOnState = false
+        heartbeatJob?.cancel()
+        val currentEpoch = if (passedEpoch != -1L) passedEpoch else telemetryEpoch.incrementAndGet()
+        UsageTrackerService.cancelActiveOnlineCalls()
+
+        // 2. Chụp snapshot và reset biến bộ nhớ RAM ngay lập tức dưới sessionLock (Thread-safe atomic closing)
+        val now = System.currentTimeMillis()
+        val (closedPkg, closedStart) = synchronized(sessionLock) {
+            val pkg = currentForegroundPackage
+            val start = currentForegroundStartTime
+            currentForegroundPackage = ""
+            currentForegroundStartTime = 0L
+            lastActivePackage = "SCREEN_OFF"
+            lastActiveUploadTimestamp = now
+            Pair(pkg, start)
+        }
+        val sessionToken = if (closedPkg.isNotEmpty() && closedStart > 0L) "${closedPkg}_${closedStart}" else ""
+
+        // 3. Fast-path offline: Gửi ngay lập tức bản tin ngắt kết nối khẩn cấp lên Firebase
+        UsageTrackerService.sendUrgentOfflineStatus(this, currentEpoch)
+
+        // 4. Bất biến kế toán: Ghi nhận thời lượng phiên sử dụng ĐỘC LẬP (kèm session token chống duplicate)
+        if (closedPkg.isNotEmpty() && closedStart > 0L && now - closedStart >= 1000L && sessionToken.isNotEmpty()) {
+            val sessionDuration = now - closedStart
+            serviceScope.launch(Dispatchers.IO) {
+                UsageTrackerService.recordAppSession(applicationContext, closedPkg, sessionDuration, sessionToken)
+            }
+        }
+
+        // 5. Telemetry offline state persistence: Áp dụng stale fencing riêng biệt cho trạng thái telemetry
+        serviceScope.launch(Dispatchers.IO) {
+            // FENCING BẤT BIẾN: Chỉ áp dụng hủy cập nhật trạng thái offline nếu màn hình đã bật lại
+            if (telemetryEpoch.get() != currentEpoch || isScreenOnState) {
+                Log.w("GuardianAccess", "Hủy bỏ screen off persist: Phát hiện SCREEN_ON trước khi ghi đĩa (currentEpoch=$currentEpoch, latestEpoch=${telemetryEpoch.get()})")
+                return@launch
+            }
+
+            val prefs = try { getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE) } catch (e: Exception) { null }
+            val lastEpoch = prefs?.getLong("last_written_epoch", -1L) ?: -1L
+            if (currentEpoch >= lastEpoch) {
+                prefs?.edit()
+                    ?.putLong("last_written_epoch", currentEpoch)
+                    ?.putBoolean("is_device_online", false)
+                    ?.putString("last_foreground_pkg", "")
+                    ?.putLong("last_foreground_start", 0L)
+                    ?.apply()
+            }
+        }
+    }
+
+    fun handleScreenOn(passedEpoch: Long = -1L) {
+        val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
+        val km = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+        val isHardwareOnline = (pm?.isInteractive == true && km?.isKeyguardLocked != true)
+
+        if (!isHardwareOnline) {
+            isScreenOnState = false
+            heartbeatJob?.cancel()
+            Log.d("GuardianAccess", "handleScreenOn: Thiết bị chưa online hoàn toàn (isInteractive=${pm?.isInteractive}, isKeyguardLocked=${km?.isKeyguardLocked}) -> Chưa kích hoạt heartbeat")
+            return
+        }
+
+        // Tăng epoch trước khi bật cờ isScreenOnState để đảm bảo mọi coroutine SCREEN_OFF trước đó lập tức bị stale
+        val currentEpoch = if (passedEpoch != -1L) passedEpoch else telemetryEpoch.incrementAndGet()
+        isScreenOnState = true
+        UsageTrackerService.lastDispatchedOfflineEpoch.set(-1L)
+        UsageTrackerService.cancelActiveOfflineCalls()
         startPeriodicHeartbeat()
+
+        val currentPkg = try {
+            val root = rootInActiveWindow
+            val p = root?.packageName?.toString()?.trim()
+            if (!p.isNullOrEmpty() && p != applicationContext.packageName) p else null
+        } catch (e: Exception) {
+            Log.w("GuardianAccess", "Error inspecting rootInActiveWindow on screen on: ${e.message}")
+            null
+        }
+
+        serviceScope.launch(Dispatchers.IO) {
+            val uploadAction = UsageTrackerService.telemetryMutex.withLock {
+                if (!isScreenOnState || telemetryEpoch.get() != currentEpoch) {
+                    return@withLock null
+                }
+                synchronized(sessionLock) {
+                    lastActivePackage = ""
+                    currentForegroundPackage = ""
+                    currentForegroundStartTime = 0L
+                }
+
+                if (currentPkg != null) {
+                    handleWindowStateChangedLocked(currentPkg, currentEpoch)
+                } else {
+                    null
+                }
+            }
+            uploadAction?.invoke()
+        }
     }
 
     private fun startPeriodicHeartbeat() {
@@ -76,8 +256,8 @@ class GuardianAccessibilityService : AccessibilityService() {
             val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
             while (isActive) {
                 try {
-                    val isInteractive = pm?.isInteractive ?: true
-                    if (isInteractive) {
+                    val isInteractive = pm?.isInteractive ?: false
+                    if (isInteractive && isScreenOnState) {
                         UsageTrackerService.sendHeartbeatPing(applicationContext)
                     }
                 } catch (e: Exception) {
@@ -91,6 +271,11 @@ class GuardianAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
 
+        val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
+        if (!isScreenOnState || (pm != null && !pm.isInteractive)) {
+            return
+        }
+
         // Gửi nhịp tim định kỳ (tối đa 1 lần mỗi 20s) khi học sinh đang tương tác với thiết bị
         val now = System.currentTimeMillis()
         if (now - lastHeartbeatTimestamp > 20_000L) {
@@ -98,25 +283,24 @@ class GuardianAccessibilityService : AccessibilityService() {
             UsageTrackerService.sendHeartbeatPing(this)
         }
 
-        val packageName = event.packageName?.toString() ?: return
+        // Bắt URL trình duyệt theo thời gian thực
+        extractAndAuditBrowserUrl(event)
 
-        // 1. Bắt sự kiện chuyển cửa sổ (TYPE_WINDOW_STATE_CHANGED) để giám sát ĐANG MỞ CÁI GÌ
-        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-            handleWindowStateChanged(packageName)
+        // Chỉ lọc các sự kiện chuyển đổi cửa sổ tiền cảnh
+        if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            return
         }
 
-        // 2. Chỉ xử lý khi sự kiện đến từ các ứng dụng duyệt web để giám sát và lọc web độc hại
-        if (BROWSER_PACKAGES.contains(packageName)) {
-            val rootNode = rootInActiveWindow ?: return
-            inspectBrowserNodeForUrl(rootNode, packageName)
+        val rawPkg = event.packageName?.toString() ?: return
+        val packageName = rawPkg.trim()
+
+        // Bỏ qua chính ứng dụng giám sát hoặc các service phụ trợ
+        if (packageName == applicationContext.packageName) {
+            return
         }
-    }
 
-    private fun handleWindowStateChanged(packageName: String) {
-        val now = System.currentTimeMillis()
-
-        // Bỏ qua nếu là chính app CVA-SmartGuardian hoặc bàn phím gõ chữ
-        if (packageName == applicationContext.packageName ||
+        // Bỏ qua bàn phím gõ tiếng Việt / Bàn phím hệ thống
+        if (
             packageName.contains("inputmethod") ||
             packageName.contains("keyboard") ||
             packageName == "com.google.android.inputmethod.latin" ||
@@ -125,99 +309,243 @@ class GuardianAccessibilityService : AccessibilityService() {
             return
         }
 
-        // Nếu chuyển sang ứng dụng khác: Kết toán và tích lũy thời gian của ứng dụng trước đó
-        if (currentForegroundPackage.isNotEmpty() && currentForegroundPackage != packageName && currentForegroundStartTime > 0L) {
-            val elapsed = now - currentForegroundStartTime
-            if (elapsed >= 1500L) {
-                UsageTrackerService.recordAppSession(applicationContext, currentForegroundPackage, elapsed)
+        handleWindowStateChanged(packageName)
+    }
+
+    private fun extractAndAuditBrowserUrl(event: AccessibilityEvent) {
+        val packageName = event.packageName?.toString() ?: return
+        if (BROWSER_PACKAGES.contains(packageName)) {
+            // Xác thực tiền cảnh: Chỉ audit URL nếu màn hình đang bật và root window khớp trình duyệt
+            if (!isScreenOnState) return
+            val activePkg = try { rootInActiveWindow?.packageName?.toString()?.trim() } catch (e: Exception) { null }
+            if (activePkg != null && activePkg != packageName) return
+
+            val rootNode = rootInActiveWindow ?: return
+            inspectBrowserNodeForUrl(rootNode, packageName)
+        }
+    }
+
+    private fun handleWindowStateChanged(packageName: String) {
+        if (!isScreenOnState) return
+        val currentEpoch = telemetryEpoch.get()
+        serviceScope.launch(Dispatchers.IO) {
+            val uploadAction = UsageTrackerService.telemetryMutex.withLock {
+                // Kiểm tra nguyên tử: Nếu màn hình đã tắt hoặc epoch đã thay đổi, bỏ qua ngay
+                if (!isScreenOnState || telemetryEpoch.get() != currentEpoch) {
+                    return@withLock null
+                }
+                handleWindowStateChangedLocked(packageName, currentEpoch)
             }
-            currentForegroundStartTime = now
+            uploadAction?.invoke()
+        }
+    }
+
+    private fun isForegroundApp(packageName: String): Boolean {
+        if (packageName.isEmpty()) return false
+
+        // 1. Accessibility Window Hierarchy check: Cửa sổ tiền cảnh đang active
+        val activePkg = try {
+            rootInActiveWindow?.packageName?.toString()?.trim()
+        } catch (e: Exception) {
+            Log.w("GuardianAccess", "rootInActiveWindow check failed: ${e.message}")
+            null
         }
 
-        // Bắt sự kiện màn hình khóa (Lockscreen / Keyguard) của Android
-        if (packageName == "com.android.systemui" || packageName.contains("keyguard")) {
-            if (currentForegroundPackage.isNotEmpty() && currentForegroundStartTime > 0L) {
-                val elapsed = now - currentForegroundStartTime
-                if (elapsed >= 1500L) {
-                    UsageTrackerService.recordAppSession(applicationContext, currentForegroundPackage, elapsed)
+        // 2. ActivityManager RunningAppProcessInfo check: Tiến trình tiền cảnh thực tế (hỗ trợ named processes như package:name)
+        var fgProcPkg: String? = null
+        var fgProcImportance: Int? = null
+        try {
+            val am = getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+            val processes = am?.runningAppProcesses
+            if (!processes.isNullOrEmpty()) {
+                val matching = processes.filter { it.processName == packageName || it.processName.startsWith("$packageName:") }
+                val targetProc = matching.find { it.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND }
+                    ?: matching.firstOrNull()
+                if (targetProc != null) {
+                    fgProcPkg = targetProc.processName
+                    fgProcImportance = targetProc.importance
                 }
             }
-            currentForegroundPackage = ""
-            currentForegroundStartTime = 0L
+        } catch (e: Exception) {
+            Log.w("GuardianAccess", "ActivityManager process check failed: ${e.message}")
+        }
 
-            val pm = getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
-            val isInteractive = pm?.isInteractive ?: true
-            if (!isInteractive || lastActivePackage != "SCREEN_OFF") {
-                lastActivePackage = "SCREEN_OFF"
-                lastActiveUploadTimestamp = now
-                UsageTrackerService.reportActiveApp(
-                    context = this,
+        // 3. UsageStatsManager check (Dual-Engine per Rule 6)
+        var lastResumedPkg: String? = null
+        try {
+            val usm = getSystemService(Context.USAGE_STATS_SERVICE) as? android.app.usage.UsageStatsManager
+            val now = System.currentTimeMillis()
+            val events = usm?.queryEvents(now - 5000L, now)
+            if (events != null) {
+                var lastEventPkg = ""
+                var lastEventType = -1
+                val eventOut = android.app.usage.UsageEvents.Event()
+                while (events.hasNextEvent()) {
+                    events.getNextEvent(eventOut)
+                    if (eventOut.eventType == android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED ||
+                        eventOut.eventType == android.app.usage.UsageEvents.Event.ACTIVITY_PAUSED
+                    ) {
+                        lastEventPkg = eventOut.packageName
+                        lastEventType = eventOut.eventType
+                    }
+                }
+                if (lastEventType == android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED) {
+                    lastResumedPkg = lastEventPkg
+                }
+            }
+        } catch (e: Exception) {
+            Log.w("GuardianAccess", "UsageStatsManager check failed: ${e.message}")
+        }
+
+        // 4. Bất biến phần cứng & an toàn số: Ủy quyền cho evaluateForegroundEvidence xác minh
+        return evaluateForegroundEvidence(
+            activeRootPkg = activePkg,
+            foregroundProcessPkg = fgProcPkg,
+            processImportance = fgProcImportance,
+            usageStatsLastResumedPkg = lastResumedPkg,
+            targetPkg = packageName
+        )
+    }
+
+    private suspend fun handleWindowStateChangedLocked(packageName: String, expectedEpoch: Long): (suspend () -> Unit)? {
+        val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
+        val km = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+        val isInteractive = pm?.isInteractive ?: false
+        val isLocked = km?.isKeyguardLocked ?: false
+
+        if (!isScreenOnState || !isInteractive || telemetryEpoch.get() != expectedEpoch) {
+            // Bất biến phần cứng: Màn hình đang tắt hoặc epoch đã thay đổi -> Bỏ qua ngay lập tức mọi sự kiện đổi cửa sổ đến muộn
+            return null
+        }
+
+        val now = System.currentTimeMillis()
+        val (prevPkg, prevStart, prevToken) = synchronized(sessionLock) {
+            val p = currentForegroundPackage
+            val s = currentForegroundStartTime
+            val t = if (p.isNotEmpty() && s > 0L) "${p}_${s}" else ""
+            Triple(p, s, t)
+        }
+
+        val isHome = isDefaultLauncher(packageName)
+        val isLock = packageName == "com.android.systemui" || packageName.contains("keyguard")
+
+        // Màn hình khóa (Keyguard/Lockscreen) hoặc KeyguardManager báo đang khóa
+        if (isLock || isLocked) {
+            val shouldUploadOff = synchronized(sessionLock) {
+                currentForegroundPackage = ""
+                currentForegroundStartTime = 0L
+                if (lastActivePackage != "SCREEN_OFF") {
+                    lastActivePackage = "SCREEN_OFF"
+                    lastActiveUploadTimestamp = now
+                    true
+                } else {
+                    false
+                }
+            }
+            if (prevPkg.isNotEmpty() && prevStart > 0L && now - prevStart >= 1500L) {
+                UsageTrackerService.recordAppSession(applicationContext, prevPkg, now - prevStart, prevToken)
+            }
+            val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit()
+                .putString("last_foreground_pkg", "")
+                .putLong("last_foreground_start", 0L)
+                .putBoolean("is_device_online", false)
+                .apply()
+
+            if (shouldUploadOff) {
+                return UsageTrackerService.prepareActiveAppLocked(
+                    context = this@GuardianAccessibilityService,
                     packageName = "SCREEN_OFF",
                     appName = "Màn hình khóa / Màn hình tắt",
                     category = "OFFLINE",
                     categoryLabel = "Đã tắt màn hình",
-                    isForeground = false
+                    isForeground = false,
+                    expectedEpoch = expectedEpoch
                 )
             }
-            return
+            return null
         }
 
-        val isHome = isDefaultLauncher(packageName)
         if (isHome) {
-            if (currentForegroundPackage.isNotEmpty() && currentForegroundStartTime > 0L) {
-                val elapsed = now - currentForegroundStartTime
-                if (elapsed >= 1500L) {
-                    UsageTrackerService.recordAppSession(applicationContext, currentForegroundPackage, elapsed)
+            val shouldUploadHome = synchronized(sessionLock) {
+                currentForegroundPackage = ""
+                currentForegroundStartTime = 0L
+                if (lastActivePackage != "HOME") {
+                    lastActivePackage = "HOME"
+                    lastActiveUploadTimestamp = now
+                    true
+                } else {
+                    false
                 }
             }
-            currentForegroundPackage = ""
-            currentForegroundStartTime = 0L
+            if (prevPkg.isNotEmpty() && prevStart > 0L && now - prevStart >= 1500L) {
+                UsageTrackerService.recordAppSession(applicationContext, prevPkg, now - prevStart, prevToken)
+            }
+            val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit().putString("last_foreground_pkg", "").putLong("last_foreground_start", 0L).apply()
 
-            if (lastActivePackage != "HOME") {
-                lastActivePackage = "HOME"
-                lastActiveUploadTimestamp = now
-                UsageTrackerService.reportActiveApp(
-                    context = this,
+            if (shouldUploadHome) {
+                return UsageTrackerService.prepareActiveAppLocked(
+                    context = this@GuardianAccessibilityService,
                     packageName = packageName,
                     appName = "Màn hình chính / Màn hình khóa",
                     category = "HOME",
                     categoryLabel = "Màn hình chính",
-                    isForeground = false
+                    isForeground = false,
+                    expectedEpoch = expectedEpoch
                 )
             }
-            return
+            return null
         }
 
-        // Ghi nhận phiên ứng dụng tiền cảnh mới
+        // Kiểm tra xác thực cửa sổ tiền cảnh (Dual-Engine Foreground Verification) CHỈ áp dụng cho ứng dụng người dùng
+        if (!isForegroundApp(packageName)) {
+            return null
+        }
+
+        // Ghi nhận ứng dụng tiền cảnh thông thường
         if (currentForegroundPackage != packageName) {
-            currentForegroundPackage = packageName
-            currentForegroundStartTime = now
+            if (prevPkg.isNotEmpty() && prevStart > 0L && now - prevStart >= 1500L) {
+                UsageTrackerService.recordAppSession(applicationContext, prevPkg, now - prevStart, prevToken)
+            }
+            synchronized(sessionLock) {
+                currentForegroundPackage = packageName
+                currentForegroundStartTime = now
+            }
+
+            val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit().putString("last_foreground_pkg", packageName).putLong("last_foreground_start", now).apply()
         }
 
-        if (packageName == lastActivePackage && now - lastActiveUploadTimestamp < 10_000L) {
-            return
+        val shouldDebounce = synchronized(sessionLock) {
+            if (packageName == lastActivePackage && now - lastActiveUploadTimestamp < 10_000L) {
+                true
+            } else {
+                lastActivePackage = packageName
+                lastActiveUploadTimestamp = now
+                false
+            }
+        }
+        if (shouldDebounce) {
+            return null
         }
 
-        lastActivePackage = packageName
-        lastActiveUploadTimestamp = now
-
-        var appInfo: android.content.pm.ApplicationInfo? = null
-        val appLabel = try {
-            appInfo = packageManager.getApplicationInfo(packageName, 0)
-            packageManager.getApplicationLabel(appInfo).toString()
+        val appInfo = try {
+            packageManager.getApplicationInfo(packageName, 0)
         } catch (e: Exception) {
-            packageName
+            null
         }
-
+        val appLabel = appInfo?.let { packageManager.getApplicationLabel(it).toString() } ?: packageName
         val metadata = AppClassifier.classify(packageName, appLabel, appInfo)
 
-        UsageTrackerService.reportActiveApp(
-            context = this,
+        return UsageTrackerService.prepareActiveAppLocked(
+            context = this@GuardianAccessibilityService,
             packageName = packageName,
             appName = metadata.appName.ifEmpty { appLabel },
             category = metadata.category.name,
             categoryLabel = metadata.category.displayName,
-            isForeground = true
+            isForeground = true,
+            expectedEpoch = expectedEpoch
         )
     }
 
@@ -305,7 +633,7 @@ class GuardianAccessibilityService : AccessibilityService() {
                 text.equals("search", ignoreCase = true) ||
                 text.equals("tìm kiếm", ignoreCase = true)
 
-        if (!isPlaceholder && text != null) {
+        if (!isPlaceholder) {
             // Kiểm tra viewId thanh địa chỉ phổ biến của Chrome, Cốc Cốc, Samsung, Firefox, Edge, Opera, Mi Browser
             val isAddressBarId = viewId.contains("url_bar") ||
                     viewId.contains("search_box") ||
@@ -374,10 +702,18 @@ class GuardianAccessibilityService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        if (instance == this) {
+            instance = null
+        }
         try {
+            isScreenOnState = false
             heartbeatJob?.cancel()
+            UsageTrackerService.cancelActiveOnlineCalls()
+            UsageTrackerService.sendUrgentOfflineStatus(applicationContext, telemetryEpoch.incrementAndGet())
             serviceJob.cancel()
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            android.util.Log.w("GuardianAccess", "Failed to cancel service jobs during onDestroy: ${e.message}")
+        }
         super.onDestroy()
     }
 }

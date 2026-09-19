@@ -1923,22 +1923,22 @@
       }
 
       const diffSeconds = Math.max(0, Math.floor((now - lastContact) / 1000));
+      const isExplicitOffline = deviceData?.online === false || pairingData?.online === false;
       const isScreenOff = deviceData?.active_app?.packageName === 'SCREEN_OFF';
 
-      // Ngưỡng đánh giá kết nối chuẩn công nghiệp cho thiết bị di động:
+      // Bất biến phần cứng (Hardware Invariant): Nếu màn hình tắt hoặc cờ online=false, lập tức xác định Ngoại tuyến (isOnline: false)
+      if (isExplicitOffline || isScreenOff) {
+        return { isOnline: false, diffSeconds, text: 'Màn hình tắt / Ngoại tuyến (Khóa máy)', color: '#64748b' };
+      }
+
+      // Ngưỡng đánh giá kết nối chuẩn công nghiệp cho thiết bị di động (khi màn hình đang mở):
       // 1. Trong vòng 90 giây: Thiết bị đang trực tuyến và phản hồi thời gian thực
       if (diffSeconds <= 90) {
-        if (isScreenOff) {
-          return { isOnline: true, diffSeconds, text: 'Màn hình tắt / Khóa máy (Trực tuyến)', color: '#38bdf8' };
-        }
         return { isOnline: true, diffSeconds, text: 'Đang hoạt động thời gian thực', color: '#10b981' };
       }
 
-      // 2. Từ 91s - 180s (1.5 - 3 phút): Thiết bị trực tuyến, có thể đang ở chế độ tiết kiệm pin hoặc đọc nội dung tĩnh
+      // 2. Từ 91s - 180s (1.5 - 3 phút): Thiết bị trực tuyến, có thể đang ở chế độ chờ
       if (diffSeconds <= 180) {
-        if (isScreenOff) {
-          return { isOnline: true, diffSeconds, text: 'Màn hình tắt / Chờ mở máy', color: '#64748b' };
-        }
         return { isOnline: true, diffSeconds, text: 'Trực tuyến (Chờ tương tác)', color: '#10b981' };
       }
 
@@ -2817,8 +2817,9 @@
               }
               webRulesLoadedOnce = true;
               renderWebRulesUI();
-            })
-            .catch(() => {});
+            .catch((err) => {
+              console.warn('Lỗi khi tải web rules:', err);
+            });
         }
       }
 

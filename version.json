@@ -1,8 +1,17 @@
 {
-  "versionCode": 23,
-  "versionName": "1.2.3",
-  "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.2.3.apk",
-  "sha256": "F6A647888725231A4B86A4A39637FA0708A7D9624E0F2EABD598E6012DB418B4",
-  "releaseNotes": "Khắc phục triệt để lỗi báo ngoại tuyến khi màn hình mở: Tích hợp Coroutine Ticker 15s trong GuardianAccessibilityService, tự động duy trì UsageTrackerService và đồng bộ nhịp tim liên tục khi lướt web.",
-  "updatedAt": 1789807820737
+  "versionCode": 24,
+  "versionName": "1.2.4",
+  "latestVersionCode": 24,
+  "latestVersionName": "1.2.4",
+  "minSupportedVersion": 1,
+  "isForceUpdate": false,
+  "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.2.4.apk",
+  "sha256": "4F5CE8178EAD27F090D8BE92B47D70DD586872EA68B5D7A9EAB43BD270CED3D7",
+  "fileSize": "5.79 MB",
+  "changelog": [
+    "Nâng cấp Hardware Invariant: Chuyển tức thì trạng thái SCREEN_OFF lên Firebase và Web Dashboard phụ huynh khi tắt màn hình",
+    "Fencing đồng bộ 2 tầng: Ngắt triệt để đếm giờ và hủy kết nối khi khóa máy, ngăn chặn hoàn toàn báo trực tuyến ảo",
+    "Tối ưu hóa cơ chế đồng bộ telemetry song song qua HTTP/2"
+  ],
+  "releaseNotes": "Bản cập nhật v1.2.4 tối ưu hóa bất biến phần cứng: Chuyển tức thì trạng thái SCREEN_OFF khi tắt màn hình, triệt tiêu hoàn toàn báo trực tuyến ảo và bảo toàn 100% dữ liệu telemetry."
 }

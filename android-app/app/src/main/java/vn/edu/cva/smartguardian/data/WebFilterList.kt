@@ -1,6 +1,7 @@
 package vn.edu.cva.smartguardian.data
 
 import android.content.Context
+import android.util.Log
 import java.net.URI
 import java.util.Locale
 import java.util.concurrent.CopyOnWriteArraySet
@@ -125,7 +126,9 @@ object WebFilterList {
             val wl = prefs.getStringSet("custom_whitelist", emptySet()) ?: emptySet()
             val sm = prefs.getBoolean("study_mode", false)
             updateCustomRules(bl, wl, sm)
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            Log.w("WebFilterList", "Failed to load preferences: ${e.message}", e)
+        }
     }
 
     /**
@@ -139,7 +142,9 @@ object WebFilterList {
                 .putStringSet("custom_whitelist", customWhitelist)
                 .putBoolean("study_mode", isStudyMode)
                 .apply()
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            Log.w("WebFilterList", "Failed to save preferences: ${e.message}", e)
+        }
     }
 
     /**

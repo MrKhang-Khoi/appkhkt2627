@@ -20,3 +20,6 @@ Thumbs.db
 
 # CodeGraph local DB
 .codegraph/
+
+# Environment secrets
+.env
