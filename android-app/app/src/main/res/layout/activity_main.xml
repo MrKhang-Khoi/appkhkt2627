@@ -712,6 +712,92 @@
                         android:textStyle="bold"
                         android:layout_marginTop="8dp"
                         android:visibility="gone" />
+
+                    <!-- PHÍM TẮT CẤP QUYỀN HỆ THỐNG NHANH 1-CHẠM -->
+                    <LinearLayout
+                        android:id="@+id/layoutQuickPermissionBarPre"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center"
+                        android:layout_marginTop="16dp">
+
+                        <LinearLayout
+                            android:id="@+id/btnQuickAppInfoPre"
+                            android:layout_width="0dp"
+                            android:layout_height="36dp"
+                            android:layout_weight="1"
+                            android:layout_marginEnd="6dp"
+                            android:background="@drawable/bg_device_card"
+                            android:gravity="center"
+                            android:paddingLeft="4dp"
+                            android:paddingRight="4dp"
+                            android:clickable="true"
+                            android:focusable="true">
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="🔓 Mở khóa ⋮"
+                                android:textColor="#F8FAFC"
+                                android:textSize="11sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/btnQuickAccessibilityPre"
+                            android:layout_width="0dp"
+                            android:layout_height="36dp"
+                            android:layout_weight="1"
+                            android:layout_marginEnd="6dp"
+                            android:background="@drawable/bg_device_card"
+                            android:gravity="center"
+                            android:paddingLeft="4dp"
+                            android:paddingRight="4dp"
+                            android:clickable="true"
+                            android:focusable="true">
+                            <TextView
+                                android:id="@+id/dotQuickAccessibilityPre"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="● "
+                                android:textColor="#EF4444"
+                                android:textSize="10sp" />
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="👁️ Trợ năng"
+                                android:textColor="#F8FAFC"
+                                android:textSize="11sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/btnQuickUsageAccessPre"
+                            android:layout_width="0dp"
+                            android:layout_height="36dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_device_card"
+                            android:gravity="center"
+                            android:paddingLeft="4dp"
+                            android:paddingRight="4dp"
+                            android:clickable="true"
+                            android:focusable="true">
+                            <TextView
+                                android:id="@+id/dotQuickUsageAccessPre"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="● "
+                                android:textColor="#EF4444"
+                                android:textSize="10sp" />
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="📊 Dữ liệu"
+                                android:textColor="#F8FAFC"
+                                android:textSize="11sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+                    </LinearLayout>
                 </LinearLayout>
 
                 <!-- TRẠNG THÁI 2: CHỈ HIỆN KHI ĐÃ GHÉP ĐÔI THÀNH CÔNG -->
@@ -785,6 +871,96 @@
                         android:textColor="#10B981"
                         android:textSize="12sp"
                         android:layout_marginTop="14dp" />
+
+                    <!-- THANH PHÍM TẮT CẤP QUYỀN HỆ THỐNG NHỎ GỌN (1-TOUCH ACCESS) -->
+                    <LinearLayout
+                        android:id="@+id/layoutQuickPermissionBar"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center"
+                        android:layout_marginTop="14dp"
+                        android:layout_marginBottom="4dp">
+
+                        <!-- CHIP 1: MỞ KHÓA CÀI ĐẶT HẠN CHẾ (APP INFO) -->
+                        <LinearLayout
+                            android:id="@+id/btnQuickAppInfo"
+                            android:layout_width="0dp"
+                            android:layout_height="36dp"
+                            android:layout_weight="1"
+                            android:layout_marginEnd="6dp"
+                            android:background="@drawable/bg_device_card"
+                            android:gravity="center"
+                            android:paddingLeft="4dp"
+                            android:paddingRight="4dp"
+                            android:clickable="true"
+                            android:focusable="true">
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="🔓 Mở khóa ⋮"
+                                android:textColor="#F8FAFC"
+                                android:textSize="11sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <!-- CHIP 2: BẬT TRỢ NĂNG (ACCESSIBILITY) -->
+                        <LinearLayout
+                            android:id="@+id/btnQuickAccessibility"
+                            android:layout_width="0dp"
+                            android:layout_height="36dp"
+                            android:layout_weight="1"
+                            android:layout_marginEnd="6dp"
+                            android:background="@drawable/bg_device_card"
+                            android:gravity="center"
+                            android:paddingLeft="4dp"
+                            android:paddingRight="4dp"
+                            android:clickable="true"
+                            android:focusable="true">
+                            <TextView
+                                android:id="@+id/dotQuickAccessibility"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="● "
+                                android:textColor="#EF4444"
+                                android:textSize="10sp" />
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="👁️ Trợ năng"
+                                android:textColor="#F8FAFC"
+                                android:textSize="11sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <!-- CHIP 3: BẬT TRUY CẬP DỮ LIỆU SỬ DỤNG (USAGE ACCESS) -->
+                        <LinearLayout
+                            android:id="@+id/btnQuickUsageAccess"
+                            android:layout_width="0dp"
+                            android:layout_height="36dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_device_card"
+                            android:gravity="center"
+                            android:paddingLeft="4dp"
+                            android:paddingRight="4dp"
+                            android:clickable="true"
+                            android:focusable="true">
+                            <TextView
+                                android:id="@+id/dotQuickUsageAccess"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="● "
+                                android:textColor="#EF4444"
+                                android:textSize="10sp" />
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="📊 Dữ liệu"
+                                android:textColor="#F8FAFC"
+                                android:textSize="11sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+                    </LinearLayout>
 
                     <!-- THÔNG TIN BẢO VỆ AN TOÀN SỐ -->
                     <LinearLayout

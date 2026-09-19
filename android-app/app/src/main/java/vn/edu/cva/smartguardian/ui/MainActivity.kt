@@ -15,6 +15,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Color
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Process
@@ -94,6 +95,19 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvGreeting: TextView
     private lateinit var tvCompanionBadge: TextView
     private lateinit var tvPairedCodeDisplay: TextView
+
+    // Phím tắt cấp quyền hệ thống 1-chạm (Quick Permission Action Chips)
+    private var btnQuickAppInfo: View? = null
+    private var btnQuickAccessibility: View? = null
+    private var btnQuickUsageAccess: View? = null
+    private var dotQuickAccessibility: TextView? = null
+    private var dotQuickUsageAccess: TextView? = null
+
+    private var btnQuickAppInfoPre: View? = null
+    private var btnQuickAccessibilityPre: View? = null
+    private var btnQuickUsageAccessPre: View? = null
+    private var dotQuickAccessibilityPre: TextView? = null
+    private var dotQuickUsageAccessPre: TextView? = null
 
     // 5. Modals & Overlays
     private lateinit var layoutPinConfirmModal: FrameLayout
@@ -184,6 +198,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         checkAllPermissions()
+        refreshQuickPermissionStatus()
 
         // Kiểm tra cập nhật mỗi khi mở lại ứng dụng
         performUpdateCheck(userInitiated = false)
@@ -379,6 +394,28 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "Vui lòng nhập lời nhắn gửi Bố Mẹ", Toast.LENGTH_SHORT).show()
             }
         }
+
+        // Khởi tạo các phím tắt cấp quyền 1-chạm (Quick Permission Chips)
+        btnQuickAppInfo = findViewById(R.id.btnQuickAppInfo)
+        btnQuickAccessibility = findViewById(R.id.btnQuickAccessibility)
+        btnQuickUsageAccess = findViewById(R.id.btnQuickUsageAccess)
+        dotQuickAccessibility = findViewById(R.id.dotQuickAccessibility)
+        dotQuickUsageAccess = findViewById(R.id.dotQuickUsageAccess)
+
+        btnQuickAppInfoPre = findViewById(R.id.btnQuickAppInfoPre)
+        btnQuickAccessibilityPre = findViewById(R.id.btnQuickAccessibilityPre)
+        btnQuickUsageAccessPre = findViewById(R.id.btnQuickUsageAccessPre)
+        dotQuickAccessibilityPre = findViewById(R.id.dotQuickAccessibilityPre)
+        dotQuickUsageAccessPre = findViewById(R.id.dotQuickUsageAccessPre)
+
+        btnQuickAppInfo?.setOnClickListener { openAppDetailsSettings() }
+        btnQuickAppInfoPre?.setOnClickListener { openAppDetailsSettings() }
+
+        btnQuickAccessibility?.setOnClickListener { openAccessibilitySettings() }
+        btnQuickAccessibilityPre?.setOnClickListener { openAccessibilitySettings() }
+
+        btnQuickUsageAccess?.setOnClickListener { openUsageAccessSettings() }
+        btnQuickUsageAccessPre?.setOnClickListener { openUsageAccessSettings() }
     }
 
     private fun switchToParentTab() {
@@ -1353,5 +1390,74 @@ class MainActivity : AppCompatActivity() {
         val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
         val adminComponent = ComponentName(this, SmartGuardianAdminReceiver::class.java)
         return dpm.isAdminActive(adminComponent)
+    }
+
+    private fun openAppDetailsSettings() {
+        try {
+            Toast.makeText(
+                this,
+                "👉 Bấm dấu 3 chấm ⋮ ở góc trên bên phải -> Chọn 'Cho phép cài đặt bị hạn chế'",
+                Toast.LENGTH_LONG
+            ).show()
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.fromParts("package", packageName, null)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+        } catch (_: Exception) {
+            try {
+                startActivity(Intent(Settings.ACTION_SETTINGS))
+            } catch (_: Exception) {}
+        }
+    }
+
+    private fun openAccessibilitySettings() {
+        try {
+            Toast.makeText(
+                this,
+                "👉 Chọn 'Ứng dụng đã tải xuống' -> CVA-SmartGuardian -> BẬT",
+                Toast.LENGTH_LONG
+            ).show()
+            val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+        } catch (_: Exception) {
+            try {
+                startActivity(Intent(Settings.ACTION_SETTINGS))
+            } catch (_: Exception) {}
+        }
+    }
+
+    private fun openUsageAccessSettings() {
+        try {
+            Toast.makeText(
+                this,
+                "👉 Tìm 'CVA-SmartGuardian' -> BẬT Cho phép",
+                Toast.LENGTH_SHORT
+            ).show()
+            val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+        } catch (_: Exception) {
+            try {
+                startActivity(Intent(Settings.ACTION_SETTINGS))
+            } catch (_: Exception) {}
+        }
+    }
+
+    private fun refreshQuickPermissionStatus() {
+        val hasA11y = hasAccessibilityPermission()
+        val hasUsage = hasUsageStatsPermission()
+
+        val activeColor = Color.parseColor("#10B981")
+        val inactiveColor = Color.parseColor("#EF4444")
+
+        dotQuickAccessibility?.setTextColor(if (hasA11y) activeColor else inactiveColor)
+        dotQuickAccessibilityPre?.setTextColor(if (hasA11y) activeColor else inactiveColor)
+
+        dotQuickUsageAccess?.setTextColor(if (hasUsage) activeColor else inactiveColor)
+        dotQuickUsageAccessPre?.setTextColor(if (hasUsage) activeColor else inactiveColor)
     }
 }
