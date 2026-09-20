@@ -78,7 +78,7 @@
   - Tab phân loại trên dialog giám sát rút gọn nhãn để hiển thị trọn vẹn trên 1 dòng ở mọi kích thước màn hình: `"🌐 Mạng XH"`, `"📚 Học tập"`, `"🎮 Game"`, `"📱 Tất cả"`, kèm thuộc tính `singleLine="true"` và `ellipsize="end"`.
   - Hiển thị Empty State trực quan (`layoutDialogEmptyState`) khi danh mục ứng dụng được lọc trống rỗng, kèm nút dẫn hướng xem tất cả ứng dụng.
 - **Tính toàn vẹn bản phát hành OTA**:
-  - Tệp `version.json`, tệp binary `apk/CVA-SmartGuardian-v1.2.7.apk` và node `/app_release.json` trên Firebase RTDB trực tuyến bắt buộc phải đồng nhất 100% về `versionCode` (27), `versionName` ("1.2.7") và `sha256`.
+  - Tệp `version.json`, tệp binary `apk/CVA-SmartGuardian-v1.2.8.apk` và node `/app_release.json` trên Firebase RTDB trực tuyến bắt buộc phải đồng nhất 100% về `versionCode` (28), `versionName` ("1.2.8") và `sha256`.
   - Trường `changelog` trong `version.json` bắt buộc là mảng các chuỗi (`Array<String>`) để đảm bảo tính tương thích ngược tuyệt đối với toàn bộ các client và parser cũ.
 
 ---

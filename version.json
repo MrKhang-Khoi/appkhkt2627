@@ -1,18 +1,19 @@
 {
-  "versionCode": 27,
-  "versionName": "1.2.7",
-  "latestVersionCode": 27,
-  "latestVersionName": "1.2.7",
+  "versionCode": 28,
+  "versionName": "1.2.8",
+  "latestVersionCode": 28,
+  "latestVersionName": "1.2.8",
   "minSupportedVersion": 1,
   "isForceUpdate": false,
-  "fileSize": "5.80 MB",
-  "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.2.7.apk",
-  "sha256": "683EA8B0E8B01E149B5525440360FDB3F6D3B77B66D5107702E80C15595697C9",
+  "fileSize": "5.83 MB",
+  "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.2.8.apk",
+  "sha256": "7ED3F653AA14E959170051DECE438D79A9A7F3342F0B4C679D43FEDAFD3727BB",
   "changelog": [
-    "Tái cấu trúc giao diện theo Chuẩn Quốc tế (One-Device One-Role): Phân định rõ ràng thiết bị Con và Cha Mẹ, ẩn thanh chuyển tab khi đã ghép đôi, bảo mật bằng mã PIN Phụ huynh băm Salted SHA-256 kèm cơ chế khóa tạm thời bền vững rate-limiting chống bypass qua restart app.",
-    "Triệt tiêu mâu thuẫn trạng thái Online/Offline: Khi thiết bị con ngoại tuyến, ứng dụng chuyển sang chế độ snapshot cảnh báo đỏ [OFFLINE - Lần cuối ghi nhận], xóa bỏ hiển thị nhầm lẫn.",
-    "Tối ưu hóa bố cục màn hình: Chống rớt dòng tab danh mục, bổ sung trạng thái rỗng trực quan (Empty State) và tối ưu độ tương phản WCAG."
+    "Trung tâm Đa Con Hub Carousel: Hỗ trợ quản lý đồng thời nhiều học sinh/con trên một máy Phụ huynh với thanh chọn danh sách Squircle sang trọng và nút thêm con trực quan.",
+    "Trường nhập Tên Con / Học sinh khi ghép đôi: Cho phép đặt tên dễ nhớ ngay khi kết nối thiết bị hoặc đổi tên linh hoạt bất kỳ lúc nào.",
+    "Thẻ Định vị GPS Thời gian thực & Google Maps 1-chạm: Tích hợp địa chỉ tọa độ chính xác kèm nút mở nhanh chỉ đường trên Google Maps.",
+    "Xóa bỏ hoàn toàn dữ liệu ảo: 100% thời gian sử dụng và danh sách ứng dụng được đo lường thực tế từ Firebase, trạng thái Online Fail-Closed chuẩn bảo mật ngân hàng."
   ],
-  "releaseNotes": "Tái cấu trúc giao diện theo Chuẩn Quốc tế (One-Device One-Role): Phân định rõ ràng thiết bị Con và Cha Mẹ, ẩn thanh chuyển tab khi đã ghép đôi, bảo mật bằng mã PIN Phụ huynh băm Salted SHA-256 kèm cơ chế khóa tạm thời bền vững rate-limiting chống bypass qua restart app. Triệt tiêu mâu thuẫn trạng thái Online/Offline: Khi thiết bị con ngoại tuyến, ứng dụng chuyển sang chế độ snapshot cảnh báo đỏ [OFFLINE - Lần cuối ghi nhận], xóa bỏ hiển thị nhầm lẫn. Tối ưu hóa bố cục màn hình: Chống rớt dòng tab danh mục, bổ sung trạng thái rỗng trực quan (Empty State) và tối ưu độ tương phản WCAG.",
-  "updatedAt": 1789909855000
+  "releaseNotes": "Bản phát hành v1.2.8: Tích hợp Hub Quản lý Đa Con (Multi-Child Carousel), hỗ trợ nhập & đổi tên con khi ghép đôi, thẻ Định vị GPS thời gian thực kèm nút mở Google Maps 1-chạm, 100% dữ liệu thực từ Firebase và trạng thái Online chuẩn Fail-Closed.",
+  "updatedAt": 1789945750866
 }
