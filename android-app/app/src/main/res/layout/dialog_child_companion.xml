@@ -60,7 +60,7 @@
             android:textStyle="bold" />
     </LinearLayout>
 
-    <!-- THANH CHỌN TAB CHUYÊN BIỆT -->
+    <!-- THANH CHỌN TAB CHUYÊN BIỆT CHỐNG RỚT DÒNG -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="38dp"
@@ -76,7 +76,9 @@
             android:layout_weight="1"
             android:background="@drawable/bg_tab_active"
             android:gravity="center"
-            android:text="🌐 Mạng xã hội"
+            android:singleLine="true"
+            android:ellipsize="end"
+            android:text="🌐 Mạng XH"
             android:textColor="#FFFFFF"
             android:textSize="11sp"
             android:textStyle="bold"
@@ -90,6 +92,8 @@
             android:layout_weight="1"
             android:background="@drawable/bg_tab_inactive"
             android:gravity="center"
+            android:singleLine="true"
+            android:ellipsize="end"
             android:text="📚 Học tập"
             android:textColor="#94A3B8"
             android:textSize="11sp"
@@ -103,6 +107,8 @@
             android:layout_weight="1"
             android:background="@drawable/bg_tab_inactive"
             android:gravity="center"
+            android:singleLine="true"
+            android:ellipsize="end"
             android:text="🎮 Game"
             android:textColor="#94A3B8"
             android:textSize="11sp"
@@ -116,6 +122,8 @@
             android:layout_weight="1"
             android:background="@drawable/bg_tab_inactive"
             android:gravity="center"
+            android:singleLine="true"
+            android:ellipsize="end"
             android:text="📱 Tất cả"
             android:textColor="#94A3B8"
             android:textSize="11sp"
@@ -123,7 +131,7 @@
             android:focusable="true" />
     </LinearLayout>
 
-    <!-- BANNER TRẠNG THÁI HIỆN TẠI (ACTIVE FOREGROUND APP) -->
+    <!-- BANNER TRẠNG THÁI HIỆN TẠI (ACTIVE FOREGROUND APP / ZERO-CONTRADICTION) -->
     <LinearLayout
         android:id="@+id/layoutDialogActiveAppBanner"
         android:layout_width="match_parent"
@@ -149,6 +157,7 @@
             android:orientation="vertical">
 
             <TextView
+                android:id="@+id/tvActiveAppTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="ỨNG DỤNG ĐANG MỞ TRÊN MÀN HÌNH:"
@@ -182,19 +191,83 @@
             android:text="🟢 ONLINE" />
     </LinearLayout>
 
-    <!-- DANH SÁCH CUỘN ỨNG DỤNG CHI TIẾT -->
+    <!-- DANH SÁCH CUỘN ỨNG DỤNG CHI TIẾT & EMPTY STATE -->
     <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="260dp"
+        android:layout_height="240dp"
+        android:fillViewport="true"
         android:scrollbars="vertical"
         android:layout_marginBottom="14dp">
 
         <LinearLayout
-            android:id="@+id/layoutDialogAppListContainer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical">
-            <!-- Render động từng Card ứng dụng -->
+
+            <LinearLayout
+                android:id="@+id/layoutDialogAppListContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+            <!-- EMPTY STATE CHUYÊN NGHIỆP: LOẠI TRỪ KHOẢNG TRỐNG ĐEN -->
+            <LinearLayout
+                android:id="@+id/layoutDialogEmptyState"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:paddingTop="32dp"
+                android:paddingBottom="32dp"
+                android:paddingLeft="16dp"
+                android:paddingRight="16dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/tvDialogEmptyIcon"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="☕"
+                    android:textSize="36sp"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:id="@+id/tvDialogEmptyTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Chưa có hoạt động trong nhóm này"
+                    android:textColor="#F8FAFC"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:gravity="center"
+                    android:layout_marginBottom="4dp" />
+
+                <TextView
+                    android:id="@+id/tvDialogEmptyDesc"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Thiết bị con chưa mở ứng dụng thuộc danh mục này hôm nay."
+                    android:textColor="#94A3B8"
+                    android:textSize="11sp"
+                    android:gravity="center"
+                    android:layout_marginBottom="12dp" />
+
+                <TextView
+                    android:id="@+id/btnDialogViewAllApps"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_tab_container"
+                    android:paddingLeft="14dp"
+                    android:paddingRight="14dp"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="6dp"
+                    android:text="📱 Xem tất cả ứng dụng"
+                    android:textColor="#38BDF8"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:clickable="true"
+                    android:focusable="true" />
+            </LinearLayout>
         </LinearLayout>
     </ScrollView>
 

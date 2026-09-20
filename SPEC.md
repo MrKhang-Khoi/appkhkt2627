@@ -62,8 +62,23 @@
     5. Fencing logic kiểm tra điều kiện phần cứng (`evaluateHardwareOnline`, `shouldAllowTelemetryUpdate`).
     6. Kiểm chứng động cơ polling độc lập UsageStatsManager, tính năng chốt phiên khi tắt màn hình, loại trừ ứng dụng ngân hàng và fallback foreground process matching.
   - *Đặc tả phần cứng thực tế*: Việc kiểm thử các lifecycle thực tế phụ thuộc hệ điều hành Android (`ACTION_SCREEN_OFF`, `ACTION_USER_PRESENT`, tối ưu hóa pin OEM) khi chạy trong môi trường CI không có thiết bị thật/emulator kết nối được bảo vệ bằng thiết kế phòng thủ theo chuẩn tài liệu Android Developers (defensive bounded timeouts 3000ms, non-blocking coroutine dispatch, 1-shot retry, và unregister receiver an toàn).
+- **Kiến trúc Phân quyền Một Thiết Bị - Một Vai Trò (One-Device One-Role Architecture - Chuẩn Google Family Link & Apple Screen Time)**:
+  - Một thiết bị đã ghép đôi bảo vệ con (Student Companion) TUYỆT ĐỐI không hiển thị đồng thời giao diện Phụ huynh để con tự ý can thiệp. Mặc định ẩn hoàn toàn thanh chuyển tab `[Phụ Huynh | Học Sinh]`.
+  - Thiết bị cài đặt lần đầu hiển thị màn hình Onboarding chọn vai trò rõ ràng: "Thiết bị của Con" (`ROLE_CHILD`) hoặc "Thiết bị của Cha Mẹ" (`ROLE_PARENT`). Khi đã ghép đôi thành công, hệ thống tự động khóa chặt vai trò `ROLE_CHILD`.
+  - Khi phụ huynh cần can thiệp cấu hình hoặc hủy ghép đôi trực tiếp trên máy của con, bắt buộc phải vượt qua chốt chặn xác thực mã PIN phụ huynh:
+    + **Chốt Chặn Xác Thực Tường Minh (Zero Default PIN Backdoor)**: Loại bỏ hoàn toàn mã PIN mặc định 1234. Bắt buộc phụ huynh tự thiết lập mã PIN riêng (đúng 4 chữ số số học `^[0-9]{4}$`, đồng nhất 100% với giao diện bàn phím cảm ứng Numpad 4 dots) khi khởi tạo vai trò hoặc trong menu bảo mật. Khi chưa thiết lập, mọi nỗ lực xác thực bị từ chối an toàn (Fail-Closed).
+    + **Bảo Vệ Mọi Luồng Hủy Ghép Đôi (Zero Unpair Bypass)**: Mọi luồng hủy ghép đôi trên thiết bị con (bao gồm cả nút Hủy ghép đôi trong menu Quản trị phụ huynh) đều BẮT BUỘC kích hoạt modal xác thực mã PIN phụ huynh `layoutPinConfirmModal` kèm persistent lockout. Tuyệt đối không có đường dẫn nào cho phép hủy ghép đôi mà không qua xác thực PIN.
+    + **Khóa Nguyên Tử Toàn Cục (Global Atomic Synchronization)**: Mọi thao tác đọc-tăng-ghi rate-limiting và xác thực PIN được bảo vệ bằng khối đồng bộ nguyên tử `synchronized(PIN_LOCK)`, ngăn ngừa hoàn toàn hiện tượng race condition khi có nhiều luồng gọi đồng thời.
+    + **An Toàn Thất Bại Đóng (Fail-Closed Persistence)**: Mọi thao tác ghi SharedPreferences (`setParentPin`, `resetPinLockout`) đều kiểm tra kết quả `commit()` và lập tức trả về `false` nếu ghi đĩa thất bại.
+    + **Khóa Tạm Thời Bền Vững (Persistent Rate-Limiting)**: Khóa 30 giây sau 5 lần nhập sai lưu trực tiếp vào SharedPreferences, chống hoàn toàn việc bypass bằng cách restart app hoặc force-stop trên tất cả các luồng xác thực (bàn phím số mở tab phụ huynh, hộp thoại quản trị và modal hủy ghép đôi).
+- **Nguyên tắc Đồng nhất Trạng thái Mạng (UI Anti-Contradiction & Zero-Phantom-Online Invariant)**:
+  - Tuyệt đối cấm hiển thị trạng thái mâu thuẫn (Ví dụ: Tiêu đề báo `🔴 Ngoại tuyến` nhưng thẻ con lại báo `🟢 ONLINE Trình khởi chạy`).
+  - Khi thiết bị con mất heartbeat quá thời gian chờ (> 45s) hoặc đã gửi trạng thái ngắt mạng khẩn cấp: Toàn bộ banner ứng dụng đang chạy chuyển sang chế độ snapshot tĩnh với nhãn `"LẦN CUỐI GHI NHẬN TRƯỚC KHI NGOẠI TUYẾN"`, nhãn trạng thái chuyển thành `[🔴 OFFLINE]` màu đỏ cảnh báo, tuyệt đối không giữ cờ online giả từ cache Firebase.
+- **Tiêu chuẩn Thiết kế Giao diện Trực quan & Chống Rớt Dòng (Responsive Mobile Standards)**:
+  - Tab phân loại trên dialog giám sát rút gọn nhãn để hiển thị trọn vẹn trên 1 dòng ở mọi kích thước màn hình: `"🌐 Mạng XH"`, `"📚 Học tập"`, `"🎮 Game"`, `"📱 Tất cả"`, kèm thuộc tính `singleLine="true"` và `ellipsize="end"`.
+  - Hiển thị Empty State trực quan (`layoutDialogEmptyState`) khi danh mục ứng dụng được lọc trống rỗng, kèm nút dẫn hướng xem tất cả ứng dụng.
 - **Tính toàn vẹn bản phát hành OTA**:
-  - Tệp `version.json`, tệp binary `apk/CVA-SmartGuardian-v1.2.6.apk` và node `/app_release.json` trên Firebase RTDB trực tuyến bắt buộc phải đồng nhất 100% về `versionCode` (26), `versionName` ("1.2.6") và `sha256`.
+  - Tệp `version.json`, tệp binary `apk/CVA-SmartGuardian-v1.2.7.apk` và node `/app_release.json` trên Firebase RTDB trực tuyến bắt buộc phải đồng nhất 100% về `versionCode` (27), `versionName` ("1.2.7") và `sha256`.
   - Trường `changelog` trong `version.json` bắt buộc là mảng các chuỗi (`Array<String>`) để đảm bảo tính tương thích ngược tuyệt đối với toàn bộ các client và parser cũ.
 
 ---

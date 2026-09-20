@@ -1,16 +1,18 @@
 {
-  "versionCode": 26,
-  "versionName": "1.2.6",
-  "latestVersionCode": 26,
-  "latestVersionName": "1.2.6",
+  "versionCode": 27,
+  "versionName": "1.2.7",
+  "latestVersionCode": 27,
+  "latestVersionName": "1.2.7",
   "minSupportedVersion": 1,
   "isForceUpdate": false,
-  "fileSize": "5.79 MB",
-  "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.2.6.apk",
-  "sha256": "248F07B13A3A1E472F2BBBED949C228B3D9411BD0B9400FAFB52FE74C6DEC72B",
+  "fileSize": "5.80 MB",
+  "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.2.7.apk",
+  "sha256": "683EA8B0E8B01E149B5525440360FDB3F6D3B77B66D5107702E80C15595697C9",
   "changelog": [
-    "Chuyển đổi kiến trúc Chuẩn Google Screen Time (UsageStatsManager): Đo đạc thời lượng và nhận diện ứng dụng độc lập 100%, triệt tiêu cảnh báo bảo mật từ các ứng dụng ngân hàng, bổ sung danh sách loại trừ ngân hàng và phân tầng quyền hạn On-Demand."
+    "Tái cấu trúc giao diện theo Chuẩn Quốc tế (One-Device One-Role): Phân định rõ ràng thiết bị Con và Cha Mẹ, ẩn thanh chuyển tab khi đã ghép đôi, bảo mật bằng mã PIN Phụ huynh băm Salted SHA-256 kèm cơ chế khóa tạm thời bền vững rate-limiting chống bypass qua restart app.",
+    "Triệt tiêu mâu thuẫn trạng thái Online/Offline: Khi thiết bị con ngoại tuyến, ứng dụng chuyển sang chế độ snapshot cảnh báo đỏ [OFFLINE - Lần cuối ghi nhận], xóa bỏ hiển thị nhầm lẫn.",
+    "Tối ưu hóa bố cục màn hình: Chống rớt dòng tab danh mục, bổ sung trạng thái rỗng trực quan (Empty State) và tối ưu độ tương phản WCAG."
   ],
-  "releaseNotes": "Chuyển đổi kiến trúc Chuẩn Google Screen Time (UsageStatsManager): Đo đạc thời lượng và nhận diện ứng dụng độc lập 100%, triệt tiêu cảnh báo bảo mật từ các ứng dụng ngân hàng, bổ sung danh sách loại trừ ngân hàng và phân tầng quyền hạn On-Demand.",
-  "updatedAt": 1789897440947
+  "releaseNotes": "Tái cấu trúc giao diện theo Chuẩn Quốc tế (One-Device One-Role): Phân định rõ ràng thiết bị Con và Cha Mẹ, ẩn thanh chuyển tab khi đã ghép đôi, bảo mật bằng mã PIN Phụ huynh băm Salted SHA-256 kèm cơ chế khóa tạm thời bền vững rate-limiting chống bypass qua restart app. Triệt tiêu mâu thuẫn trạng thái Online/Offline: Khi thiết bị con ngoại tuyến, ứng dụng chuyển sang chế độ snapshot cảnh báo đỏ [OFFLINE - Lần cuối ghi nhận], xóa bỏ hiển thị nhầm lẫn. Tối ưu hóa bố cục màn hình: Chống rớt dòng tab danh mục, bổ sung trạng thái rỗng trực quan (Empty State) và tối ưu độ tương phản WCAG.",
+  "updatedAt": 1789909855000
 }

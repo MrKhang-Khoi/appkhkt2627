@@ -48,7 +48,143 @@
             </LinearLayout>
 
             <!-- ========================================================== -->
-            <!-- 2. SEGMENTED CONTROL: 2 TABS CÂN XỨNG CHUẨN M3            -->
+            <!-- 1.5 ONBOARDING ROLE SELECTION: CHỌN VAI TRÒ LẦN ĐẦU        -->
+            <!-- ========================================================== -->
+            <LinearLayout
+                android:id="@+id/layoutRoleOnboarding"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center_horizontal"
+                android:visibility="gone"
+                android:layout_marginBottom="20dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Thiết Lập Vai Trò Thiết Bị"
+                    android:textColor="#F8FAFC"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:gravity="center"
+                    android:layout_marginBottom="6dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Vui lòng chọn vai trò cho thiết bị này để tiếp tục"
+                    android:textColor="#94A3B8"
+                    android:textSize="13sp"
+                    android:gravity="center"
+                    android:layout_marginBottom="24dp" />
+
+                <!-- THẺ 1: THIẾT BỊ CỦA CON (HỌC SINH) -->
+                <LinearLayout
+                    android:id="@+id/btnSelectRoleChild"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_glass_card"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:padding="18dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:layout_marginBottom="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🎒"
+                        android:textSize="32sp"
+                        android:layout_marginEnd="16dp" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Thiết bị của Con (Học Sinh)"
+                            android:textColor="#38BDF8"
+                            android:textSize="15sp"
+                            android:textStyle="bold"
+                            android:layout_marginBottom="4dp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Nhận quản lý thời gian, lời nhắc và bảo vệ lành mạnh từ Cha Mẹ."
+                            android:textColor="#94A3B8"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="➔"
+                        android:textColor="#38BDF8"
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <!-- THẺ 2: THIẾT BỊ CỦA CHA MẸ (PHỤ HUYNH) -->
+                <LinearLayout
+                    android:id="@+id/btnSelectRoleParent"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_glass_card"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:padding="18dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:layout_marginBottom="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="👨‍👩‍👧"
+                        android:textSize="32sp"
+                        android:layout_marginEnd="16dp" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Thiết bị của Cha Mẹ (Phụ Huynh)"
+                            android:textColor="#FDE047"
+                            android:textSize="15sp"
+                            android:textStyle="bold"
+                            android:layout_marginBottom="4dp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Bảng điều khiển giám sát, quản lý thời gian và gửi tin nhắn nhắc nhở."
+                            android:textColor="#94A3B8"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="➔"
+                        android:textColor="#FDE047"
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- ========================================================== -->
+            <!-- 2. SEGMENTED CONTROL: 2 TABS (ẨN KHI ĐÃ CỐ ĐỊNH VAI TRÒ)  -->
             <!-- ========================================================== -->
             <LinearLayout
                 android:id="@+id/layoutSegmentedControl"
@@ -57,6 +193,7 @@
                 android:background="@drawable/bg_tab_container"
                 android:orientation="horizontal"
                 android:padding="4dp"
+                android:visibility="gone"
                 android:layout_marginBottom="22dp">
 
                 <!-- TAB 1: PHỤ HUYNH -->
@@ -384,7 +521,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Mã PIN bảo mật mặc định: 1234"
+                        android:text="Mã PIN phụ huynh được mã hóa bảo mật Salted SHA-256"
                         android:textColor="#64748B"
                         android:textSize="11sp"
                         android:layout_marginTop="16dp" />
@@ -1403,6 +1540,19 @@
                             android:textStyle="italic"
                             android:visibility="gone" />
                     </LinearLayout>
+
+                    <!-- NÚT CÀI ĐẶT PHỤ HUYNH TRÊN MÁY CON (ĐƯỢC BẢO VỆ BẰNG MÃ PIN) -->
+                    <TextView
+                        android:id="@+id/btnStudentParentSettings"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="20dp"
+                        android:text="🔒 Cài đặt &amp; Quản lý Phụ Huynh (Cần PIN)"
+                        android:textColor="#64748B"
+                        android:textSize="12sp"
+                        android:padding="8dp"
+                        android:clickable="true"
+                        android:focusable="true" />
                 </LinearLayout>
 
             </LinearLayout>

@@ -16,6 +16,8 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import vn.edu.cva.smartguardian.ui.MainActivity
+import vn.edu.cva.smartguardian.ui.MainActivity.PinAuthResult
 import vn.edu.cva.smartguardian.update.AppUpdateManager
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -1690,6 +1692,464 @@ class HardwareInvariantTest {
         // Deduplication set BẮT BUỘC phải chặn đứng lần ghi thứ hai, thời lượng không được nhân đôi thành 20000ms
         assertEquals("Deduplication must prevent double accounting, duration must stay 10000ms", 10000L, afterDuplicate)
     }
+
+    @Test
+    fun testOneDeviceOneRoleConstantsAndContract() {
+        // One-Device One-Role Invariants theo chuẩn Google Family Link / Apple Screen Time
+        assertEquals("user_role", MainActivity.PREF_USER_ROLE)
+        assertEquals("UNSET", MainActivity.ROLE_UNSET)
+        assertEquals("PARENT", MainActivity.ROLE_PARENT)
+        assertEquals("CHILD", MainActivity.ROLE_CHILD)
+    }
+
+    @Test
+    fun testRoleRoutingResolutionContractDirectProductionMethod() {
+        // Trực tiếp gọi production method MainActivity.resolveEffectiveRole để chứng minh 100% Invariant:
+        // 1. Máy đã ghép đôi (isPaired = true): BẤT BIẾN KHÓA CHẶT là ROLE_CHILD, cấm mọi hành vi biến thành PARENT hoặc UNSET!
+        val pairedWithParentRole = MainActivity.resolveEffectiveRole(isPaired = true, configuredRole = MainActivity.ROLE_PARENT)
+        assertEquals("Paired device must NEVER become PARENT", MainActivity.ROLE_CHILD, pairedWithParentRole)
+
+        val pairedWithUnsetRole = MainActivity.resolveEffectiveRole(isPaired = true, configuredRole = MainActivity.ROLE_UNSET)
+        assertEquals("Paired device must NEVER become UNSET", MainActivity.ROLE_CHILD, pairedWithUnsetRole)
+
+        val pairedWithNullRole = MainActivity.resolveEffectiveRole(isPaired = true, configuredRole = null)
+        assertEquals("Paired device with null role must resolve to CHILD", MainActivity.ROLE_CHILD, pairedWithNullRole)
+
+        val pairedWithChildRole = MainActivity.resolveEffectiveRole(isPaired = true, configuredRole = MainActivity.ROLE_CHILD)
+        assertEquals("Paired device with CHILD role resolves to CHILD", MainActivity.ROLE_CHILD, pairedWithChildRole)
+
+        // 2. Máy chưa ghép đôi (isPaired = false): Cho phép cấu hình theo lựa chọn của người dùng
+        val unpairedParent = MainActivity.resolveEffectiveRole(isPaired = false, configuredRole = MainActivity.ROLE_PARENT)
+        assertEquals("Unpaired device with PARENT config resolves to PARENT", MainActivity.ROLE_PARENT, unpairedParent)
+
+        val unpairedChild = MainActivity.resolveEffectiveRole(isPaired = false, configuredRole = MainActivity.ROLE_CHILD)
+        assertEquals("Unpaired device with CHILD config resolves to CHILD", MainActivity.ROLE_CHILD, unpairedChild)
+
+        val unpairedUnset = MainActivity.resolveEffectiveRole(isPaired = false, configuredRole = MainActivity.ROLE_UNSET)
+        assertEquals("Unpaired device with UNSET config resolves to UNSET", MainActivity.ROLE_UNSET, unpairedUnset)
+
+        val unpairedNull = MainActivity.resolveEffectiveRole(isPaired = false, configuredRole = null)
+        assertEquals("Unpaired device with null config resolves to UNSET", MainActivity.ROLE_UNSET, unpairedNull)
+    }
+
+    @Test
+    fun testParentPinSha256VerificationAndSecurity() {
+        val prefs = FakeSharedPreferences()
+
+        // 1. Xác thực hàm băm có salt động
+        val salt = "test_salt_random_123456"
+        val hash = MainActivity.hashPinWithSalt("1234", salt)
+        assertEquals(64, hash.length)
+        assertTrue(hash.matches(Regex("^[0-9a-f]{64}$")))
+
+        // 2. Khi chưa thiết lập PIN: verifyParentPin BẮT BUỘC từ chối (Không có PIN mặc định backdoor)
+        assertFalse("Chưa thiết lập PIN thì không có backdoor 1234", MainActivity.verifyParentPin(prefs, "1234"))
+
+        // 3. Phụ huynh thiết lập PIN 1234
+        assertTrue("Thiết lập PIN 1234 thành công", MainActivity.setParentPin(prefs, "1234"))
+
+        // 4. Xác thực PIN đúng (1234) qua SharedPreferences
+        assertTrue("PIN 1234 must be verified successfully", MainActivity.verifyParentPin(prefs, "1234"))
+
+        // 5. Từ chối PIN sai, rỗng, thừa ký tự (Timing-safe comparison)
+        assertFalse("Wrong PIN 0000 must be rejected", MainActivity.verifyParentPin(prefs, "0000"))
+        assertFalse("Wrong PIN 9999 must be rejected", MainActivity.verifyParentPin(prefs, "9999"))
+        assertFalse("Empty PIN must be rejected", MainActivity.verifyParentPin(prefs, ""))
+        assertFalse("Whitespace PIN must be rejected", MainActivity.verifyParentPin(prefs, "    "))
+    }
+
+    @Test
+    fun testParentPinStrictDigitFormatValidation() {
+        val prefs = FakeSharedPreferences()
+
+        // 1. setParentPin từ chối các định dạng không phải đúng 4 chữ số số học
+        assertFalse("Từ chối ký tự chữ abcd", MainActivity.setParentPin(prefs, "abcd"))
+        assertFalse("Từ chối PIN quá ngắn (2 số)", MainActivity.setParentPin(prefs, "12"))
+        assertFalse("Từ chối PIN 3 số", MainActivity.setParentPin(prefs, "123"))
+        assertFalse("Từ chối PIN 5 số (vượt quá 4 numpad dots)", MainActivity.setParentPin(prefs, "12345"))
+        assertFalse("Từ chối PIN 6 số", MainActivity.setParentPin(prefs, "123456"))
+        assertFalse("Từ chối PIN chứa chữ và số 12a4", MainActivity.setParentPin(prefs, "12a4"))
+        assertFalse("Từ chối khoảng trắng", MainActivity.setParentPin(prefs, " 1234 "))
+        assertFalse("Từ chối rỗng", MainActivity.setParentPin(prefs, ""))
+
+        // 2. Chấp nhận các PIN hợp lệ gồm đúng 4 chữ số
+        assertTrue("Chấp nhận 4 số 1234", MainActivity.setParentPin(prefs, "1234"))
+        assertTrue("Chấp nhận 4 số 0000", MainActivity.setParentPin(prefs, "0000"))
+        assertTrue("Chấp nhận 4 số 9999", MainActivity.setParentPin(prefs, "9999"))
+
+        // 3. verifyParentPin cũng từ chối ngay lập tức nếu input không phải đúng 4 chữ số
+        assertFalse("verify từ chối abcd", MainActivity.verifyParentPin(prefs, "abcd"))
+        assertFalse("verify từ chối 12", MainActivity.verifyParentPin(prefs, "12"))
+        assertFalse("verify từ chối 123", MainActivity.verifyParentPin(prefs, "123"))
+        assertFalse("verify từ chối 12345", MainActivity.verifyParentPin(prefs, "12345"))
+        assertFalse("verify từ chối 12a4", MainActivity.verifyParentPin(prefs, "12a4"))
+    }
+
+    @Test
+    fun testParentPinRequiresExplicitSetupAndRejectsDefaultBypass() {
+        val prefs = FakeSharedPreferences()
+
+        // Ban đầu chưa có salt/hash
+        assertFalse("hasParentPin phải trả về false khi chưa thiết lập", MainActivity.hasParentPin(prefs))
+        assertFalse("Không có backdoor PIN 1234", MainActivity.verifyParentPin(prefs, "1234"))
+        assertFalse("Không chấp nhận 0000", MainActivity.verifyParentPin(prefs, "0000"))
+
+        // Phụ huynh thiết lập PIN 4 số hợp lệ
+        val setupSuccess = MainActivity.setParentPin(prefs, "4321")
+        assertTrue("Thiết lập mã PIN 4 số thành công", setupSuccess)
+        assertTrue("hasParentPin trả về true sau khi thiết lập", MainActivity.hasParentPin(prefs))
+
+        // Xác thực đúng và sai
+        assertTrue("Đúng PIN 4321 thành công", MainActivity.verifyParentPin(prefs, "4321"))
+        assertFalse("Sai PIN 1234 bị từ chối", MainActivity.verifyParentPin(prefs, "1234"))
+    }
+
+    @Test
+    fun testParentManagementOptionsUnpairFlowGuardedByPin() {
+        val backingStorage = mutableMapOf<String, Any?>()
+        val prefs = FakeSharedPreferences(backingStorage)
+        val now = 1700000000000L
+
+        // Thiết lập trạng thái thiết bị đã ghép đôi
+        prefs.edit().putBoolean("is_paired", true).putString("paired_code", "CVA-123").commit()
+        MainActivity.setParentPin(prefs, "9876")
+
+        // 1. Luồng hủy ghép đôi từ chối nếu không có PIN hoặc PIN sai
+        assertFalse("Hủy ghép đôi với PIN rỗng phải thất bại", MainActivity.verifyParentPin(prefs, ""))
+        assertFalse("Hủy ghép đôi với PIN sai 1111 phải thất bại", MainActivity.verifyParentPin(prefs, "1111"))
+
+        // 2. Kẻ xấu thử brute-force trong luồng hủy ghép đôi 5 lần
+        for (i in 1..5) {
+            MainActivity.recordFailedPinAttempt(prefs, now)
+        }
+        val lockout = MainActivity.getPinLockoutRemainingSeconds(prefs, now)
+        assertTrue("Bị khóa 30 giây", lockout >= 29L && lockout <= 30L)
+
+        // 3. Trong thời gian khóa, mọi nỗ lực hủy ghép đôi đều bị chặn
+        assertTrue("Bị khóa chặt", MainActivity.checkPinLockout(now + 5000L, prefs.getLong(MainActivity.PREF_PIN_LOCKOUT_UNTIL, 0L)))
+
+        // 4. Sau khi hết thời gian khóa và nhập đúng PIN 9876 -> Hủy ghép đôi thành công
+        val nowAfter = now + 30_001L
+        assertEquals(0L, MainActivity.getPinLockoutRemainingSeconds(prefs, nowAfter))
+        assertTrue("Nhập đúng PIN 9876 thành công", MainActivity.verifyParentPin(prefs, "9876"))
+        MainActivity.resetPinLockout(prefs)
+        assertEquals(0, prefs.getInt(MainActivity.PREF_PIN_FAILED_ATTEMPTS, -1))
+    }
+
+    @Test
+    fun testParentPinAtomicConcurrencyOnFailedAttempts() {
+        val prefs = FakeSharedPreferences()
+        val now = 1700000000000L
+        val threadCount = 10
+        val threads = mutableListOf<Thread>()
+
+        // 10 luồng chạy đồng thời gọi recordFailedPinAttempt
+        for (i in 1..threadCount) {
+            val t = Thread {
+                MainActivity.recordFailedPinAttempt(prefs, now)
+            }
+            threads.add(t)
+        }
+
+        threads.forEach { it.start() }
+        threads.forEach { it.join() }
+
+        // Nhờ synchronized(PIN_LOCK), số lần thất bại không bị race-condition ghi đè
+        val finalFailures = prefs.getInt(MainActivity.PREF_PIN_FAILED_ATTEMPTS, 0)
+        assertEquals("Số lần thất bại phải là 10 sau 10 luồng đồng thời", threadCount, finalFailures)
+        val lockoutUntil = prefs.getLong(MainActivity.PREF_PIN_LOCKOUT_UNTIL, 0L)
+        assertEquals("Đã bị khóa 30 giây", now + 30_000L, lockoutUntil)
+    }
+
+    @Test
+    fun testParentPinFailClosedWhenCommitFailsOnAllOperations() {
+        // Mô phỏng đĩa bị lỗi ghi (commitReturnsSuccess = false)
+        val failingPrefs = FakeSharedPreferences(commitReturnsSuccess = false)
+
+        // 1. setParentPin fail-closed
+        val setOk = MainActivity.setParentPin(failingPrefs, "1234")
+        assertFalse("Khi commit thất bại, setParentPin BẮT BUỘC trả về false", setOk)
+
+        // 2. resetPinLockout fail-closed
+        val resetOk = MainActivity.resetPinLockout(failingPrefs)
+        assertFalse("Khi commit thất bại, resetPinLockout BẮT BUỘC trả về false", resetOk)
+
+        // 3. verifyParentPin fail-closed khi chưa có PIN
+        val verifyOk = MainActivity.verifyParentPin(failingPrefs, "1234")
+        assertFalse("verifyParentPin từ chối an toàn khi commit thất bại", verifyOk)
+    }
+
+    @Test
+    fun testParentPinLockoutAndRateLimiting() {
+        val baseTime = 1700000000000L
+
+        // Lần 1 đến 4: Tăng số lần thử sai, chưa khóa (lockoutUntil = 0L)
+        var failures = 0
+        var lockoutUntil = 0L
+        for (i in 1..4) {
+            val res = MainActivity.recordFailedPinAttempt(failures, baseTime)
+            failures = res.first
+            lockoutUntil = res.second
+            assertEquals(i, failures)
+            assertEquals(0L, lockoutUntil)
+            assertFalse("Chưa đạt 5 lần sai thì không bị khóa", MainActivity.checkPinLockout(baseTime, lockoutUntil))
+        }
+
+        // Lần thứ 5 sai: Bị khóa 30 giây (30_000ms)
+        val res5 = MainActivity.recordFailedPinAttempt(failures, baseTime)
+        failures = res5.first
+        lockoutUntil = res5.second
+        assertEquals(5, failures)
+        assertEquals(baseTime + 30_000L, lockoutUntil)
+
+        // Trong thời gian 30s: Bị khóa chặt (checkPinLockout = true)
+        assertTrue("Trong thời gian 30s phải bị khóa", MainActivity.checkPinLockout(baseTime + 10_000L, lockoutUntil))
+        assertTrue("Ở giây thứ 29 vẫn bị khóa", MainActivity.checkPinLockout(baseTime + 29_999L, lockoutUntil))
+
+        // Sau 30s: Hết thời gian khóa (checkPinLockout = false)
+        assertFalse("Hết 30s thì hết bị khóa", MainActivity.checkPinLockout(baseTime + 30_001L, lockoutUntil))
+    }
+
+    @Test
+    fun testParentPinPersistentLockoutSurvivesProcessRestart() {
+        val backingStorage = mutableMapOf<String, Any?>()
+        val now = 1700000000000L
+
+        // 1. Process 1: Ứng dụng chạy lần đầu, nhập sai PIN 5 lần
+        val prefsProcess1 = FakeSharedPreferences(backingStorage)
+        for (i in 1..5) {
+            MainActivity.recordFailedPinAttempt(prefsProcess1, now)
+        }
+        val remainSec1 = MainActivity.getPinLockoutRemainingSeconds(prefsProcess1, now)
+        assertTrue("Sau 5 lần sai trong Process 1 phải bị khóa 30 giây", remainSec1 >= 29L && remainSec1 <= 30L)
+
+        // 2. Kẻ tấn công Force-Stop / Kill App / Khởi động lại thiết bị (Process Death Simulation)
+        // Tạo instance FakeSharedPreferences mới nạp từ cùng backing storage của hệ thống
+        val prefsProcess2 = FakeSharedPreferences(backingStorage)
+
+        // 3. Process 2 khởi động: Đọc trạng thái khóa từ đĩa lưu trữ SharedPreferences
+        val remainSec2 = MainActivity.getPinLockoutRemainingSeconds(prefsProcess2, now)
+        assertTrue("Sau khi khởi động lại app, trạng thái khóa BẮT BUỘC vẫn tồn tại (Không thể bypass bằng restart)", remainSec2 >= 29L && remainSec2 <= 30L)
+
+        // Ở giây thứ 15 trong Process 2: Vẫn bị khóa chặt
+        val remainSec15 = MainActivity.getPinLockoutRemainingSeconds(prefsProcess2, now + 15_000L)
+        assertTrue("Ở giây thứ 15 vẫn còn thời gian khóa", remainSec15 >= 14L && remainSec15 <= 15L)
+
+        // Sau 30s (giây thứ 31): Tự động mở khóa
+        val remainSecAfter = MainActivity.getPinLockoutRemainingSeconds(prefsProcess2, now + 30_001L)
+        assertEquals("Sau 30s thì tự động hết khóa", 0L, remainSecAfter)
+
+        // 4. Nhập đúng PIN: Reset trạng thái khóa
+        val resetResult = MainActivity.resetPinLockout(prefsProcess2)
+        assertTrue("Reset lockout phải thành công", resetResult)
+        assertEquals("Số lần sai phải được reset về 0", 0, prefsProcess2.getInt(MainActivity.PREF_PIN_FAILED_ATTEMPTS, -1))
+        assertEquals("Hạn khóa phải được reset về 0", 0L, prefsProcess2.getLong(MainActivity.PREF_PIN_LOCKOUT_UNTIL, -1L))
+    }
+
+    @Test
+    fun testParentPinSaltedHashVerification() {
+        val pin = "5678"
+        val salt1 = "salt_device_alpha_1111"
+        val salt2 = "salt_device_beta_2222"
+
+        val hash1 = MainActivity.hashPinWithSalt(pin, salt1)
+        val hash2 = MainActivity.hashPinWithSalt(pin, salt2)
+
+        // Độ dài chuẩn SHA-256
+        assertEquals(64, hash1.length)
+        assertEquals(64, hash2.length)
+
+        // Cùng một PIN nhưng hai salt ngẫu nhiên khác nhau BẮT BUỘC sinh ra hai chuỗi hash hoàn toàn khác nhau
+        assertTrue("Hai salt khác nhau phải sinh ra hai hash khác nhau (triệt tiêu rainbow tables / brute force)", hash1 != hash2)
+
+        // Cùng một PIN và cùng salt phải sinh ra hash giống nhau (Deterministic)
+        val hash1Again = MainActivity.hashPinWithSalt(pin, salt1)
+        assertEquals(hash1, hash1Again)
+    }
+
+    @Test
+    fun testParentPinCustomizationAndPersistence() {
+        val backingStorage = mutableMapOf<String, Any?>()
+        val prefs = FakeSharedPreferences(backingStorage)
+
+        // 1. Phụ huynh thiết lập mã PIN ban đầu là 1234
+        assertTrue("Thiết lập PIN 1234", MainActivity.setParentPin(prefs, "1234"))
+        assertTrue("PIN 1234 phải được xác thực thành công", MainActivity.verifyParentPin(prefs, "1234"))
+        assertFalse("PIN sai 9999 phải bị từ chối", MainActivity.verifyParentPin(prefs, "9999"))
+
+        // Salt và Hash đã được lưu bền vững vào preferences
+        val initialSalt = prefs.getString(MainActivity.PREF_PARENT_PIN_SALT, null)
+        val initialHash = prefs.getString(MainActivity.PREF_PARENT_PIN_HASH, null)
+        assertNotNull("Salt phải được tạo và lưu trữ", initialSalt)
+        assertNotNull("Hash phải được tạo và lưu trữ", initialHash)
+
+        // 2. Phụ huynh thực hiện đổi mã PIN sang "8899"
+        val changed = MainActivity.setParentPin(prefs, "8899")
+        assertTrue("Đổi PIN thành công", changed)
+
+        // 3. Mã PIN cũ "1234" lập tức KHÔNG CÒN hợp lệ
+        assertFalse("Mã PIN cũ 1234 phải bị từ chối sau khi đổi", MainActivity.verifyParentPin(prefs, "1234"))
+
+        // 4. Mã PIN mới "8899" được xác thực thành công
+        assertTrue("Mã PIN mới 8899 phải được xác thực thành công", MainActivity.verifyParentPin(prefs, "8899"))
+
+        // 5. Mô phỏng Restart App: Instance SharedPreferences mới nạp lại dữ liệu
+        val prefsRestarted = FakeSharedPreferences(backingStorage)
+        assertTrue("Mã PIN mới 8899 vẫn tồn tại và hợp lệ sau khi restart app", MainActivity.verifyParentPin(prefsRestarted, "8899"))
+        assertFalse("Mã PIN cũ 1234 vẫn bị từ chối sau khi restart app", MainActivity.verifyParentPin(prefsRestarted, "1234"))
+    }
+
+    @Test
+    fun testParentUnpairFlowEnforcesCustomPinAndPersistentLockout() {
+        val backingStorage = mutableMapOf<String, Any?>()
+        val prefs = FakeSharedPreferences(backingStorage)
+        val now = 1700000000000L
+
+        // 1. Phụ huynh đã thiết lập PIN riêng cho thiết bị là "7788"
+        MainActivity.setParentPin(prefs, "7788")
+
+        // 2. Kẻ xấu/con cố gắng hủy ghép đôi bằng mã PIN 1234 -> BẮT BUỘC BỊ TỪ CHỐI
+        val unpairWithDefaultPin = MainActivity.verifyParentPin(prefs, "1234")
+        assertFalse("Hủy ghép đôi bằng PIN 1234 sau khi đã đổi PIN phải thất bại", unpairWithDefaultPin)
+
+        // 3. Kẻ xấu thử brute-force trong modal hủy ghép đôi 5 lần
+        for (i in 1..5) {
+            MainActivity.recordFailedPinAttempt(prefs, now)
+        }
+        val lockoutSec = MainActivity.getPinLockoutRemainingSeconds(prefs, now)
+        assertTrue("Sau 5 lần sai trong luồng hủy ghép đôi, thiết bị BẮT BUỘC bị khóa 30 giây", lockoutSec >= 29L && lockoutSec <= 30L)
+
+        // 4. Kẻ xấu force-stop / restart app để tìm cách bypass lockout
+        val prefsAfterRestart = FakeSharedPreferences(backingStorage)
+        val lockoutSecAfterRestart = MainActivity.getPinLockoutRemainingSeconds(prefsAfterRestart, now)
+        assertTrue("Khởi động lại app vẫn BỊ KHÓA CHẶT (Không thể bypass hủy ghép đôi)", lockoutSecAfterRestart >= 29L && lockoutSecAfterRestart <= 30L)
+
+        // Trong thời gian bị khóa, mọi nỗ lực hủy ghép đôi (dù nhập đúng hay sai) đều bị chặn
+        val isLocked = MainActivity.checkPinLockout(now + 10_000L, prefsAfterRestart.getLong(MainActivity.PREF_PIN_LOCKOUT_UNTIL, 0L))
+        assertTrue("Trong thời gian khóa thì luồng hủy ghép đôi bị chặn hoàn toàn", isLocked)
+
+        // 5. Sau khi hết thời gian khóa 30 giây, phụ huynh nhập đúng mã PIN "7788"
+        val nowAfterLockout = now + 30_001L
+        assertEquals("Hết 30 giây thì hết bị khóa", 0L, MainActivity.getPinLockoutRemainingSeconds(prefsAfterRestart, nowAfterLockout))
+
+        val unpairWithCustomPin = MainActivity.verifyParentPin(prefsAfterRestart, "7788")
+        assertTrue("Hủy ghép đôi với đúng PIN phụ huynh 7788 phải thành công", unpairWithCustomPin)
+
+        // Hủy ghép đôi thành công -> Reset lockout
+        val resetResult = MainActivity.resetPinLockout(prefsAfterRestart)
+        assertTrue("Reset lockout phải thành công", resetResult)
+        assertEquals(0, prefsAfterRestart.getInt(MainActivity.PREF_PIN_FAILED_ATTEMPTS, -1))
+        assertEquals(0L, prefsAfterRestart.getLong(MainActivity.PREF_PIN_LOCKOUT_UNTIL, -1L))
+    }
+
+    @Test
+    fun testAuthenticateParentPinAtomicSuccessResetsLockout() {
+        val prefs = FakeSharedPreferences()
+        val now = 1700000000000L
+
+        // Thiết lập PIN hợp lệ
+        assertTrue(MainActivity.setParentPin(prefs, "2468"))
+
+        // Giả lập đã nhập sai 2 lần trước đó
+        MainActivity.recordFailedPinAttempt(prefs, now)
+        MainActivity.recordFailedPinAttempt(prefs, now)
+        assertEquals(2, prefs.getInt(MainActivity.PREF_PIN_FAILED_ATTEMPTS, 0))
+
+        // Gọi authenticateParentPinAtomic với đúng PIN "2468"
+        val result = MainActivity.authenticateParentPinAtomic(prefs, "2468", now + 1000L)
+        assertTrue("Kết quả phải là PinAuthResult.Success", result is MainActivity.PinAuthResult.Success)
+
+        // Kiểm tra nguyên tử: failed attempts và lockout đã được reset về 0
+        assertEquals(0, prefs.getInt(MainActivity.PREF_PIN_FAILED_ATTEMPTS, -1))
+        assertEquals(0L, prefs.getLong(MainActivity.PREF_PIN_LOCKOUT_UNTIL, -1L))
+    }
+
+    @Test
+    fun testAuthenticateParentPinAtomicLockedOutFailsEarly() {
+        val prefs = FakeSharedPreferences()
+        val now = 1700000000000L
+        assertTrue(MainActivity.setParentPin(prefs, "2468"))
+
+        // Thử sai 4 lần đầu
+        for (i in 1..4) {
+            val res = MainActivity.authenticateParentPinAtomic(prefs, "0000", now)
+            assertTrue(res is MainActivity.PinAuthResult.IncorrectPin)
+            val inc = res as MainActivity.PinAuthResult.IncorrectPin
+            assertEquals(i, inc.failedAttempts)
+            assertEquals(5 - i, inc.remainingAttempts)
+            assertFalse(inc.isNowLockedOut)
+        }
+
+        // Lần thứ 5 sai -> Kích hoạt khóa 30s
+        val res5 = MainActivity.authenticateParentPinAtomic(prefs, "0000", now)
+        assertTrue(res5 is MainActivity.PinAuthResult.IncorrectPin)
+        val inc5 = res5 as MainActivity.PinAuthResult.IncorrectPin
+        assertEquals(5, inc5.failedAttempts)
+        assertEquals(0, inc5.remainingAttempts)
+        assertTrue(inc5.isNowLockedOut)
+
+        // Sau 5 giây, kể cả khi nhập ĐÚNG PIN "2468", giao dịch nguyên tử BẮT BUỘC trả về LockedOut
+        val lockedResult = MainActivity.authenticateParentPinAtomic(prefs, "2468", now + 5000L)
+        assertTrue("Không thể bypass lockout dù nhập đúng PIN", lockedResult is MainActivity.PinAuthResult.LockedOut)
+        val locked = lockedResult as MainActivity.PinAuthResult.LockedOut
+        assertTrue("Còn lại 25 giây", locked.remainingSeconds in 24L..25L)
+    }
+
+    @Test
+    fun testAuthenticateParentPinAtomicFailClosedOnStorageError() {
+        // SharedPreferences giả lập lỗi commit (đĩa hỏng / bộ nhớ đầy)
+        val failingPrefs = FakeSharedPreferences(commitReturnsSuccess = false)
+        val now = 1700000000000L
+
+        // Giao dịch nguyên tử BẮT BUỘC Fail-Closed
+        val authResult = MainActivity.authenticateParentPinAtomic(failingPrefs, "1234", now)
+        assertTrue("Phải trả về PinAuthResult.StorageError khi lưu trữ lỗi", authResult is MainActivity.PinAuthResult.StorageError)
+    }
+
+    @Test
+    fun testAuthenticateParentPinAtomicThreadSafetyUnderHighConcurrency() {
+        val prefs = FakeSharedPreferences()
+        val now = 1700000000000L
+        assertTrue(MainActivity.setParentPin(prefs, "5555"))
+
+        val threadCount = 20
+        val results = java.util.Collections.synchronizedList(mutableListOf<PinAuthResult>())
+        val threads = mutableListOf<Thread>()
+
+        // 20 luồng đồng thời gọi authenticateParentPinAtomic
+        for (i in 1..threadCount) {
+            val t = Thread {
+                val res = MainActivity.authenticateParentPinAtomic(prefs, "9999", now)
+                results.add(res)
+            }
+            threads.add(t)
+        }
+
+        threads.forEach { it.start() }
+        threads.forEach { it.join() }
+
+        assertEquals(threadCount, results.size)
+        // Nhờ synchronized(PIN_LOCK), ít nhất 5 lần đầu nhận IncorrectPin và các lần sau nhận LockedOut
+        val incorrectCount = results.count { it is PinAuthResult.IncorrectPin }
+        val lockedOutCount = results.count { it is PinAuthResult.LockedOut }
+        assertEquals("Tổng số kết quả phải khớp 20", threadCount, incorrectCount + lockedOutCount)
+        assertTrue("Số lần thử sai ghi nhận đạt ngưỡng khóa 5", incorrectCount >= 5)
+        assertTrue("Các luồng sau bị khóa an toàn", lockedOutCount > 0)
+        val lockoutUntil = prefs.getLong(MainActivity.PREF_PIN_LOCKOUT_UNTIL, 0L)
+        assertEquals("Lockout phải được kích hoạt sau >= 5 lần sai", now + 30_000L, lockoutUntil)
+    }
+
+    @Test
+    fun testAuthenticateParentPinAtomicRejectsUnconfiguredPinWithoutBackdoor() {
+        val prefs = FakeSharedPreferences()
+        val now = 1700000000000L
+
+        // Chưa thiết lập PIN -> Tuyệt đối không chấp nhận 1234 hay bất kỳ số nào
+        val res = MainActivity.authenticateParentPinAtomic(prefs, "1234", now)
+        assertTrue("Chưa thiết lập PIN phải trả về StorageError (Zero Backdoor)", res is MainActivity.PinAuthResult.StorageError)
+    }
+
+
 
     private class FakeTestContext(
         val prefs: FakeSharedPreferences

@@ -12,6 +12,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Context
+import android.content.SharedPreferences
 import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Color
@@ -20,6 +21,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Process
 import android.provider.Settings
+import android.text.InputType
 import android.util.Log
 import android.view.Gravity
 import android.view.View
@@ -63,9 +65,224 @@ import vn.edu.cva.smartguardian.location.LocationHelper
 
 class MainActivity : AppCompatActivity() {
 
+    sealed class PinAuthResult {
+        object Success : PinAuthResult()
+        data class LockedOut(val remainingSeconds: Long) : PinAuthResult()
+        data class IncorrectPin(val failedAttempts: Int, val remainingAttempts: Int, val isNowLockedOut: Boolean) : PinAuthResult()
+        data class StorageError(val message: String) : PinAuthResult()
+    }
+
+    companion object {
+        const val PREF_USER_ROLE = "user_role"
+        const val ROLE_UNSET = "UNSET"
+        const val ROLE_PARENT = "PARENT"
+        const val ROLE_CHILD = "CHILD"
+
+        // Khóa lưu trữ bảo mật mã PIN phụ huynh kèm Salt ngẫu nhiên per-device
+        const val PREF_PARENT_PIN_HASH = "parent_pin_hash"
+        const val PREF_PARENT_PIN_SALT = "parent_pin_salt"
+        const val PREF_PIN_FAILED_ATTEMPTS = "pin_failed_attempts"
+        const val PREF_PIN_LOCKOUT_UNTIL = "pin_lockout_until"
+
+        private val PIN_LOCK = Any()
+        private val PIN_REGEX = Regex("^[0-9]{4}$")
+
+        @JvmStatic
+        fun resolveEffectiveRole(isPaired: Boolean, configuredRole: String?): String {
+            // INVARIANT (One-Device One-Role): Khi thiết bị đã ở trạng thái ghép đôi (isPaired == true),
+            // vai trò BẮT BUỘC là ROLE_CHILD 100%, khóa chặt không thể bị ghi đè thành ROLE_PARENT hay ROLE_UNSET.
+            if (isPaired) {
+                return ROLE_CHILD
+            }
+            return when (configuredRole) {
+                ROLE_PARENT -> ROLE_PARENT
+                ROLE_CHILD -> ROLE_CHILD
+                else -> ROLE_UNSET
+            }
+        }
+
+        @JvmStatic
+        fun hashPinWithSalt(pin: String, salt: String): String {
+            val digest = java.security.MessageDigest.getInstance("SHA-256")
+            val combined = "$salt:$pin:$salt"
+            val hashBytes = digest.digest(combined.toByteArray(Charsets.UTF_8))
+            val sb = StringBuilder()
+            for (b in hashBytes) {
+                sb.append(String.format("%02x", b))
+            }
+            return sb.toString()
+        }
+
+        @JvmStatic
+        fun hasParentPin(prefs: SharedPreferences): Boolean = synchronized(PIN_LOCK) {
+            val salt = prefs.getString(PREF_PARENT_PIN_SALT, null)
+            val storedHash = prefs.getString(PREF_PARENT_PIN_HASH, null)
+            !salt.isNullOrEmpty() && !storedHash.isNullOrEmpty()
+        }
+
+        @JvmStatic
+        fun setParentPin(prefs: SharedPreferences, newPin: String): Boolean = synchronized(PIN_LOCK) {
+            if (!PIN_REGEX.matches(newPin)) return false
+            val salt = java.util.UUID.randomUUID().toString().replace("-", "")
+            val hashed = hashPinWithSalt(newPin, salt)
+            val committed = prefs.edit()
+                .putString(PREF_PARENT_PIN_SALT, salt)
+                .putString(PREF_PARENT_PIN_HASH, hashed)
+                .commit()
+            if (!committed) {
+                Log.e("MainActivity", "LỖI AN TOÀN: commit SharedPreferences thất bại khi lưu mã PIN mới!")
+                return false
+            }
+            true
+        }
+
+        @JvmStatic
+        fun verifyParentPin(prefs: SharedPreferences, enteredPin: String): Boolean = synchronized(PIN_LOCK) {
+            if (!PIN_REGEX.matches(enteredPin)) return false
+            val salt = prefs.getString(PREF_PARENT_PIN_SALT, null)
+            val storedHash = prefs.getString(PREF_PARENT_PIN_HASH, null)
+            if (salt.isNullOrEmpty() || storedHash.isNullOrEmpty()) {
+                // CHỐT CHẶN BẢO MẬT (Zero Default PIN Backdoor): Tuyệt đối không tự động cấp quyền bằng mã PIN mặc định!
+                // Phụ huynh bắt buộc phải thiết lập mã PIN riêng trong onboarding hoặc menu bảo mật.
+                Log.w("MainActivity", "Mã PIN phụ huynh chưa được thiết lập, từ chối xác thực an toàn.")
+                return false
+            }
+            return try {
+                val enteredHash = hashPinWithSalt(enteredPin, salt)
+                java.security.MessageDigest.isEqual(
+                    enteredHash.toByteArray(Charsets.UTF_8),
+                    storedHash.toByteArray(Charsets.UTF_8)
+                )
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Lỗi băm kiểm tra mã PIN phụ huynh: ${e.message}", e)
+                false
+            }
+        }
+
+        @JvmStatic
+        fun checkPinLockout(now: Long, lockoutUntil: Long): Boolean = now < lockoutUntil
+
+        @JvmStatic
+        fun getPinLockoutRemainingSeconds(prefs: SharedPreferences, now: Long): Long = synchronized(PIN_LOCK) {
+            val lockoutUntil = prefs.getLong(PREF_PIN_LOCKOUT_UNTIL, 0L)
+            return if (now < lockoutUntil) {
+                (lockoutUntil - now + 999L) / 1000L
+            } else {
+                0L
+            }
+        }
+
+        @JvmStatic
+        fun recordFailedPinAttempt(prefs: SharedPreferences, now: Long): Pair<Int, Long>? = synchronized(PIN_LOCK) {
+            val currentFailures = prefs.getInt(PREF_PIN_FAILED_ATTEMPTS, 0) + 1
+            val lockoutUntil = if (currentFailures >= 5) now + 30_000L else 0L
+            val committed = prefs.edit()
+                .putInt(PREF_PIN_FAILED_ATTEMPTS, currentFailures)
+                .putLong(PREF_PIN_LOCKOUT_UNTIL, lockoutUntil)
+                .commit()
+            if (!committed) {
+                Log.e("MainActivity", "LỖI AN TOÀN: commit SharedPreferences thất bại khi ghi nhận lần thử PIN sai!")
+                return null
+            }
+            Pair(currentFailures, lockoutUntil)
+        }
+
+        @JvmStatic
+        fun resetPinLockout(prefs: SharedPreferences): Boolean = synchronized(PIN_LOCK) {
+            val committed = prefs.edit()
+                .putInt(PREF_PIN_FAILED_ATTEMPTS, 0)
+                .putLong(PREF_PIN_LOCKOUT_UNTIL, 0L)
+                .commit()
+            if (!committed) {
+                Log.e("MainActivity", "LỖI AN TOÀN: commit SharedPreferences thất bại khi reset PIN lockout!")
+                return false
+            }
+            true
+        }
+
+        @JvmStatic
+        fun authenticateParentPinAtomic(prefs: SharedPreferences, enteredPin: String, now: Long): PinAuthResult = synchronized(PIN_LOCK) {
+            val lockoutUntil = prefs.getLong(PREF_PIN_LOCKOUT_UNTIL, 0L)
+            if (now < lockoutUntil) {
+                val remainSec = (lockoutUntil - now + 999L) / 1000L
+                return PinAuthResult.LockedOut(remainSec)
+            }
+
+            if (!PIN_REGEX.matches(enteredPin)) {
+                return recordFailedAttemptLocked(prefs, now)
+            }
+
+            val salt = prefs.getString(PREF_PARENT_PIN_SALT, null)
+            val storedHash = prefs.getString(PREF_PARENT_PIN_HASH, null)
+            if (salt.isNullOrEmpty() || storedHash.isNullOrEmpty()) {
+                Log.w("MainActivity", "Mã PIN phụ huynh chưa được thiết lập, từ chối xác thực nguyên tử an toàn.")
+                return PinAuthResult.StorageError("Mã PIN phụ huynh chưa được thiết lập trên thiết bị này!")
+            }
+
+            val enteredHash = hashPinWithSalt(enteredPin, salt)
+            val matches = try {
+                java.security.MessageDigest.isEqual(
+                    enteredHash.toByteArray(Charsets.UTF_8),
+                    storedHash.toByteArray(Charsets.UTF_8)
+                )
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Lỗi so khớp băm mã PIN: ${e.message}", e)
+                false
+            }
+
+            if (matches) {
+                val committed = prefs.edit()
+                    .putInt(PREF_PIN_FAILED_ATTEMPTS, 0)
+                    .putLong(PREF_PIN_LOCKOUT_UNTIL, 0L)
+                    .commit()
+                if (!committed) {
+                    Log.e("MainActivity", "LỖI AN TOÀN: commit reset PIN lockout thất bại!")
+                    return PinAuthResult.StorageError("Lỗi hệ thống lưu trữ: Không thể đặt lại trạng thái bảo vệ PIN!")
+                }
+                return PinAuthResult.Success
+            } else {
+                return recordFailedAttemptLocked(prefs, now)
+            }
+        }
+
+        private fun recordFailedAttemptLocked(prefs: SharedPreferences, now: Long): PinAuthResult {
+            val currentFailures = prefs.getInt(PREF_PIN_FAILED_ATTEMPTS, 0) + 1
+            val lockoutUntil = if (currentFailures >= 5) now + 30_000L else 0L
+            val committed = prefs.edit()
+                .putInt(PREF_PIN_FAILED_ATTEMPTS, currentFailures)
+                .putLong(PREF_PIN_LOCKOUT_UNTIL, lockoutUntil)
+                .commit()
+            if (!committed) {
+                Log.e("MainActivity", "LỖI AN TOÀN: commit ghi nhận lần nhập sai PIN thất bại!")
+                return PinAuthResult.StorageError("Lỗi hệ thống lưu trữ: Không thể ghi nhận bảo vệ PIN!")
+            }
+            val isNowLockedOut = currentFailures >= 5
+            val remainAttempts = if (isNowLockedOut) 0 else (5 - currentFailures)
+            return PinAuthResult.IncorrectPin(
+                failedAttempts = currentFailures,
+                remainingAttempts = remainAttempts,
+                isNowLockedOut = isNowLockedOut
+            )
+        }
+
+        @JvmStatic
+        fun recordFailedPinAttempt(currentFailures: Int, now: Long): Pair<Int, Long> {
+            val newFailures = currentFailures + 1
+            val newLockoutUntil = if (newFailures >= 5) now + 30_000L else 0L
+            return Pair(newFailures, newLockoutUntil)
+        }
+
+    }
+
     private val TAG = "MainActivity"
-    private val DEFAULT_PARENT_PIN = "1234"
     private val FIREBASE_RTDB_URL = "https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app"
+
+    // 0. Onboarding & Role Management (One-Device One-Role Architecture)
+    private lateinit var layoutRoleOnboarding: LinearLayout
+    private lateinit var btnSelectRoleChild: View
+    private lateinit var btnSelectRoleParent: View
+    private lateinit var layoutSegmentedControl: LinearLayout
+    private var btnStudentParentSettings: TextView? = null
 
     // 1. Top Navigation & Tabs
     private lateinit var btnTabParent: TextView
@@ -173,23 +390,20 @@ class MainActivity : AppCompatActivity() {
                 )
             }
 
-            // 3. Mặc định khởi động ở Tab Học Sinh chuẩn Screen 3
-            switchToStudentTab()
+            // 3. Phân định vai trò độc lập chuẩn Google Screen Time & Family Link
+            applyRoleRouting()
 
             val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
             val isPaired = prefs.getBoolean("is_paired", false)
             val pairedCode = prefs.getString("paired_code", "") ?: ""
 
             if (isPaired && pairedCode.isNotEmpty()) {
-                showStudentPairedState(pairedCode)
                 UsageTrackerService.start(this)
                 startUnpairListener(pairedCode)
                 startHeartbeatLoop(pairedCode)
                 lifecycleScope.launch(Dispatchers.IO) {
                     sendHeartbeatPing(pairedCode)
                 }
-            } else {
-                showStudentUnpairedState()
             }
         } catch (e: Exception) {
             Log.e(TAG, "Lỗi nghiêm trọng khi khởi tạo MainActivity: ${e.message}", e)
@@ -254,6 +468,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun initViews() {
+        // 0. Onboarding & Role Management
+        layoutRoleOnboarding = findViewById(R.id.layoutRoleOnboarding)
+        btnSelectRoleChild = findViewById(R.id.btnSelectRoleChild)
+        btnSelectRoleParent = findViewById(R.id.btnSelectRoleParent)
+        layoutSegmentedControl = findViewById(R.id.layoutSegmentedControl)
+        btnStudentParentSettings = findViewById(R.id.btnStudentParentSettings)
+
         // Top Navigation Tabs
         btnTabParent = findViewById(R.id.btnTabParent)
         btnTabStudent = findViewById(R.id.btnTabStudent)
@@ -313,6 +534,33 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
+        // 0. Onboarding Role Selection Listeners
+        btnSelectRoleChild.setOnClickListener {
+            val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit().putString(PREF_USER_ROLE, ROLE_CHILD).apply()
+            applyRoleRouting()
+            Toast.makeText(this, "Đã thiết lập: Thiết bị của Con (Học Sinh)", Toast.LENGTH_SHORT).show()
+        }
+
+        btnSelectRoleParent.setOnClickListener {
+            val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
+            if (!hasParentPin(prefs)) {
+                showSetupParentPinDialog {
+                    prefs.edit().putString(PREF_USER_ROLE, ROLE_PARENT).apply()
+                    applyRoleRouting()
+                    Toast.makeText(this, "Đã thiết lập: Thiết bị của Cha Mẹ (Phụ Huynh)", Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                prefs.edit().putString(PREF_USER_ROLE, ROLE_PARENT).apply()
+                applyRoleRouting()
+                Toast.makeText(this, "Đã thiết lập: Thiết bị của Cha Mẹ (Phụ Huynh)", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        btnStudentParentSettings?.setOnClickListener {
+            showParentPinToOpenSettings()
+        }
+
         // Chuyển đổi 2 Tab
         btnTabParent.setOnClickListener { switchToParentTab() }
         btnTabStudent.setOnClickListener { switchToStudentTab() }
@@ -374,13 +622,33 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnModalConfirmUnpair.setOnClickListener {
-            val inputPin = etModalPinConfirm.text.toString()
-            if (inputPin == DEFAULT_PARENT_PIN) {
-                layoutPinConfirmModal.visibility = View.GONE
-                executeParentUnpair()
-            } else {
-                tvModalPinError.visibility = View.VISIBLE
-                tvModalPinError.text = "Mã PIN không đúng! Vui lòng thử lại."
+            val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
+            val now = System.currentTimeMillis()
+            val inputPin = etModalPinConfirm.text.toString().trim()
+
+            when (val authRes = authenticateParentPinAtomic(prefs, inputPin, now)) {
+                is PinAuthResult.Success -> {
+                    tvModalPinError.visibility = View.GONE
+                    layoutPinConfirmModal.visibility = View.GONE
+                    executeParentUnpair()
+                }
+                is PinAuthResult.LockedOut -> {
+                    tvModalPinError.visibility = View.VISIBLE
+                    tvModalPinError.text = "Nhập sai quá 5 lần! Vui lòng thử lại sau ${authRes.remainingSeconds}s"
+                }
+                is PinAuthResult.IncorrectPin -> {
+                    tvModalPinError.visibility = View.VISIBLE
+                    if (authRes.isNowLockedOut) {
+                        tvModalPinError.text = "Nhập sai 5 lần! Bị khóa tạm thời 30 giây."
+                    } else {
+                        tvModalPinError.text = "Mã PIN không đúng! Còn lại ${authRes.remainingAttempts} lần thử."
+                    }
+                }
+                is PinAuthResult.StorageError -> {
+                    tvModalPinError.visibility = View.VISIBLE
+                    tvModalPinError.text = "Lỗi lưu trữ: ${authRes.message} Thao tác bị từ chối."
+                    Toast.makeText(this, "Lỗi bảo vệ lưu trữ: ${authRes.message}", Toast.LENGTH_LONG).show()
+                }
             }
         }
 
@@ -439,6 +707,215 @@ class MainActivity : AppCompatActivity() {
         layoutParentChildRow?.setOnClickListener { showChildCompanionDialog() }
     }
 
+    private fun applyRoleRouting() {
+        val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
+        val isPaired = prefs.getBoolean("is_paired", false)
+        val configuredRole = prefs.getString(PREF_USER_ROLE, ROLE_UNSET)
+        val role = resolveEffectiveRole(isPaired, configuredRole)
+
+        // Tự động khôi phục dữ liệu nếu trạng thái lưu trữ bị lệch khỏi bất biến
+        if (isPaired && configuredRole != ROLE_CHILD) {
+            prefs.edit().putString(PREF_USER_ROLE, ROLE_CHILD).apply()
+        }
+
+        when (role) {
+            ROLE_PARENT -> {
+                layoutRoleOnboarding.visibility = View.GONE
+                layoutSegmentedControl.visibility = View.GONE
+                layoutTabStudentContent.visibility = View.GONE
+                layoutTabParentContent.visibility = View.VISIBLE
+                if (layoutParentHub.visibility != View.VISIBLE) {
+                    layoutParentPinGate.visibility = View.VISIBLE
+                }
+                loadParentHubData()
+            }
+            ROLE_CHILD -> {
+                layoutRoleOnboarding.visibility = View.GONE
+                layoutSegmentedControl.visibility = View.GONE
+                layoutTabParentContent.visibility = View.GONE
+                layoutTabStudentContent.visibility = View.VISIBLE
+                val pairedCode = prefs.getString("paired_code", "") ?: ""
+                if (isPaired && pairedCode.isNotEmpty()) {
+                    showStudentPairedState(pairedCode)
+                } else {
+                    showStudentUnpairedState()
+                }
+            }
+            else -> {
+                layoutRoleOnboarding.visibility = View.VISIBLE
+                layoutSegmentedControl.visibility = View.GONE
+                layoutTabParentContent.visibility = View.GONE
+                layoutTabStudentContent.visibility = View.GONE
+            }
+        }
+    }
+
+    private fun showSetupParentPinDialog(onSuccess: (() -> Unit)? = null) {
+        val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
+        val input = EditText(this).apply {
+            hint = "Nhập mã PIN phụ huynh (4 chữ số)"
+            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
+            gravity = Gravity.CENTER
+            setPadding(40, 30, 40, 30)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("🔒 Thiết Lập Mã PIN Phụ Huynh Lần Đầu")
+            .setMessage("Để bảo vệ an toàn cho thiết bị và ngăn con tùy tiện can thiệp cài đặt, vui lòng tự đặt mã PIN bảo mật riêng (đúng 4 chữ số):")
+            .setView(input)
+            .setCancelable(false)
+            .setPositiveButton("LƯU MÃ PIN") { _, _ ->
+                val entered = input.text.toString().trim()
+                if (Regex("^[0-9]{4}$").matches(entered)) {
+                    val ok = setParentPin(prefs, entered)
+                    if (ok) {
+                        Toast.makeText(this, "Đã tạo mã PIN phụ huynh thành công!", Toast.LENGTH_SHORT).show()
+                        onSuccess?.invoke()
+                    } else {
+                        Toast.makeText(this, "Không thể lưu mã PIN. Vui lòng thử lại.", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    Toast.makeText(this, "Mã PIN phải gồm đúng 4 chữ số (chỉ bao gồm số)!", Toast.LENGTH_SHORT).show()
+                    showSetupParentPinDialog(onSuccess)
+                }
+            }
+            .setNegativeButton("Hủy", null)
+            .show()
+    }
+
+    private fun showParentPinToOpenSettings() {
+        val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        val remainSec = getPinLockoutRemainingSeconds(prefs, now)
+        if (remainSec > 0L) {
+            Toast.makeText(this, "Đã nhập sai PIN quá 5 lần. Vui lòng thử lại sau ${remainSec}s", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        if (!hasParentPin(prefs)) {
+            showSetupParentPinDialog {
+                showParentManagementOptions()
+            }
+            return
+        }
+
+        val input = EditText(this).apply {
+            hint = "Nhập mã PIN phụ huynh 4 số"
+            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
+            gravity = Gravity.CENTER
+            setPadding(40, 30, 40, 30)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("🔒 Cài Đặt & Quản Lý Phụ Huynh")
+            .setMessage("Vui lòng nhập mã PIN bảo mật của phụ huynh để tiếp tục:")
+            .setView(input)
+            .setPositiveButton("XÁC NHẬN") { _, _ ->
+                val entered = input.text.toString().trim()
+                val now = System.currentTimeMillis()
+                when (val authRes = authenticateParentPinAtomic(prefs, entered, now)) {
+                    is PinAuthResult.Success -> {
+                        showParentManagementOptions()
+                    }
+                    is PinAuthResult.LockedOut -> {
+                        Toast.makeText(this, "Nhập sai quá 5 lần! Khóa tạm thời ${authRes.remainingSeconds} giây.", Toast.LENGTH_LONG).show()
+                    }
+                    is PinAuthResult.IncorrectPin -> {
+                        if (authRes.isNowLockedOut) {
+                            Toast.makeText(this, "Nhập sai PIN 5 lần! Khóa tạm thời 30 giây.", Toast.LENGTH_LONG).show()
+                        } else {
+                            Toast.makeText(this, "Mã PIN không đúng! Còn lại ${authRes.remainingAttempts} lần thử.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    is PinAuthResult.StorageError -> {
+                        Toast.makeText(this, "Lỗi lưu trữ: ${authRes.message} Thao tác bị từ chối.", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+            .setNegativeButton("Hủy", null)
+            .show()
+    }
+
+    private fun showChangeParentPinDialog() {
+        val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
+        val input = EditText(this).apply {
+            hint = "Nhập mã PIN mới (đúng 4 số)"
+            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
+            gravity = Gravity.CENTER
+            setPadding(40, 30, 40, 30)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("🔑 Đổi Mã PIN Phụ Huynh")
+            .setMessage("Thiết lập mã PIN mới cho thiết bị này. Mã PIN được mã hóa Salted SHA-256 an toàn riêng biệt.")
+            .setView(input)
+            .setPositiveButton("LƯU MÃ PIN") { _, _ ->
+                val newPin = input.text.toString().trim()
+                if (Regex("^[0-9]{4}$").matches(newPin)) {
+                    val ok = setParentPin(prefs, newPin)
+                    if (ok) {
+                        Toast.makeText(this, "Đã đổi mã PIN phụ huynh thành công!", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(this, "Không thể lưu mã PIN mới. Vui lòng thử lại.", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    Toast.makeText(this, "Mã PIN phải gồm đúng 4 chữ số (chỉ bao gồm số)!", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Hủy", null)
+            .show()
+    }
+
+    private fun showParentManagementOptions() {
+        val options = arrayOf(
+            "🛡️ Kiểm tra trạng thái Giám sát & Bất biến Phần cứng",
+            "⚙️ Cấp lại & Làm mới quyền hệ thống (UsageStats/Overlay)",
+            "🔄 Buộc đồng bộ nhịp tim (Force Heartbeat Ping)",
+            "🔑 Đổi mã PIN bảo mật phụ huynh",
+            "❌ Hủy ghép đôi thiết bị này (Xóa dữ liệu & Đặt lại máy)"
+        )
+        AlertDialog.Builder(this)
+            .setTitle("🔒 Quản Trị Viên Phụ Huynh (Máy Con)")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> {
+                        val statusMsg = "Quyền UsageStats: " + (if (hasUsageStatsPermission()) "ĐÃ CẤP" else "CHƯA CẤP") + "\n" +
+                                "Màn hình: " + (if (GuardianAccessibilityService.isScreenOnState) "Đang mở" else "Đã tắt") + "\n" +
+                                "Epoch: " + GuardianAccessibilityService.telemetryEpoch.get()
+                        AlertDialog.Builder(this)
+                            .setTitle("🛡️ Trạng Thái Bất Biến Phần Cứng")
+                            .setMessage(statusMsg)
+                            .setPositiveButton("Đóng", null)
+                            .show()
+                    }
+                    1 -> {
+                        checkAllPermissions()
+                        Toast.makeText(this, "Đã làm mới trạng thái quyền hệ thống", Toast.LENGTH_SHORT).show()
+                    }
+                    2 -> {
+                        val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
+                        val pairedCode = prefs.getString("paired_code", "") ?: ""
+                        if (pairedCode.isNotEmpty()) {
+                            UsageTrackerService.collectAndSave(this@MainActivity)
+                            lifecycleScope.launch(Dispatchers.IO) {
+                                sendHeartbeatPing(pairedCode)
+                            }
+                            Toast.makeText(this, "Đã gửi xung nhịp đồng bộ lên Firebase", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    3 -> {
+                        showChangeParentPinDialog()
+                    }
+                    4 -> {
+                        // CHỐT CHẶN BẢO MẬT: Mọi luồng hủy ghép đôi BẮT BUỘC phải qua modal xác thực mã PIN phụ huynh kèm persistent lockout
+                        etModalPinConfirm.setText("")
+                        tvModalPinError.visibility = View.GONE
+                        layoutPinConfirmModal.visibility = View.VISIBLE
+                    }
+                }
+            }
+            .setNegativeButton("Đóng", null)
+            .show()
+    }
+
+
     private fun switchToParentTab() {
         btnTabParent.setBackgroundResource(R.drawable.bg_tab_active)
         btnTabParent.setTextColor(Color.WHITE)
@@ -462,23 +939,73 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun handlePinInput(char: String) {
+        val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        val remainSec = getPinLockoutRemainingSeconds(prefs, now)
+        if (remainSec > 0L) {
+            tvParentPinError.visibility = View.VISIBLE
+            tvParentPinError.text = "Nhập sai quá 5 lần! Vui lòng thử lại sau ${remainSec}s"
+            parentPinBuilder.clear()
+            updatePinDots()
+            return
+        }
+
+        if (!hasParentPin(prefs)) {
+            showSetupParentPinDialog {
+                tvParentPinError.visibility = View.GONE
+                layoutParentPinGate.visibility = View.GONE
+                layoutParentHub.visibility = View.VISIBLE
+                loadParentHubData()
+            }
+            parentPinBuilder.clear()
+            updatePinDots()
+            return
+        }
+
         if (parentPinBuilder.length < 4) {
             parentPinBuilder.append(char)
             updatePinDots()
 
             if (parentPinBuilder.length == 4) {
-                if (parentPinBuilder.toString() == DEFAULT_PARENT_PIN) {
-                    tvParentPinError.visibility = View.GONE
-                    layoutParentPinGate.visibility = View.GONE
-                    layoutParentHub.visibility = View.VISIBLE
-                    loadParentHubData()
-                } else {
-                    tvParentPinError.visibility = View.VISIBLE
-                    tvParentPinError.text = "Mã PIN không đúng! (Mặc định: 1234)"
-                    lifecycleScope.launch {
-                        delay(600)
-                        parentPinBuilder.clear()
-                        updatePinDots()
+                val enteredPin = parentPinBuilder.toString()
+                val now = System.currentTimeMillis()
+                when (val authRes = authenticateParentPinAtomic(prefs, enteredPin, now)) {
+                    is PinAuthResult.Success -> {
+                        tvParentPinError.visibility = View.GONE
+                        layoutParentPinGate.visibility = View.GONE
+                        layoutParentHub.visibility = View.VISIBLE
+                        loadParentHubData()
+                    }
+                    is PinAuthResult.LockedOut -> {
+                        tvParentPinError.visibility = View.VISIBLE
+                        tvParentPinError.text = "Nhập sai quá 5 lần! Vui lòng chờ ${authRes.remainingSeconds} giây."
+                        lifecycleScope.launch {
+                            delay(600)
+                            parentPinBuilder.clear()
+                            updatePinDots()
+                        }
+                    }
+                    is PinAuthResult.IncorrectPin -> {
+                        tvParentPinError.visibility = View.VISIBLE
+                        if (authRes.isNowLockedOut) {
+                            tvParentPinError.text = "Nhập sai 5 lần! Bị khóa tạm thời 30 giây."
+                        } else {
+                            tvParentPinError.text = "Mã PIN không đúng! Còn lại ${authRes.remainingAttempts} lần thử."
+                        }
+                        lifecycleScope.launch {
+                            delay(600)
+                            parentPinBuilder.clear()
+                            updatePinDots()
+                        }
+                    }
+                    is PinAuthResult.StorageError -> {
+                        tvParentPinError.visibility = View.VISIBLE
+                        tvParentPinError.text = "Lỗi lưu trữ: ${authRes.message} Thao tác bị từ chối."
+                        lifecycleScope.launch {
+                            delay(600)
+                            parentPinBuilder.clear()
+                            updatePinDots()
+                        }
                     }
                 }
             }
@@ -830,6 +1357,7 @@ class MainActivity : AppCompatActivity() {
                     .putBoolean("is_paired", true)
                     .putString("paired_code", inputCode)
                     .putString("device_id", androidId)
+                    .putString(PREF_USER_ROLE, ROLE_CHILD)
                     .apply()
 
                 UsageTrackerService.start(this@MainActivity)
@@ -880,10 +1408,17 @@ class MainActivity : AppCompatActivity() {
         val tabDialogGame = dialogView.findViewById<TextView>(R.id.tabDialogGame)
         val tabDialogAll = dialogView.findViewById<TextView>(R.id.tabDialogAll)
 
+        val layoutDialogActiveAppBanner = dialogView.findViewById<LinearLayout>(R.id.layoutDialogActiveAppBanner)
+        val tvActiveAppTitle = dialogView.findViewById<TextView>(R.id.tvActiveAppTitle)
         val tvActiveAppIcon = dialogView.findViewById<TextView>(R.id.tvActiveAppIcon)
         val tvActiveAppName = dialogView.findViewById<TextView>(R.id.tvActiveAppName)
         val tvActiveAppLiveBadge = dialogView.findViewById<TextView>(R.id.tvActiveAppLiveBadge)
         val layoutDialogAppListContainer = dialogView.findViewById<LinearLayout>(R.id.layoutDialogAppListContainer)
+
+        val layoutDialogEmptyState = dialogView.findViewById<LinearLayout>(R.id.layoutDialogEmptyState)
+        val tvDialogEmptyTitle = dialogView.findViewById<TextView>(R.id.tvDialogEmptyTitle)
+        val tvDialogEmptyDesc = dialogView.findViewById<TextView>(R.id.tvDialogEmptyDesc)
+        val btnDialogViewAllApps = dialogView.findViewById<TextView>(R.id.btnDialogViewAllApps)
 
         val btnDialogSendMessage = dialogView.findViewById<Button>(R.id.btnDialogSendMessage)
         val btnDialogClose = dialogView.findViewById<Button>(R.id.btnDialogClose)
@@ -922,16 +1457,31 @@ class MainActivity : AppCompatActivity() {
             }
 
             if (filteredList.isEmpty()) {
-                val emptyTv = TextView(this@MainActivity).apply {
-                    text = "Chưa có ứng dụng nào trong mục này hôm nay."
-                    setTextColor(Color.parseColor("#94A3B8"))
-                    textSize = 12f
-                    setPadding(16, 24, 16, 24)
-                    gravity = Gravity.CENTER
+                layoutDialogEmptyState.visibility = View.VISIBLE
+                layoutDialogAppListContainer.visibility = View.GONE
+                when (currentTab) {
+                    "SOCIAL" -> {
+                        tvDialogEmptyTitle.text = "Chưa có hoạt động Mạng XH"
+                        tvDialogEmptyDesc.text = "Thiết bị con chưa mở ứng dụng mạng xã hội nào hôm nay."
+                    }
+                    "STUDY" -> {
+                        tvDialogEmptyTitle.text = "Chưa có hoạt động Học tập"
+                        tvDialogEmptyDesc.text = "Thiết bị con chưa mở ứng dụng học tập nào hôm nay."
+                    }
+                    "GAME" -> {
+                        tvDialogEmptyTitle.text = "Chưa có hoạt động Trò chơi"
+                        tvDialogEmptyDesc.text = "Thiết bị con chưa mở game nào hôm nay."
+                    }
+                    else -> {
+                        tvDialogEmptyTitle.text = "Chưa có dữ liệu ứng dụng"
+                        tvDialogEmptyDesc.text = "Dữ liệu hoạt động sẽ xuất hiện khi thiết bị đồng bộ."
+                    }
                 }
-                layoutDialogAppListContainer.addView(emptyTv)
                 return
             }
+
+            layoutDialogEmptyState.visibility = View.GONE
+            layoutDialogAppListContainer.visibility = View.VISIBLE
 
             val sortedList = filteredList.sortedWith(
                 compareByDescending<CompanionAppItem> { it.isOnline }
@@ -1002,6 +1552,7 @@ class MainActivity : AppCompatActivity() {
         tabDialogStudy.setOnClickListener { updateTabs("STUDY") }
         tabDialogGame.setOnClickListener { updateTabs("GAME") }
         tabDialogAll.setOnClickListener { updateTabs("ALL") }
+        btnDialogViewAllApps.setOnClickListener { updateTabs("ALL") }
 
         btnDialogClose.setOnClickListener { dialog.dismiss() }
 
@@ -1123,26 +1674,48 @@ class MainActivity : AppCompatActivity() {
 
                                 withContext(Dispatchers.Main) {
                                     tvDialogChildTitle.text = "Giám Sát: $devModel"
-                                    tvDialogChildSubtitle.text = if (isOnline) "🟢 Trực tuyến • Đồng bộ thời gian thực" else "🔴 Ngoại tuyến (Đã ngắt mạng)"
                                     tvDialogBalanceScore.text = "⚖️ $balanceScore/100"
 
-                                    if (activeIsFg && activePkg != "SCREEN_OFF" && activePkg != "HOME") {
-                                        tvActiveAppIcon.text = getAppIcon(activeCat, activePkg, activeName)
-                                        tvActiveAppName.text = "$activeName (Đang mở trên màn hình)"
-                                        tvActiveAppLiveBadge.text = "🟢 ONLINE"
-                                        tvActiveAppLiveBadge.setBackgroundColor(Color.parseColor("#15803D"))
-                                        tvActiveAppLiveBadge.setTextColor(Color.parseColor("#86EFAC"))
+                                    if (isOnline) {
+                                        tvDialogChildSubtitle.text = "🟢 Trực tuyến • Đồng bộ thời gian thực"
+                                        tvDialogChildSubtitle.setTextColor(Color.parseColor("#34D399"))
+
+                                        if (activeIsFg && activePkg != "SCREEN_OFF" && activePkg != "HOME") {
+                                            tvActiveAppTitle.text = "ỨNG DỤNG ĐANG MỞ TRÊN MÀN HÌNH:"
+                                            tvActiveAppTitle.setTextColor(Color.parseColor("#FDE047"))
+                                            tvActiveAppIcon.text = getAppIcon(activeCat, activePkg, activeName)
+                                            tvActiveAppName.text = "$activeName (Đang mở trên màn hình)"
+                                            tvActiveAppLiveBadge.text = "🟢 ONLINE"
+                                            tvActiveAppLiveBadge.setBackgroundColor(Color.parseColor("#15803D"))
+                                            tvActiveAppLiveBadge.setTextColor(Color.parseColor("#86EFAC"))
+                                            layoutDialogActiveAppBanner.setBackgroundResource(R.drawable.bg_gold_card)
+                                        } else {
+                                            tvActiveAppTitle.text = "TRẠNG THÁI MÀN HÌNH:"
+                                            tvActiveAppTitle.setTextColor(Color.parseColor("#94A3B8"))
+                                            tvActiveAppIcon.text = "🔒"
+                                            tvActiveAppName.text = "Màn hình khóa / Màn hình tắt (Zero-Phantom-Time)"
+                                            tvActiveAppLiveBadge.text = "⚪ ĐÃ KHÓA"
+                                            tvActiveAppLiveBadge.setBackgroundColor(Color.parseColor("#334155"))
+                                            tvActiveAppLiveBadge.setTextColor(Color.parseColor("#94A3B8"))
+                                            layoutDialogActiveAppBanner.setBackgroundResource(R.drawable.bg_device_card)
+                                        }
                                     } else {
-                                        tvActiveAppIcon.text = "🔒"
-                                        tvActiveAppName.text = "Màn hình khóa / Màn hình tắt (Zero-Phantom-Time)"
-                                        tvActiveAppLiveBadge.text = "⚪ ĐÃ ĐÓNG"
-                                        tvActiveAppLiveBadge.setBackgroundColor(Color.parseColor("#334155"))
-                                        tvActiveAppLiveBadge.setTextColor(Color.parseColor("#94A3B8"))
+                                        // THIẾT BỊ NGOẠI TUYẾN -> KHÔNG BAO GIỜ BÁO ONLINE GIẢ NỮA!
+                                        tvDialogChildSubtitle.text = "🔴 Ngoại tuyến (Đã ngắt mạng / tắt máy)"
+                                        tvDialogChildSubtitle.setTextColor(Color.parseColor("#EF4444"))
+                                        tvActiveAppTitle.text = "LẦN CUỐI GHI NHẬN TRƯỚC KHI NGOẠI TUYẾN:"
+                                        tvActiveAppTitle.setTextColor(Color.parseColor("#F87171"))
+                                        tvActiveAppIcon.text = if (activePkg != "SCREEN_OFF" && activePkg != "HOME") getAppIcon(activeCat, activePkg, activeName) else "⚪"
+                                        tvActiveAppName.text = if (activePkg != "SCREEN_OFF" && activePkg != "HOME") "$activeName (Trước khi ngắt mạng)" else "Màn hình tắt / Không kết nối"
+                                        tvActiveAppLiveBadge.text = "🔴 OFFLINE"
+                                        tvActiveAppLiveBadge.setBackgroundColor(Color.parseColor("#7F1D1D"))
+                                        tvActiveAppLiveBadge.setTextColor(Color.parseColor("#FCA5A5"))
+                                        layoutDialogActiveAppBanner.setBackgroundResource(R.drawable.bg_device_card)
                                     }
 
                                     allAppsList.clear()
                                     allAppsList.addAll(loadedApps)
-                                    updateTabs("SOCIAL")
+                                    updateTabs(currentTab)
                                 }
                             }
                         }
@@ -1153,6 +1726,9 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        updateTabs("SOCIAL")
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        dialog.window?.setDimAmount(0.65f)
         dialog.show()
     }
 
