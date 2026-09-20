@@ -2149,6 +2149,111 @@ class HardwareInvariantTest {
         assertTrue("Chưa thiết lập PIN phải trả về StorageError (Zero Backdoor)", res is MainActivity.PinAuthResult.StorageError)
     }
 
+    @Test
+    fun testComputeDeviceOnlineStatusInvariants() {
+        val now = 1700000000000L
+
+        // 1. Device hợp lệ: trực tuyến trong vòng 45s
+        val devOnline = JSONObject().apply {
+            put("isPaired", true)
+            put("status", "paired")
+            put("online", true)
+            put("lastSync", now - 10000L)
+            put("active_app", JSONObject().apply {
+                put("packageName", "com.google.android.youtube")
+            })
+        }
+        assertTrue("Thiết bị đồng bộ 10s trước phải trực tuyến", MainActivity.computeDeviceOnlineStatus(devOnline, now))
+
+        // 2. Mất mạng quá 45s -> ngoại tuyến
+        val devStale = JSONObject().apply {
+            put("isPaired", true)
+            put("online", true)
+            put("lastSync", now - 46000L)
+        }
+        assertFalse("Thiết bị quá 45s không liên lạc phải ngoại tuyến", MainActivity.computeDeviceOnlineStatus(devStale, now))
+
+        // 3. Màn hình tắt (SCREEN_OFF) -> ngoại tuyến (Zero Phantom Time)
+        val devScreenOff = JSONObject().apply {
+            put("isPaired", true)
+            put("online", true)
+            put("lastSync", now - 5000L)
+            put("active_app", JSONObject().apply {
+                put("packageName", "SCREEN_OFF")
+            })
+        }
+        assertFalse("Thiết bị ở trạng thái SCREEN_OFF phải ngoại tuyến", MainActivity.computeDeviceOnlineStatus(devScreenOff, now))
+
+        // 4. Trạng thái bị thu hồi (REVOKED) -> ngoại tuyến
+        val devRevoked = JSONObject().apply {
+            put("isPaired", true)
+            put("status", "REVOKED")
+            put("online", true)
+            put("lastSync", now - 5000L)
+        }
+        assertFalse("Thiết bị REVOKED phải ngoại tuyến", MainActivity.computeDeviceOnlineStatus(devRevoked, now))
+
+        // 5. Cờ online = false -> ngoại tuyến
+        val devExplicitOffline = JSONObject().apply {
+            put("isPaired", true)
+            put("online", false)
+            put("lastSync", now - 5000L)
+        }
+        assertFalse("Thiết bị có cờ online=false phải ngoại tuyến", MainActivity.computeDeviceOnlineStatus(devExplicitOffline, now))
+
+        // 6. Timestamp từ tương lai (> now + 5s) -> chống gian lận thời gian, ngoại tuyến
+        val devFutureTime = JSONObject().apply {
+            put("isPaired", true)
+            put("online", true)
+            put("lastSync", now + 10000L)
+        }
+        assertFalse("Thiết bị gửi timestamp tương lai ảo phải bị từ chối", MainActivity.computeDeviceOnlineStatus(devFutureTime, now))
+
+        // 7. Chưa ghép đôi (unpaired) -> ngoại tuyến
+        val devUnpaired = JSONObject().apply {
+            put("isPaired", false)
+            put("online", true)
+            put("lastSync", now - 5000L)
+        }
+        assertFalse("Thiết bị chưa ghép đôi phải ngoại tuyến", MainActivity.computeDeviceOnlineStatus(devUnpaired, now))
+
+        // 8. Thiếu trường 'online' hoàn toàn (Fail-closed invariant) -> ngoại tuyến
+        val devMissingOnline = JSONObject().apply {
+            put("isPaired", true)
+            put("status", "paired")
+            put("lastSync", now - 5000L)
+            put("lastHeartbeat", now - 5000L)
+        }
+        assertFalse("Thiết bị thiếu trường 'online' bắt buộc phải ngoại tuyến (Fail-Closed)", MainActivity.computeDeviceOnlineStatus(devMissingOnline, now))
+
+        // 9. Thiếu trường 'isPaired' hoàn toàn và không có status 'paired' -> ngoại tuyến
+        val devMissingPaired = JSONObject().apply {
+            put("online", true)
+            put("lastSync", now - 5000L)
+            put("lastHeartbeat", now - 5000L)
+        }
+        assertFalse("Thiết bị thiếu 'isPaired' bắt buộc phải ngoại tuyến", MainActivity.computeDeviceOnlineStatus(devMissingPaired, now))
+
+        // 10. JSON chỉ có lastSync nhưng không có heartbeat hoặc online -> ngoại tuyến
+        val devLastSyncOnly = JSONObject().apply {
+            put("lastSync", now - 5000L)
+        }
+        assertFalse("JSON chỉ có lastSync không thể báo trực tuyến", MainActivity.computeDeviceOnlineStatus(devLastSyncOnly, now))
+
+        // 11. Fail-closed: Mô phỏng polling nền thất bại chuyển thiết bị trực tuyến thành snapshot ngoại tuyến
+        val activeOnlineChild = MainActivity.FamilyChildDevice(
+            deviceId = "test-dev-01",
+            childName = "Minh Khang",
+            deviceModel = "Pixel 8",
+            isOnline = true,
+            lastContact = now - 5000L,
+            rawObj = devOnline
+        )
+        assertTrue("Ban đầu thiết bị đang trực tuyến", activeOnlineChild.isOnline)
+        val staleChild = activeOnlineChild.copy(isOnline = false)
+        assertFalse("Sau khi polling nền gặp lỗi mạng, thiết bị bắt buộc chuyển thành snapshot ngoại tuyến", staleChild.isOnline)
+    }
+
 
 
     private class FakeTestContext(

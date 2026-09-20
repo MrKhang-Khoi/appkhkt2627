@@ -16,6 +16,7 @@ import android.content.SharedPreferences
 import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Color
+import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -272,6 +273,31 @@ class MainActivity : AppCompatActivity() {
             return Pair(newFailures, newLockoutUntil)
         }
 
+        @JvmStatic
+        fun computeDeviceOnlineStatus(devObj: JSONObject, now: Long = System.currentTimeMillis()): Boolean {
+            val isPaired = devObj.optBoolean("isPaired", false) || devObj.optString("status") == "paired"
+            if (!isPaired) return false
+            if (devObj.optString("status") == "REVOKED") return false
+
+            // Fail-Closed Invariant: Bắt buộc trường 'online' tồn tại VÀ mang giá trị true
+            if (!devObj.has("online") || !devObj.optBoolean("online", false)) return false
+
+            val activeApp = devObj.optJSONObject("active_app")
+            val activePkg = activeApp?.optString("packageName", "") ?: ""
+            if (activePkg == "SCREEN_OFF") return false
+
+            val lastSync = devObj.optLong("lastSync", 0L)
+            val lastHeartbeat = devObj.optLong("lastHeartbeat", 0L)
+            val lastContact = maxOf(lastSync, lastHeartbeat)
+            if (lastContact <= 0L) return false
+
+            // Chống timestamp tương lai (loại bỏ timestamp vượt quá now + 5000L)
+            if (lastContact > now + 5000L) return false
+
+            val diff = now - lastContact
+            return diff in 0L..45000L
+        }
+
     }
 
     private val TAG = "MainActivity"
@@ -308,8 +334,33 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnParentTriggerUnpair: View
     private lateinit var btnLockParentTab: View
 
+    // 3.1 Multi-Child Carousel & Profile Selector
+    private lateinit var layoutChildSelectorChips: LinearLayout
+    private lateinit var btnParentAddChild: TextView
+    private lateinit var tvParentChildName: TextView
+    private lateinit var tvParentChildAvatar: TextView
+    private lateinit var dotParentChildOnline: View
+    private lateinit var tvParentChildStatusBadge: TextView
+
+    // 3.2 GPS Live Location Card
+    private lateinit var layoutParentLocationCard: LinearLayout
+    private lateinit var tvParentLocationAddress: TextView
+    private lateinit var tvParentLocationTime: TextView
+    private lateinit var btnParentOpenMap: TextView
+
+    // 3.3 Screen Time Thật & Real Apps
+    private lateinit var tvParentScreenTimeTotal: TextView
+    private lateinit var viewParentProgressStudy: View
+    private lateinit var viewParentProgressSocial: View
+    private lateinit var viewParentProgressGame: View
+    private lateinit var viewParentProgressEmpty: View
+    private lateinit var tvParentUsageStats: TextView
+    private lateinit var layoutParentAppsContainer: LinearLayout
+    private lateinit var layoutParentAppsEmptyState: LinearLayout
+
     // 4. Tab Học Sinh: Screen 3 (Student Card & Paired State)
     private lateinit var layoutStudentCard: LinearLayout
+    private lateinit var etStudentNameInput: EditText
     private lateinit var etPairingCodeInput: EditText
     private lateinit var btnConnectPairing: TextView
     private lateinit var pbPairingLoading: ProgressBar
@@ -322,6 +373,17 @@ class MainActivity : AppCompatActivity() {
     private lateinit var cardStudentBattery: LinearLayout
 
     private var layoutParentChildRow: LinearLayout? = null
+
+    data class FamilyChildDevice(
+        val deviceId: String,
+        val childName: String,
+        val deviceModel: String,
+        val isOnline: Boolean,
+        val lastContact: Long,
+        val rawObj: JSONObject
+    )
+    private val familyChildrenList = mutableListOf<FamilyChildDevice>()
+    private var activeSelectedChildId: String = ""
 
     // 5. Modals & Overlays
     private lateinit var layoutPinConfirmModal: FrameLayout
@@ -346,6 +408,7 @@ class MainActivity : AppCompatActivity() {
 
     private var unpairJob: Job? = null
     private var heartbeatJob: Job? = null
+    private var parentHubPollingJob: Job? = null
     private var isVpnRunning = false
     private val firebaseClient = OkHttpClient.Builder()
         .connectTimeout(8, TimeUnit.SECONDS)
@@ -450,10 +513,15 @@ class MainActivity : AppCompatActivity() {
             @Suppress("DEPRECATION")
             registerReceiver(usageUpdateReceiver, filter)
         }
+
+        if (::layoutParentHub.isInitialized && layoutParentHub.visibility == View.VISIBLE) {
+            startParentHubPolling()
+        }
     }
 
     override fun onPause() {
         super.onPause()
+        stopParentHubPolling()
         try {
             unregisterReceiver(usageUpdateReceiver)
         } catch (e: Exception) {
@@ -463,8 +531,26 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        stopParentHubPolling()
         unpairJob?.cancel()
         heartbeatJob?.cancel()
+    }
+
+    private fun startParentHubPolling() {
+        parentHubPollingJob?.cancel()
+        parentHubPollingJob = lifecycleScope.launch {
+            while (isActive) {
+                delay(10000L)
+                if (::layoutParentHub.isInitialized && layoutParentHub.visibility == View.VISIBLE) {
+                    loadParentHubData(isBackgroundPoll = true)
+                }
+            }
+        }
+    }
+
+    private fun stopParentHubPolling() {
+        parentHubPollingJob?.cancel()
+        parentHubPollingJob = null
     }
 
     private fun initViews() {
@@ -499,8 +585,33 @@ class MainActivity : AppCompatActivity() {
         btnParentTriggerUnpair = findViewById(R.id.btnParentTriggerUnpair)
         btnLockParentTab = findViewById(R.id.btnLockParentTab)
 
+        // Multi-Child Selector
+        layoutChildSelectorChips = findViewById(R.id.layoutChildSelectorChips)
+        btnParentAddChild = findViewById(R.id.btnParentAddChild)
+        tvParentChildName = findViewById(R.id.tvParentChildName)
+        tvParentChildAvatar = findViewById(R.id.tvParentChildAvatar)
+        dotParentChildOnline = findViewById(R.id.dotParentChildOnline)
+        tvParentChildStatusBadge = findViewById(R.id.tvParentChildStatusBadge)
+
+        // GPS Location Card
+        layoutParentLocationCard = findViewById(R.id.layoutParentLocationCard)
+        tvParentLocationAddress = findViewById(R.id.tvParentLocationAddress)
+        tvParentLocationTime = findViewById(R.id.tvParentLocationTime)
+        btnParentOpenMap = findViewById(R.id.btnParentOpenMap)
+
+        // Screen Time & Real Apps
+        tvParentScreenTimeTotal = findViewById(R.id.tvParentScreenTimeTotal)
+        viewParentProgressStudy = findViewById(R.id.viewParentProgressStudy)
+        viewParentProgressSocial = findViewById(R.id.viewParentProgressSocial)
+        viewParentProgressGame = findViewById(R.id.viewParentProgressGame)
+        viewParentProgressEmpty = findViewById(R.id.viewParentProgressEmpty)
+        tvParentUsageStats = findViewById(R.id.tvParentUsageStats)
+        layoutParentAppsContainer = findViewById(R.id.layoutParentAppsContainer)
+        layoutParentAppsEmptyState = findViewById(R.id.layoutParentAppsEmptyState)
+
         // Tab Học Sinh: Screen 3
         layoutStudentCard = findViewById(R.id.layoutStudentCard)
+        etStudentNameInput = findViewById(R.id.etStudentNameInput)
         etPairingCodeInput = findViewById(R.id.etPairingCodeInput)
         btnConnectPairing = findViewById(R.id.btnConnectPairing)
         pbPairingLoading = findViewById(R.id.pbPairingLoading)
@@ -610,6 +721,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnLockParentTab.setOnClickListener {
+            stopParentHubPolling()
             parentPinBuilder.clear()
             updatePinDots()
             layoutParentHub.visibility = View.GONE
@@ -926,9 +1038,13 @@ class MainActivity : AppCompatActivity() {
         layoutTabStudentContent.visibility = View.GONE
 
         loadParentHubData()
+        if (layoutParentHub.visibility == View.VISIBLE) {
+            startParentHubPolling()
+        }
     }
 
     private fun switchToStudentTab() {
+        stopParentHubPolling()
         btnTabStudent.setBackgroundResource(R.drawable.bg_tab_active)
         btnTabStudent.setTextColor(Color.WHITE)
         btnTabParent.setBackgroundResource(R.drawable.bg_tab_inactive)
@@ -956,6 +1072,7 @@ class MainActivity : AppCompatActivity() {
                 layoutParentPinGate.visibility = View.GONE
                 layoutParentHub.visibility = View.VISIBLE
                 loadParentHubData()
+                startParentHubPolling()
             }
             parentPinBuilder.clear()
             updatePinDots()
@@ -975,6 +1092,7 @@ class MainActivity : AppCompatActivity() {
                         layoutParentPinGate.visibility = View.GONE
                         layoutParentHub.visibility = View.VISIBLE
                         loadParentHubData()
+                        startParentHubPolling()
                     }
                     is PinAuthResult.LockedOut -> {
                         tvParentPinError.visibility = View.VISIBLE
@@ -1020,105 +1138,514 @@ class MainActivity : AppCompatActivity() {
         pinDot4.setBackgroundResource(if (len >= 4) R.drawable.bg_pin_dot_filled else R.drawable.bg_pin_dot_empty)
     }
 
-    private fun loadParentHubData() {
+    private fun showAddChildDialog(familyCode: String) {
+        AlertDialog.Builder(this)
+            .setTitle("➕ Thêm Thiết Bị Của Con")
+            .setMessage("Để kết nối thêm thiết bị cho con (bé thứ 2, thứ 3...):\n\n1. Cài đặt CVA-SmartGuardian trên điện thoại của bé.\n2. Chọn vai trò 'Thiết bị của Con'.\n3. Nhập Tên của bé và Mã gia đình: $familyCode\n4. Nhấn 'KẾT NỐI' để hoàn tất!\n\nThiết bị mới sẽ tự động xuất hiện trên thanh danh sách con.")
+            .setPositiveButton("ĐÃ HIỂU", null)
+            .show()
+    }
+
+    private fun showRenameChildDialog(familyCode: String, child: FamilyChildDevice) {
+        val input = EditText(this).apply {
+            setText(child.childName)
+            setSelection(child.childName.length)
+            setPadding(40, 30, 40, 30)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("✏️ Đổi Tên Hồ Sơ Của Con")
+            .setMessage("Nhập tên hiển thị cho thiết bị (${child.deviceModel}):")
+            .setView(input)
+            .setPositiveButton("LƯU") { _, _ ->
+                val newName = input.text.toString().trim()
+                if (newName.isNotEmpty()) {
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        try {
+                            val jsonMediaType = "application/json; charset=utf-8".toMediaType()
+                            val quotedName = JSONObject.quote(newName)
+                            val body = quotedName.toRequestBody(jsonMediaType)
+                            val patchReq = Request.Builder()
+                                .url("$FIREBASE_RTDB_URL/families/$familyCode/devices/${child.deviceId}/childName.json")
+                                .put(body)
+                                .build()
+                            val response = firebaseClient.newCall(patchReq).execute()
+                            val isOk = response.isSuccessful
+                            val statusCode = response.code
+                            response.close()
+
+                            if (isOk) {
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(this@MainActivity, "Đã đổi tên thành: $newName", Toast.LENGTH_SHORT).show()
+                                    loadParentHubData()
+                                }
+                            } else {
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(this@MainActivity, "Không thể đổi tên (Mã HTTP $statusCode)", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Lỗi đổi tên con: ${e.message}")
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(this@MainActivity, "Lỗi khi lưu tên con: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                }
+            }
+            .setNegativeButton("Hủy", null)
+            .show()
+    }
+
+    private fun renderNetworkErrorState(familyCode: String) {
+        layoutChildSelectorChips.removeAllViews()
+        val errorChip = TextView(this).apply {
+            text = "⚠️ Lỗi kết nối mạng"
+            setTextColor(Color.parseColor("#EF4444"))
+            textSize = 12f
+            setPadding(20, 10, 20, 10)
+        }
+        layoutChildSelectorChips.addView(errorChip)
+
+        tvParentChildName.text = "Không thể tải dữ liệu"
+        tvParentChildSubtitle.text = "⚠️ Vui lòng kiểm tra kết nối mạng và thử lại"
+        dotParentChildOnline.setBackgroundColor(Color.parseColor("#EF4444"))
+        tvParentChildStatusBadge.text = "LỖI MẠNG"
+        tvParentChildStatusBadge.setTextColor(Color.parseColor("#EF4444"))
+
+        tvParentLocationAddress.text = "Chưa thể kết nối tới máy chủ Firebase"
+        tvParentLocationTime.text = "--"
+        tvParentScreenTimeTotal.text = "--"
+        tvParentUsageStats.text = "Vui lòng kiểm tra WiFi / 4G"
+        layoutParentAppsEmptyState.visibility = View.VISIBLE
+        layoutParentAppsContainer.visibility = View.GONE
+    }
+
+    private fun renderEmptyChildSelector(familyCode: String) {
+        layoutChildSelectorChips.removeAllViews()
+        val emptyChip = TextView(this).apply {
+            text = "Chưa có thiết bị con nào kết nối"
+            setTextColor(Color.parseColor("#94A3B8"))
+            textSize = 12f
+            setPadding(20, 10, 20, 10)
+        }
+        layoutChildSelectorChips.addView(emptyChip)
+
+        tvParentChildName.text = "Chờ học sinh kết nối..."
+        tvParentChildSubtitle.text = "Cung cấp mã $familyCode cho con để ghép đôi"
+        dotParentChildOnline.setBackgroundColor(Color.parseColor("#64748B"))
+        tvParentChildStatusBadge.text = "CHỜ ĐỒNG BỘ"
+        tvParentChildStatusBadge.setTextColor(Color.parseColor("#94A3B8"))
+
+        tvParentLocationAddress.text = "Chưa có dữ liệu vị trí GPS"
+        tvParentLocationTime.text = "--"
+        tvParentScreenTimeTotal.text = "--"
+        tvParentUsageStats.text = "📚 Học tập: 0m • 💬 Mạng XH: 0m • 🎮 Game: 0m"
+        layoutParentAppsEmptyState.visibility = View.VISIBLE
+        layoutParentAppsContainer.visibility = View.GONE
+    }
+
+    private fun renderChildSelector(familyCode: String) {
+        layoutChildSelectorChips.removeAllViews()
+
+        for (child in familyChildrenList) {
+            val isSelected = child.deviceId == activeSelectedChildId
+            val chipView = layoutInflater.inflate(R.layout.item_child_selector_chip, layoutChildSelectorChips, false) as LinearLayout
+
+            val tvAvatar = chipView.findViewById<TextView>(R.id.tvChipChildAvatar)
+            val tvName = chipView.findViewById<TextView>(R.id.tvChipChildName)
+            val dotStatus = chipView.findViewById<View>(R.id.dotChipChildStatus)
+            val tvStatus = chipView.findViewById<TextView>(R.id.tvChipChildStatus)
+
+            val isGirl = child.childName.lowercase().let { it.contains("linh") || it.contains("chi") || it.contains("gái") || it.contains("mai") }
+            tvAvatar.text = if (isGirl) "👧" else "👦"
+            tvName.text = child.childName
+
+            if (child.isOnline) {
+                dotStatus.setBackgroundColor(Color.parseColor("#10B981"))
+                tvStatus.text = "Trực tuyến"
+                tvStatus.setTextColor(Color.parseColor("#38BDF8"))
+            } else {
+                dotStatus.setBackgroundColor(Color.parseColor("#64748B"))
+                tvStatus.text = "Ngoại tuyến"
+                tvStatus.setTextColor(Color.parseColor("#94A3B8"))
+            }
+
+            chipView.setBackgroundResource(if (isSelected) R.drawable.bg_child_chip_selected else R.drawable.bg_child_chip_unselected)
+
+            chipView.setOnClickListener {
+                if (activeSelectedChildId != child.deviceId) {
+                    activeSelectedChildId = child.deviceId
+                    renderChildSelector(familyCode)
+                    updateActiveChildDashboard(familyCode, child)
+                }
+            }
+
+            layoutChildSelectorChips.addView(chipView)
+        }
+
+        // Chip Thêm Con ở cuối
+        val addChip = TextView(this).apply {
+            text = "➕ Thêm"
+            setTextColor(Color.parseColor("#38BDF8"))
+            textSize = 12f
+            setBackgroundResource(R.drawable.bg_add_child_chip)
+            setPadding(30, 16, 30, 16)
+            setOnClickListener {
+                showAddChildDialog(familyCode)
+            }
+        }
+        val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        lp.setMargins(0, 0, 20, 0)
+        addChip.layoutParams = lp
+        layoutChildSelectorChips.addView(addChip)
+    }
+
+    private fun updateActiveChildDashboard(familyCode: String, child: FamilyChildDevice) {
+        val isGirl = child.childName.lowercase().let { it.contains("linh") || it.contains("chi") || it.contains("gái") || it.contains("mai") }
+        tvParentChildAvatar.text = if (isGirl) "👧" else "👦"
+        tvParentChildName.text = child.childName
+
+        tvParentChildName.setOnClickListener {
+            showRenameChildDialog(familyCode, child)
+        }
+
+        layoutParentChildRow?.setOnClickListener {
+            showChildCompanionDialog(child.deviceId)
+        }
+
+        val now = System.currentTimeMillis()
+        if (child.isOnline) {
+            dotParentChildOnline.setBackgroundColor(Color.parseColor("#10B981"))
+            tvParentChildStatusBadge.text = "TRỰC TUYẾN"
+            tvParentChildStatusBadge.setTextColor(Color.parseColor("#38BDF8"))
+            tvParentChildSubtitle.text = "🟢 Đang hoạt động • ${child.deviceModel}"
+        } else {
+            dotParentChildOnline.setBackgroundColor(Color.parseColor("#64748B"))
+            tvParentChildStatusBadge.text = "NGOẠI TUYẾN"
+            tvParentChildStatusBadge.setTextColor(Color.parseColor("#94A3B8"))
+            val minAgo = if (child.lastContact > 0) maxOf(0L, (now - child.lastContact) / 60000L) else 999L
+            val timeText = if (minAgo < 1) "vừa ngắt mạng" else if (minAgo < 60) "ngắt mạng ${minAgo}m trước" else "ngắt mạng ${minAgo / 60}h trước"
+            tvParentChildSubtitle.text = "🔴 LẦN CUỐI GHI NHẬN TRƯỚC KHI NGOẠI TUYẾN ($timeText) • ${child.deviceModel}"
+        }
+
+        // GPS Location
+        val locObj = child.rawObj.optJSONObject("location")
+        val lat = locObj?.optDouble("latitude", 0.0) ?: 0.0
+        val lng = locObj?.optDouble("longitude", 0.0) ?: 0.0
+        val address = locObj?.optString("address", "") ?: ""
+        val timestamp = locObj?.optLong("timestamp", 0L) ?: 0L
+
+        if (Math.abs(lat) > 0.0001 && Math.abs(lng) > 0.0001) {
+            tvParentLocationAddress.text = if (address.isNotEmpty()) address else "Tọa độ: ${"%.4f".format(lat)}, ${"%.4f".format(lng)}"
+            val minDiff = if (timestamp > 0) maxOf(0L, (now - timestamp) / 60000L) else 999L
+            val prefix = if (child.isOnline) "Cập nhật" else "[Snapshot Ngoại Tuyến]"
+            tvParentLocationTime.text = if (minDiff < 2) (if (child.isOnline) "Vừa cập nhật" else "$prefix Vừa cập nhật") else "$prefix ${minDiff}m trước"
+
+            btnParentOpenMap.setOnClickListener {
+                try {
+                    val uri = Uri.parse("geo:$lat,$lng?q=$lat,$lng(${Uri.encode(child.childName)})")
+                    val intent = Intent(Intent.ACTION_VIEW, uri)
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    try {
+                        val webUri = Uri.parse("https://www.google.com/maps/search/?api=1&query=$lat,$lng")
+                        val webIntent = Intent(Intent.ACTION_VIEW, webUri)
+                        startActivity(webIntent)
+                    } catch (e2: Exception) {
+                        Toast.makeText(this, "Không thể mở bản đồ: ${e2.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        } else {
+            tvParentLocationAddress.text = "Chưa nhận được tọa độ GPS từ thiết bị của ${child.childName}"
+            tvParentLocationTime.text = "Chờ tín hiệu..."
+            btnParentOpenMap.setOnClickListener {
+                Toast.makeText(this, "Thiết bị con chưa cập nhật vị trí GPS.", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        // Screen Time & App Usage Thật từ Firebase
+        val usageObj = child.rawObj.optJSONObject("usage")
+        val historyArr = child.rawObj.optJSONArray("app_history") ?: usageObj?.optJSONArray("appHistory")
+
+        var totalMinutes = 0L
+        var studyMinutes = 0L
+        var socialMinutes = 0L
+        var gameMinutes = 0L
+        val realAppsList = mutableListOf<CompanionAppItem>()
+
+        if (historyArr != null && historyArr.length() > 0) {
+            for (i in 0 until historyArr.length()) {
+                val appObj = historyArr.optJSONObject(i) ?: continue
+                val pkg = appObj.optString("packageName", "")
+                val name = appObj.optString("appName", pkg)
+                val cat = appObj.optString("category", "UTILITY")
+                val catLbl = appObj.optString("categoryLabel", "Ứng dụng")
+                val dur = appObj.optLong("durationMinutes", 0L)
+                val lastUsed = appObj.optLong("lastTimeUsed", 0L)
+
+                totalMinutes += dur
+                when (cat) {
+                    "STUDY" -> studyMinutes += dur
+                    "SOCIAL" -> socialMinutes += dur
+                    "GAME" -> gameMinutes += dur
+                }
+
+                realAppsList.add(
+                    CompanionAppItem(
+                        packageName = pkg,
+                        appName = name,
+                        category = cat,
+                        categoryLabel = catLbl,
+                        durationMinutes = dur.toInt(),
+                        lastTimeUsed = lastUsed,
+                        isOnline = false
+                    )
+                )
+            }
+        }
+
+        val prefixUsage = if (child.isOnline) "" else "[Snapshot Ngoại Tuyến] "
+        if (totalMinutes > 0) {
+            val hours = totalMinutes / 60
+            val mins = totalMinutes % 60
+            tvParentScreenTimeTotal.text = if (hours > 0) "${hours}h ${mins}m" else "${mins}m"
+
+            val studyW = maxOf(1f, (studyMinutes * 100f / totalMinutes))
+            val socialW = maxOf(1f, (socialMinutes * 100f / totalMinutes))
+            val gameW = maxOf(1f, (gameMinutes * 100f / totalMinutes))
+            (viewParentProgressStudy.layoutParams as LinearLayout.LayoutParams).weight = studyW
+            (viewParentProgressSocial.layoutParams as LinearLayout.LayoutParams).weight = socialW
+            (viewParentProgressGame.layoutParams as LinearLayout.LayoutParams).weight = gameW
+            (viewParentProgressEmpty.layoutParams as LinearLayout.LayoutParams).weight = 0f
+            viewParentProgressStudy.requestLayout()
+
+            tvParentUsageStats.text = "${prefixUsage}📚 Học tập: ${studyMinutes}m • 💬 Mạng XH: ${socialMinutes}m • 🎮 Game: ${gameMinutes}m"
+        } else {
+            tvParentScreenTimeTotal.text = "0m"
+            (viewParentProgressStudy.layoutParams as LinearLayout.LayoutParams).weight = 0f
+            (viewParentProgressSocial.layoutParams as LinearLayout.LayoutParams).weight = 0f
+            (viewParentProgressGame.layoutParams as LinearLayout.LayoutParams).weight = 0f
+            (viewParentProgressEmpty.layoutParams as LinearLayout.LayoutParams).weight = 100f
+            viewParentProgressStudy.requestLayout()
+
+            tvParentUsageStats.text = "${prefixUsage}📚 Học tập: 0m • 💬 Mạng XH: 0m • 🎮 Game: 0m"
+        }
+
+        // Render Top Real Apps
+        layoutParentAppsContainer.removeAllViews()
+        if (realAppsList.isEmpty()) {
+            layoutParentAppsEmptyState.visibility = View.VISIBLE
+            layoutParentAppsContainer.visibility = View.GONE
+        } else {
+            layoutParentAppsEmptyState.visibility = View.GONE
+            layoutParentAppsContainer.visibility = View.VISIBLE
+
+            val topApps = realAppsList.sortedByDescending { it.durationMinutes }.take(4)
+            for (app in topApps) {
+                val appCard = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setBackgroundResource(R.drawable.bg_app_item_card)
+                    setPadding(28, 16, 28, 16)
+                    val cardLp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                    cardLp.setMargins(0, 0, 0, 16)
+                    layoutParams = cardLp
+                }
+
+                val lower = (app.packageName + app.appName).lowercase()
+                val iconStr = when {
+                    lower.contains("youtube") -> "🔴"
+                    lower.contains("tiktok") || lower.contains("trill") -> "🎵"
+                    lower.contains("facebook") -> "🔵"
+                    lower.contains("zalo") -> "📘"
+                    lower.contains("messenger") -> "💬"
+                    lower.contains("azota") || lower.contains("k12") || app.category == "STUDY" -> "📚"
+                    lower.contains("game") || app.category == "GAME" -> "🎮"
+                    else -> "📱"
+                }
+
+                val tvIcon = TextView(this).apply {
+                    text = iconStr
+                    textSize = 20f
+                    setPadding(0, 0, 24, 0)
+                }
+
+                val infoLayout = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                }
+
+                val tvTitle = TextView(this).apply {
+                    text = app.appName
+                    setTextColor(Color.parseColor("#F8FAFC"))
+                    textSize = 14f
+                    setTypeface(null, Typeface.BOLD)
+                }
+
+                val tvCat = TextView(this).apply {
+                    text = "${app.categoryLabel} • ${app.durationMinutes} phút"
+                    setTextColor(Color.parseColor("#94A3B8"))
+                    textSize = 11f
+                }
+
+                infoLayout.addView(tvTitle)
+                infoLayout.addView(tvCat)
+
+                val tvDur = TextView(this).apply {
+                    text = "${app.durationMinutes}m"
+                    setTextColor(Color.parseColor("#38BDF8"))
+                    textSize = 14f
+                    setTypeface(null, Typeface.BOLD)
+                }
+
+                appCard.addView(tvIcon)
+                appCard.addView(infoLayout)
+                appCard.addView(tvDur)
+
+                layoutParentAppsContainer.addView(appCard)
+            }
+        }
+    }
+
+    private fun loadParentHubData(isBackgroundPoll: Boolean = false) {
         val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
         val currentCode = prefs.getString("family_code", "CVA-8A20") ?: "CVA-8A20"
-        tvParentHubFamilyCode.text = currentCode
+        if (!isBackgroundPoll) {
+            tvParentHubFamilyCode.text = currentCode
+
+            btnParentAddChild.setOnClickListener {
+                showAddChildDialog(currentCode)
+            }
+        }
 
         lifecycleScope.launch(Dispatchers.IO) {
+            var networkSuccess = false
             try {
-                // 1. Thử đọc danh sách đa thiết bị từ /families/$currentCode/devices.json
                 val famReq = Request.Builder()
                     .url("$FIREBASE_RTDB_URL/families/$currentCode/devices.json")
                     .build()
-                var handled = false
+                val children = mutableListOf<FamilyChildDevice>()
+                val now = System.currentTimeMillis()
+
                 firebaseClient.newCall(famReq).execute().use { response ->
                     if (response.isSuccessful) {
+                        networkSuccess = true
                         val bodyStr = response.body?.string()
                         if (!bodyStr.isNullOrEmpty() && bodyStr != "null") {
                             val json = JSONObject(bodyStr)
                             val keys = json.keys()
-                            var totalDevices = 0
-                            var onlineDevices = 0
-                            val deviceNames = mutableListOf<String>()
-                            val now = System.currentTimeMillis()
-
                             while (keys.hasNext()) {
                                 val devKey = keys.next()
                                 val devObj = json.optJSONObject(devKey) ?: continue
-                                if (devObj.optBoolean("isPaired", true) || devObj.optString("status") == "paired") {
-                                    totalDevices++
+                                if (devObj.optBoolean("isPaired", false) || devObj.optString("status") == "paired") {
+                                    val savedChildName = devObj.optString("childName", "")
                                     val model = devObj.optString("deviceModel", "Thiết bị con")
+                                    val childName = if (savedChildName.isNotEmpty()) savedChildName else "Con ($model)"
                                     val lastSync = devObj.optLong("lastSync", 0L)
                                     val lastHeartbeat = devObj.optLong("lastHeartbeat", 0L)
                                     val lastContact = maxOf(lastSync, lastHeartbeat)
-                                    val isOnline = lastContact > 0 && (now - lastContact) <= 45000L
+                                    val isOnline = computeDeviceOnlineStatus(devObj, now)
 
-                                    if (isOnline) {
-                                        onlineDevices++
-                                        deviceNames.add("🟢 $model")
-                                    } else {
-                                        deviceNames.add("🔴 $model")
-                                    }
-                                }
-                            }
-
-                            if (totalDevices > 0) {
-                                handled = true
-                                withContext(Dispatchers.Main) {
-                                    if (onlineDevices == totalDevices) {
-                                        tvParentChildSubtitle.text = "🟢 $onlineDevices/$totalDevices thiết bị trực tuyến (${deviceNames.joinToString(", ")})"
-                                    } else if (onlineDevices > 0) {
-                                        tvParentChildSubtitle.text = "🟡 $onlineDevices/$totalDevices trực tuyến (${deviceNames.joinToString(", ")})"
-                                    } else {
-                                        tvParentChildSubtitle.text = "🔴 $totalDevices thiết bị ngoại tuyến (${deviceNames.joinToString(", ")})"
-                                    }
+                                    children.add(
+                                        FamilyChildDevice(
+                                            deviceId = devKey,
+                                            childName = childName,
+                                            deviceModel = model,
+                                            isOnline = isOnline,
+                                            lastContact = lastContact,
+                                            rawObj = devObj
+                                        )
+                                    )
                                 }
                             }
                         }
                     }
                 }
 
-                // 2. Dự phòng: Đọc legacy /devices/$currentCode.json nếu chưa có danh sách
-                if (!handled) {
-                    val req = Request.Builder()
+                if (children.isEmpty() && networkSuccess) {
+                    val legacyReq = Request.Builder()
                         .url("$FIREBASE_RTDB_URL/devices/$currentCode.json")
                         .build()
-                    firebaseClient.newCall(req).execute().use { response ->
-                        if (response.isSuccessful) {
-                            val bodyStr = response.body?.string()
-                            if (!bodyStr.isNullOrEmpty() && bodyStr != "null") {
-                                val json = JSONObject(bodyStr)
-                                val model = json.optString("deviceModel", "Xiaomi HyperOS")
+                    firebaseClient.newCall(legacyReq).execute().use { resp ->
+                        if (resp.isSuccessful) {
+                            val bStr = resp.body?.string()
+                            if (!bStr.isNullOrEmpty() && bStr != "null") {
+                                val json = JSONObject(bStr)
                                 val isPaired = json.optBoolean("isPaired", false)
-                                val lastSync = json.optLong("lastSync", 0L)
-                                val now = System.currentTimeMillis()
-                                val diffSec = if (lastSync > 0) (now - lastSync) / 1000 else 999999L
-                                val isOnline = diffSec <= 45
-
-                                withContext(Dispatchers.Main) {
-                                    if (isPaired) {
-                                        if (isOnline) {
-                                            tvParentChildSubtitle.text = "🟢 Trực tuyến • $model"
-                                        } else {
-                                            val minAgo = diffSec / 60
-                                            val timeText = if (minAgo < 1) "vừa ngắt mạng" else "mất mạng ${minAgo}m trước"
-                                            tvParentChildSubtitle.text = "🔴 Ngoại tuyến ($timeText) • $model"
-                                        }
-                                    } else {
-                                        tvParentChildSubtitle.text = "Chờ học sinh kết nối..."
-                                    }
-                                }
-                            } else {
-                                withContext(Dispatchers.Main) {
-                                    tvParentChildSubtitle.text = "Chờ học sinh kết nối..."
+                                if (isPaired) {
+                                    val model = json.optString("deviceModel", "Thiết bị con")
+                                    val savedName = json.optString("childName", "")
+                                    val childName = if (savedName.isNotEmpty()) savedName else "Con ($model)"
+                                    val lastSync = json.optLong("lastSync", 0L)
+                                    val isOnline = computeDeviceOnlineStatus(json, now)
+                                    children.add(
+                                        FamilyChildDevice(
+                                            deviceId = currentCode,
+                                            childName = childName,
+                                            deviceModel = model,
+                                            isOnline = isOnline,
+                                            lastContact = lastSync,
+                                            rawObj = json
+                                        )
+                                    )
                                 }
                             }
+                        }
+                    }
+                }
+
+                withContext(Dispatchers.Main) {
+                    if (networkSuccess) {
+                        familyChildrenList.clear()
+                        familyChildrenList.addAll(children)
+
+                        if (familyChildrenList.isNotEmpty()) {
+                            if (activeSelectedChildId.isEmpty() || familyChildrenList.none { it.deviceId == activeSelectedChildId }) {
+                                activeSelectedChildId = familyChildrenList.first().deviceId
+                            }
+                            val activeChild = familyChildrenList.firstOrNull { it.deviceId == activeSelectedChildId }
+                                ?: familyChildrenList.first()
+
+                            renderChildSelector(currentCode)
+                            updateActiveChildDashboard(currentCode, activeChild)
+                        } else {
+                            renderEmptyChildSelector(currentCode)
+                        }
+                    } else {
+                        if (isBackgroundPoll) {
+                            // Fail-Closed Invariant: Khi polling nền gặp lỗi mạng, chuyển trạng thái thiết bị sang offline snapshot
+                            for (i in 0 until familyChildrenList.size) {
+                                val c = familyChildrenList[i]
+                                familyChildrenList[i] = c.copy(isOnline = false)
+                            }
+                            val activeChild = familyChildrenList.firstOrNull { it.deviceId == activeSelectedChildId }
+                            if (activeChild != null) {
+                                renderChildSelector(currentCode)
+                                updateActiveChildDashboard(currentCode, activeChild)
+                            }
+                        } else {
+                            renderNetworkErrorState(currentCode)
                         }
                     }
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Lỗi load Parent Hub: ${e.message}")
+                withContext(Dispatchers.Main) {
+                    if (isBackgroundPoll) {
+                        for (i in 0 until familyChildrenList.size) {
+                            val c = familyChildrenList[i]
+                            familyChildrenList[i] = c.copy(isOnline = false)
+                        }
+                        val activeChild = familyChildrenList.firstOrNull { it.deviceId == activeSelectedChildId }
+                        if (activeChild != null) {
+                            renderChildSelector(currentCode)
+                            updateActiveChildDashboard(currentCode, activeChild)
+                        }
+                    } else {
+                        renderNetworkErrorState(currentCode)
+                    }
+                }
             }
         }
     }
@@ -1238,9 +1765,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun handleConnectPairing() {
+        val inputStudentName = etStudentNameInput.text.toString().trim()
+        if (inputStudentName.isEmpty()) {
+            Toast.makeText(this, "Vui lòng nhập tên của con / học sinh!", Toast.LENGTH_SHORT).show()
+            etStudentNameInput.requestFocus()
+            return
+        }
+
         val inputCode = etPairingCodeInput.text.toString().trim().uppercase()
         if (inputCode.isEmpty()) {
             Toast.makeText(this, "Vui lòng nhập mã ghép đôi CVA-XXXX!", Toast.LENGTH_SHORT).show()
+            etPairingCodeInput.requestFocus()
             return
         }
 
@@ -1299,6 +1834,7 @@ class MainActivity : AppCompatActivity() {
 
                 val devicePayload = JSONObject().apply {
                     put("deviceId", androidId)
+                    put("childName", inputStudentName)
                     put("familyCode", inputCode)
                     put("pairingCode", inputCode)
                     put("deviceModel", "$manufacturer $model")
@@ -1357,6 +1893,7 @@ class MainActivity : AppCompatActivity() {
                     .putBoolean("is_paired", true)
                     .putString("paired_code", inputCode)
                     .putString("device_id", androidId)
+                    .putString("child_name", inputStudentName)
                     .putString(PREF_USER_ROLE, ROLE_CHILD)
                     .apply()
 
@@ -1394,7 +1931,7 @@ class MainActivity : AppCompatActivity() {
         var isOnline: Boolean
     )
 
-    private fun showChildCompanionDialog() {
+    private fun showChildCompanionDialog(preferredDeviceId: String? = null) {
         val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
         val currentCode = prefs.getString("family_code", "CVA-8A20") ?: "CVA-8A20"
 
@@ -1428,7 +1965,7 @@ class MainActivity : AppCompatActivity() {
             .create()
 
         var currentTab = "SOCIAL"
-        var targetChildDeviceId = ""
+        var targetChildDeviceId = preferredDeviceId ?: ""
         val allAppsList = mutableListOf<CompanionAppItem>()
 
         fun getAppIcon(category: String, packageName: String, appName: String): String {
@@ -1566,29 +2103,50 @@ class MainActivity : AppCompatActivity() {
                 val req = Request.Builder()
                     .url("$FIREBASE_RTDB_URL/families/$currentCode/devices.json")
                     .build()
+                var targetDeviceObj: JSONObject? = null
                 firebaseClient.newCall(req).execute().use { resp ->
                     if (resp.isSuccessful) {
                         val bodyStr = resp.body?.string()
                         if (!bodyStr.isNullOrEmpty() && bodyStr != "null") {
                             val json = JSONObject(bodyStr)
                             val keys = json.keys()
-                            var targetDeviceObj: JSONObject? = null
-                            while (keys.hasNext()) {
-                                val devKey = keys.next()
-                                val devObj = json.optJSONObject(devKey) ?: continue
-                                targetChildDeviceId = devKey
-                                targetDeviceObj = devObj
-                                break
+                            if (!preferredDeviceId.isNullOrEmpty() && json.has(preferredDeviceId)) {
+                                targetChildDeviceId = preferredDeviceId
+                                targetDeviceObj = json.optJSONObject(preferredDeviceId)
+                            } else {
+                                while (keys.hasNext()) {
+                                    val devKey = keys.next()
+                                    val devObj = json.optJSONObject(devKey) ?: continue
+                                    targetChildDeviceId = devKey
+                                    targetDeviceObj = devObj
+                                    break
+                                }
                             }
+                        }
+                    }
+                }
 
-                            if (targetDeviceObj != null) {
-                                val devModel = targetDeviceObj.optString("deviceModel", "Xiaomi")
-                                val lastSync = targetDeviceObj.optLong("lastSync", 0L)
-                                val lastHeartbeat = targetDeviceObj.optLong("lastHeartbeat", 0L)
-                                val lastContact = maxOf(lastSync, lastHeartbeat)
-                                val isOnline = (System.currentTimeMillis() - lastContact) <= 45000L
+                if (targetDeviceObj == null) {
+                    val fallbackId = if (!preferredDeviceId.isNullOrEmpty()) preferredDeviceId else currentCode
+                    val legacyReq = Request.Builder()
+                        .url("$FIREBASE_RTDB_URL/devices/$fallbackId.json")
+                        .build()
+                    firebaseClient.newCall(legacyReq).execute().use { resp ->
+                        if (resp.isSuccessful) {
+                            val bodyStr = resp.body?.string()
+                            if (!bodyStr.isNullOrEmpty() && bodyStr != "null") {
+                                targetDeviceObj = JSONObject(bodyStr)
+                                targetChildDeviceId = fallbackId
+                            }
+                        }
+                    }
+                }
 
-                                val usageObj = targetDeviceObj.optJSONObject("usage")
+                if (targetDeviceObj != null) {
+                    val devModel = targetDeviceObj.optString("deviceModel", "Thiết bị con")
+                    val isOnline = computeDeviceOnlineStatus(targetDeviceObj)
+
+                    val usageObj = targetDeviceObj.optJSONObject("usage")
                                 val balanceScore = usageObj?.optInt("balanceScore", 85) ?: 85
 
                                 val activeAppObj = targetDeviceObj.optJSONObject("active_app")
@@ -1627,7 +2185,9 @@ class MainActivity : AppCompatActivity() {
 
 
                                 withContext(Dispatchers.Main) {
-                                    tvDialogChildTitle.text = "Giám Sát: $devModel"
+                                    val savedChildName = targetDeviceObj.optString("childName", "")
+                                    val titleName = if (savedChildName.isNotEmpty()) "$savedChildName ($devModel)" else devModel
+                                    tvDialogChildTitle.text = "Giám Sát: $titleName"
                                     tvDialogBalanceScore.text = "⚖️ $balanceScore/100"
 
                                     if (isOnline) {
@@ -1672,10 +2232,7 @@ class MainActivity : AppCompatActivity() {
                                     updateTabs(currentTab)
                                 }
                             }
-                        }
-                    }
-                }
-            } catch (e: Exception) {
+                        } catch (e: Exception) {
                 Log.e(TAG, "Lỗi load data dialog companion", e)
             }
         }
