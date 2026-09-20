@@ -533,7 +533,7 @@
                     android:id="@+id/layoutParentHub"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:background="@drawable/bg_glass_card"
+                    android:background="@drawable/bg_dialog_modern"
                     android:orientation="vertical"
                     android:padding="20dp"
                     android:visibility="gone">
@@ -559,12 +559,12 @@
                         <LinearLayout
                             android:id="@+id/btnParentCopyCode"
                             android:layout_width="wrap_content"
-                            android:layout_height="32dp"
-                            android:background="@drawable/bg_compact_chip"
+                            android:layout_height="34dp"
+                            android:background="@drawable/bg_score_pill"
                             android:orientation="horizontal"
                             android:gravity="center_vertical"
-                            android:paddingLeft="10dp"
-                            android:paddingRight="10dp"
+                            android:paddingLeft="12dp"
+                            android:paddingRight="12dp"
                             android:clickable="true"
                             android:focusable="true">
 
@@ -581,7 +581,7 @@
                                 android:layout_height="wrap_content"
                                 android:text="CVA-A646"
                                 android:textColor="#FBBF24"
-                                android:textSize="11sp"
+                                android:textSize="12sp"
                                 android:textStyle="bold" />
 
                             <TextView
@@ -601,65 +601,96 @@
                         </LinearLayout>
                     </LinearLayout>
 
-                    <!-- 1. THẺ TRẠNG THÁI CON TRỰC TUYẾN LIVE -->
+                    <!-- 1. THẺ TRẠNG THÁI CON TRỰC TUYẾN LIVE (HERO CARD VỚI AVATAR SQUIRCLE) -->
                     <LinearLayout
                         android:id="@+id/layoutParentChildRow"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:background="@drawable/bg_device_card"
-                        android:orientation="vertical"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
                         android:padding="14dp"
                         android:layout_marginBottom="14dp"
                         android:clickable="true"
                         android:focusable="true">
 
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:gravity="center_vertical">
+                        <FrameLayout
+                            android:layout_width="44dp"
+                            android:layout_height="44dp"
+                            android:background="@drawable/bg_avatar_squircle"
+                            android:layout_marginEnd="12dp">
 
                             <TextView
-                                android:id="@+id/tvParentChildName"
-                                android:layout_width="0dp"
+                                android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:text="Liam Chen (Lớp 9B)"
-                                android:textColor="#F8FAFC"
-                                android:textSize="15sp"
-                                android:textStyle="bold" />
+                                android:layout_gravity="center"
+                                android:text="🎒"
+                                android:textSize="22sp" />
+                        </FrameLayout>
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
 
                             <LinearLayout
-                                android:layout_width="wrap_content"
+                                android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:orientation="horizontal"
                                 android:gravity="center_vertical">
 
-                                <View
-                                    android:id="@+id/dotParentChildOnline"
-                                    android:layout_width="8dp"
-                                    android:layout_height="8dp"
-                                    android:background="@drawable/bg_pin_dot_filled"
-                                    android:layout_marginEnd="6dp" />
-
                                 <TextView
+                                    android:id="@+id/tvParentChildName"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="Liam Chen (Lớp 9B)"
+                                    android:textColor="#F8FAFC"
+                                    android:textSize="15sp"
+                                    android:textStyle="bold" />
+
+                                <LinearLayout
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="TRỰC TUYẾN"
-                                    android:textColor="#34D399"
-                                    android:textSize="11sp"
-                                    android:textStyle="bold" />
+                                    android:orientation="horizontal"
+                                    android:gravity="center_vertical">
+
+                                    <View
+                                        android:id="@+id/dotParentChildOnline"
+                                        android:layout_width="8dp"
+                                        android:layout_height="8dp"
+                                        android:background="#64748B"
+                                        android:layout_marginEnd="6dp" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="CHỜ KẾT NỐI"
+                                        android:textColor="#94A3B8"
+                                        android:textSize="11sp"
+                                        android:textStyle="bold" />
+                                </LinearLayout>
                             </LinearLayout>
+
+                            <TextView
+                                android:id="@+id/tvParentChildSubtitle"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="● Đang kiểm tra trạng thái..."
+                                android:textColor="#94A3B8"
+                                android:textSize="12sp"
+                                android:layout_marginTop="4dp" />
                         </LinearLayout>
 
                         <TextView
-                            android:id="@+id/tvParentChildSubtitle"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="● Đang mở: TikTok (04:57)"
-                            android:textColor="#94A3B8"
-                            android:textSize="12sp"
-                            android:layout_marginTop="6dp" />
+                            android:text=" ➔"
+                            android:textColor="#38BDF8"
+                            android:textSize="16sp"
+                            android:textStyle="bold"
+                            android:layout_marginStart="8dp" />
                     </LinearLayout>
 
                     <!-- 2. THẺ THỜI LƯỢNG SỬ DỤNG HÔM NAY (CHUẨN APPLE SCREEN TIME) -->
@@ -756,9 +787,9 @@
 
                         <LinearLayout
                             android:layout_width="0dp"
-                            android:layout_height="52dp"
+                            android:layout_height="54dp"
                             android:layout_weight="1"
-                            android:background="@drawable/bg_device_card"
+                            android:background="@drawable/bg_app_item_card"
                             android:orientation="horizontal"
                             android:gravity="center_vertical"
                             android:paddingLeft="10dp"
@@ -769,7 +800,7 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:text="🎵"
-                                android:textSize="16sp"
+                                android:textSize="18sp"
                                 android:layout_marginEnd="8dp" />
 
                             <LinearLayout
@@ -797,9 +828,9 @@
 
                         <LinearLayout
                             android:layout_width="0dp"
-                            android:layout_height="52dp"
+                            android:layout_height="54dp"
                             android:layout_weight="1"
-                            android:background="@drawable/bg_device_card"
+                            android:background="@drawable/bg_app_item_card"
                             android:orientation="horizontal"
                             android:gravity="center_vertical"
                             android:paddingLeft="10dp"
@@ -810,7 +841,7 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:text="📚"
-                                android:textSize="16sp"
+                                android:textSize="18sp"
                                 android:layout_marginEnd="8dp" />
 
                             <LinearLayout
@@ -846,9 +877,9 @@
 
                         <LinearLayout
                             android:layout_width="0dp"
-                            android:layout_height="52dp"
+                            android:layout_height="54dp"
                             android:layout_weight="1"
-                            android:background="@drawable/bg_device_card"
+                            android:background="@drawable/bg_app_item_card"
                             android:orientation="horizontal"
                             android:gravity="center_vertical"
                             android:paddingLeft="10dp"
@@ -859,7 +890,7 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:text="▶️"
-                                android:textSize="16sp"
+                                android:textSize="18sp"
                                 android:layout_marginEnd="8dp" />
 
                             <LinearLayout
@@ -887,9 +918,9 @@
 
                         <LinearLayout
                             android:layout_width="0dp"
-                            android:layout_height="52dp"
+                            android:layout_height="54dp"
                             android:layout_weight="1"
-                            android:background="@drawable/bg_device_card"
+                            android:background="@drawable/bg_app_item_card"
                             android:orientation="horizontal"
                             android:gravity="center_vertical"
                             android:paddingLeft="10dp"
@@ -900,7 +931,7 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:text="🌐"
-                                android:textSize="16sp"
+                                android:textSize="18sp"
                                 android:layout_marginEnd="8dp" />
 
                             <LinearLayout
@@ -938,9 +969,9 @@
                             android:id="@+id/btnParentTriggerUnpair"
                             android:layout_width="match_parent"
                             android:layout_height="44dp"
-                            android:background="@drawable/bg_danger_pill"
-                            android:text="Ngắt Kết Nối An Toàn"
-                            android:textColor="#EF4444"
+                            android:background="@drawable/bg_safe_unpair_btn"
+                            android:text="🔒 Ngắt Kết Nối An Toàn"
+                            android:textColor="#94A3B8"
                             android:textSize="13sp"
                             android:textStyle="bold"
                             android:gravity="center"

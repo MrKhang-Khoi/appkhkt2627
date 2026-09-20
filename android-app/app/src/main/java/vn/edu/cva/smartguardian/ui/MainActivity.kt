@@ -1489,7 +1489,7 @@ class MainActivity : AppCompatActivity() {
                     .thenByDescending { it.lastTimeUsed }
             )
 
-            val timeFormat = SimpleDateFormat("HH:mm Hôm nay", Locale.getDefault())
+            val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
 
             for (item in sortedList) {
                 val itemView = layoutInflater.inflate(R.layout.item_companion_app, layoutDialogAppListContainer, false)
@@ -1519,7 +1519,7 @@ class MainActivity : AppCompatActivity() {
                 tvItemAppDuration.text = if (h > 0) "${h} giờ ${m} phút (${item.durationMinutes}p)" else "${item.durationMinutes} phút"
 
                 tvItemAppLastUsed.text = if (item.lastTimeUsed > 0) {
-                    timeFormat.format(Date(item.lastTimeUsed))
+                    "${timeFormat.format(Date(item.lastTimeUsed))} hôm nay"
                 } else {
                     "Chưa mở hôm nay"
                 }
@@ -1624,53 +1624,7 @@ class MainActivity : AppCompatActivity() {
                                     }
                                 }
 
-                                // Đảm bảo luôn có YouTube, TikTok, Facebook trong Tab Mạng xã hội
-                                val hasYouTube = loadedApps.any { it.packageName.contains("youtube") }
-                                if (!hasYouTube) {
-                                    val isYtOnline = activeIsFg && activePkg.contains("youtube")
-                                    loadedApps.add(
-                                        CompanionAppItem(
-                                            packageName = "com.google.android.youtube",
-                                            appName = "YouTube",
-                                            category = "SOCIAL",
-                                            categoryLabel = "Mạng xã hội & Video",
-                                            durationMinutes = if (isYtOnline) 15 else 0,
-                                            lastTimeUsed = if (isYtOnline) System.currentTimeMillis() else 0L,
-                                            isOnline = isYtOnline
-                                        )
-                                    )
-                                }
 
-                                val hasTikTok = loadedApps.any { it.packageName.contains("trill") || it.packageName.contains("musically") || it.appName.contains("TikTok") }
-                                if (!hasTikTok) {
-                                    val isTtOnline = activeIsFg && (activePkg.contains("trill") || activePkg.contains("musically"))
-                                    loadedApps.add(
-                                        CompanionAppItem(
-                                            packageName = "com.ss.android.ugc.trill",
-                                            appName = "TikTok",
-                                            category = "SOCIAL",
-                                            categoryLabel = "Mạng xã hội Video ngắn",
-                                            durationMinutes = if (isTtOnline) 25 else 0,
-                                            lastTimeUsed = if (isTtOnline) System.currentTimeMillis() else 0L,
-                                            isOnline = isTtOnline
-                                        )
-                                    )
-                                }
-
-                                val hasFacebook = loadedApps.any { it.packageName.contains("facebook") }
-                                if (!hasFacebook) {
-                                    loadedApps.add(
-                                        CompanionAppItem(
-                                            packageName = "com.facebook.katana",
-                                            appName = "Facebook",
-                                            category = "SOCIAL",
-                                            categoryLabel = "Mạng xã hội",
-                                            durationMinutes = 0,
-                                            lastTimeUsed = 0L,
-                                            isOnline = false
-                                        )
-                                    )
-                                }
 
                                 withContext(Dispatchers.Main) {
                                     tvDialogChildTitle.text = "Giám Sát: $devModel"
