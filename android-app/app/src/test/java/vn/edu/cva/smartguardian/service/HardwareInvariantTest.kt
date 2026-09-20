@@ -1456,6 +1456,241 @@ class HardwareInvariantTest {
         }
     }
 
+    @Test
+    fun testUsageTrackerServiceClosePolledSessionResetsStateAndRecordsSession() {
+        val fakePrefs = FakeSharedPreferences()
+        val context = FakeTestContext(fakePrefs)
+
+        UsageTrackerService.lastPolledForegroundPkg = "com.study.math"
+        UsageTrackerService.lastPolledForegroundStartTime = System.currentTimeMillis() - 5000L
+
+        UsageTrackerService.closePolledSession(context, "SCREEN_OFF")
+
+        assertTrue("lastPolledForegroundPkg must be empty after closePolledSession", UsageTrackerService.lastPolledForegroundPkg.isEmpty())
+        assertEquals("lastPolledForegroundStartTime must be 0 after closePolledSession", 0L, UsageTrackerService.lastPolledForegroundStartTime)
+
+        // Session must be recorded in prefs (đợi tối đa 1000ms cho Dispatchers.IO hoàn tất)
+        val todayStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault()).format(java.util.Date())
+        val appKey = "session_${todayStr}_com.study.math"
+        var elapsed = 0
+        while (!fakePrefs.contains(appKey) && elapsed < 1000) {
+            Thread.sleep(50)
+            elapsed += 50
+        }
+
+        assertTrue("Recorded session must contain app key: $appKey", fakePrefs.contains(appKey))
+        val duration = fakePrefs.getLong(appKey, 0L)
+        assertTrue("Session duration must be at least 4000ms", duration >= 4000L)
+    }
+
+    @Test
+    fun testUsageTrackerServiceClosePolledSessionThreadSafetyAndDeduplication() {
+        val fakePrefs = FakeSharedPreferences()
+        val context = FakeTestContext(fakePrefs)
+
+        UsageTrackerService.lastPolledForegroundPkg = "com.study.concurrent"
+        UsageTrackerService.lastPolledForegroundStartTime = System.currentTimeMillis() - 3000L
+
+        // Gọi đồng thời từ 5 luồng khác nhau
+        val threads = (1..5).map {
+            Thread {
+                UsageTrackerService.closePolledSession(context, "SCREEN_OFF")
+            }
+        }
+        threads.forEach { it.start() }
+        threads.forEach { it.join() }
+
+        // State RAM vẫn sạch 100%
+        assertTrue(UsageTrackerService.lastPolledForegroundPkg.isEmpty())
+        assertEquals(0L, UsageTrackerService.lastPolledForegroundStartTime)
+
+        // Đợi IO hoàn tất
+        val todayStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault()).format(java.util.Date())
+        val appKey = "session_${todayStr}_com.study.concurrent"
+        var elapsed = 0
+        while (!fakePrefs.contains(appKey) && elapsed < 1000) {
+            Thread.sleep(50)
+            elapsed += 50
+        }
+
+        assertTrue(fakePrefs.contains(appKey))
+        val duration = fakePrefs.getLong(appKey, 0L)
+        // Dù 5 luồng gọi đồng thời, session token chống trùng lặp chỉ cho phép ghi nhận DUY NHẤT 1 lần (~3000ms, không được nhân 5 thành 15000ms)
+        assertTrue("Duration must be recorded only once (~3000ms), but was $duration", duration in 2500L..5000L)
+    }
+
+    @Test
+    fun testUsageTrackerServiceClosePolledSessionIgnoresShortDuration() {
+        val fakePrefs = FakeSharedPreferences()
+        val context = FakeTestContext(fakePrefs)
+
+        UsageTrackerService.lastPolledForegroundPkg = "com.quick.flick"
+        UsageTrackerService.lastPolledForegroundStartTime = System.currentTimeMillis() - 200L // < 1000ms
+
+        UsageTrackerService.closePolledSession(context, "SCREEN_OFF")
+
+        assertTrue("lastPolledForegroundPkg must be empty", UsageTrackerService.lastPolledForegroundPkg.isEmpty())
+        assertEquals("lastPolledForegroundStartTime must be 0", 0L, UsageTrackerService.lastPolledForegroundStartTime)
+
+        val todayStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault()).format(java.util.Date())
+        val appKey = "session_${todayStr}_com.quick.flick"
+        assertFalse("Sub-second session must NOT be recorded", fakePrefs.contains(appKey))
+    }
+
+    @Test
+    fun testBankPackagesExcludedFromMonitoring() {
+        // Kiểm tra hàm chuẩn hóa isBankPackage với các biến thể hoa, thường, hậu tố
+        assertTrue("Vietcombank lowercase must be excluded", GuardianAccessibilityService.isBankPackage("com.vcb"))
+        assertTrue("Vietcombank uppercase com.VCB must be excluded", GuardianAccessibilityService.isBankPackage("com.VCB"))
+        assertTrue("VCB Digibank must be excluded", GuardianAccessibilityService.isBankPackage("com.vcb.digibank"))
+        assertTrue("MB Bank must be excluded", GuardianAccessibilityService.isBankPackage("com.mbmobile"))
+        assertTrue("Techcombank must be excluded", GuardianAccessibilityService.isBankPackage("vn.com.techcombank.bb.app"))
+        assertTrue("BIDV uppercase must be excluded", GuardianAccessibilityService.isBankPackage("COM.VNPAY.BIDV"))
+        assertTrue("VPBank must be excluded", GuardianAccessibilityService.isBankPackage("com.vnpay.vpbankonline"))
+        assertTrue("MoMo must be excluded", GuardianAccessibilityService.isBankPackage("vn.momo.platform"))
+        assertTrue("Generic mbanking must be excluded", GuardianAccessibilityService.isBankPackage("com.custom.bank.mbanking"))
+        assertFalse("Regular study app must NOT be excluded", GuardianAccessibilityService.isBankPackage("vn.edu.azota"))
+    }
+
+    @Test
+    fun testForegroundEvidenceRequiresImportanceForegroundForProcessMatch() {
+        val target = "com.gaming.app"
+
+        // Process matches target but importance is IMPORTANCE_CACHED (400) -> Must reject
+        val cachedResult = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = null,
+            foregroundProcessPkg = target,
+            processImportance = ActivityManager.RunningAppProcessInfo.IMPORTANCE_CACHED,
+            usageStatsLastResumedPkg = null,
+            targetPkg = target
+        )
+        assertFalse("Cached process must NOT be accepted as foreground", cachedResult)
+
+        // Process matches target and importance is IMPORTANCE_FOREGROUND (100) -> Must accept
+        val fgResult = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = null,
+            foregroundProcessPkg = target,
+            processImportance = ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND,
+            usageStatsLastResumedPkg = null,
+            targetPkg = target
+        )
+        assertTrue("Active foreground process must be accepted", fgResult)
+    }
+
+    @Test
+    fun testEvaluateForegroundEvidenceAcceptsSubProcessWithColon() {
+        val basePkg = "com.supercell.clashofclans"
+        val subProcess = "com.supercell.clashofclans:remote"
+
+        // Sub-process với dấu hai chấm (package:name) và IMPORTANCE_FOREGROUND -> BẮT BUỘC chấp nhận theo SPEC
+        val result = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = null,
+            foregroundProcessPkg = subProcess,
+            processImportance = ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND,
+            usageStatsLastResumedPkg = basePkg,
+            targetPkg = basePkg
+        )
+        assertTrue("Sub-process package:name with IMPORTANCE_FOREGROUND must be accepted", result)
+
+        // Sub-process nhưng importance không phải FOREGROUND -> BẮT BUỘC từ chối
+        val cachedSubResult = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = null,
+            foregroundProcessPkg = subProcess,
+            processImportance = ActivityManager.RunningAppProcessInfo.IMPORTANCE_CACHED,
+            usageStatsLastResumedPkg = null,
+            targetPkg = basePkg
+        )
+        assertFalse("Sub-process with CACHED importance must be rejected", cachedSubResult)
+    }
+
+    @Test
+    fun testAccessibilityClosesPreviousSessionWhenBankAppOpened() {
+        val fakePrefs = FakeSharedPreferences()
+        val context = FakeTestContext(fakePrefs)
+
+        // Thiết lập trạng thái đang mở app học tập
+        UsageTrackerService.lastPolledForegroundPkg = "vn.edu.azota"
+        UsageTrackerService.lastPolledForegroundStartTime = System.currentTimeMillis() - 4000L
+
+        // Mô phỏng mở app ngân hàng VCB Digibank -> Kích hoạt chốt an toàn
+        UsageTrackerService.closePolledSession(context, "BANK_APP_OPENED")
+
+        // Bộ đếm RAM phải được reset về rỗng ngay lập tức
+        assertTrue("lastPolledForegroundPkg must be reset immediately", UsageTrackerService.lastPolledForegroundPkg.isEmpty())
+        assertEquals("lastPolledForegroundStartTime must be reset immediately", 0L, UsageTrackerService.lastPolledForegroundStartTime)
+
+        // Đợi background IO ghi nhận phiên học tập trước đó
+        val todayStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault()).format(java.util.Date())
+        val appKey = "session_${todayStr}_vn.edu.azota"
+        var elapsed = 0
+        while (!fakePrefs.contains(appKey) && elapsed < 1000) {
+            Thread.sleep(50)
+            elapsed += 50
+        }
+        assertTrue("Previous app session must be safely recorded", fakePrefs.contains(appKey))
+
+        // Phiên của app ngân hàng tuyệt đối KHÔNG ĐƯỢC ghi nhận
+        val bankKey = "session_${todayStr}_com.vcb"
+        assertFalse("Bank app session must NEVER be recorded", fakePrefs.contains(bankKey))
+    }
+
+    @Test
+    fun testUsageStatsManagerPollingOperatesConcurrentlyWithAccessibility() {
+        val fakePrefs = FakeSharedPreferences()
+        val context = FakeTestContext(fakePrefs)
+
+        // Đảm bảo trạng thái phần cứng online
+        GuardianAccessibilityService.isScreenOnState = true
+
+        // Thiết lập phiên tiền cảnh độc lập cho polling engine
+        UsageTrackerService.lastPolledForegroundPkg = "com.duolingo"
+        UsageTrackerService.lastPolledForegroundStartTime = System.currentTimeMillis() - 3500L
+
+        // Đóng phiên polling độc lập bất kể Accessibility Service có đang chạy hay không
+        UsageTrackerService.closePolledSession(context, "SCREEN_OFF")
+
+        assertTrue("Polling state must reset cleanly", UsageTrackerService.lastPolledForegroundPkg.isEmpty())
+        assertEquals(0L, UsageTrackerService.lastPolledForegroundStartTime)
+
+        // Kiểm tra session được ghi nhận vào SharedPreferences độc lập
+        val todayStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault()).format(java.util.Date())
+        val appKey = "session_${todayStr}_com.duolingo"
+        var elapsed = 0
+        while (!fakePrefs.contains(appKey) && elapsed < 1000) {
+            Thread.sleep(50)
+            elapsed += 50
+        }
+        assertTrue("Duolingo session must be recorded independently", fakePrefs.contains(appKey))
+        val recordedDuration = fakePrefs.getLong(appKey, 0L)
+        assertTrue("Duration must be at least 3000ms", recordedDuration >= 3000L)
+    }
+
+    @Test
+    fun testDualEngineSessionDeduplicationPreventsDoubleAccounting() {
+        val fakePrefs = FakeSharedPreferences()
+        val context = FakeTestContext(fakePrefs)
+
+        val targetPkg = "com.google.android.youtube"
+        val sessionStart = System.currentTimeMillis() - 10000L
+        val sessionDuration = 10000L
+        val sharedToken = "${targetPkg}_${sessionStart}"
+
+        // Engine 1 (Accessibility Service) ghi nhận phiên
+        UsageTrackerService.recordAppSession(context, targetPkg, sessionDuration, sharedToken)
+
+        val todayStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault()).format(java.util.Date())
+        val appKey = "session_${todayStr}_$targetPkg"
+        val initialRecorded = fakePrefs.getLong(appKey, 0L)
+        assertEquals("Initial recording must match 10000ms", 10000L, initialRecorded)
+
+        // Engine 2 (UsageStatsManager Polling) cùng ghi nhận cùng phiên với cùng sessionToken
+        UsageTrackerService.recordAppSession(context, targetPkg, sessionDuration, sharedToken)
+
+        val afterDuplicate = fakePrefs.getLong(appKey, 0L)
+        // Deduplication set BẮT BUỘC phải chặn đứng lần ghi thứ hai, thời lượng không được nhân đôi thành 20000ms
+        assertEquals("Deduplication must prevent double accounting, duration must stay 10000ms", 10000L, afterDuplicate)
+    }
+
     private class FakeTestContext(
         val prefs: FakeSharedPreferences
     ) : ContextWrapper(null) {

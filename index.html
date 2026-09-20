@@ -3085,6 +3085,17 @@
         statusSpan.style.fontWeight = '700';
         statusSpan.textContent = `● ${status.text}`;
         dashChildStatus.appendChild(statusSpan);
+
+        const engineBadge = document.createElement('span');
+        engineBadge.style.fontSize = '0.70rem';
+        engineBadge.style.color = '#38bdf8';
+        engineBadge.style.background = 'rgba(56, 189, 248, 0.12)';
+        engineBadge.style.border = '1px solid rgba(56, 189, 248, 0.3)';
+        engineBadge.style.borderRadius = '999px';
+        engineBadge.style.padding = '2px 8px';
+        engineBadge.style.marginLeft = '8px';
+        engineBadge.textContent = '🛡️ Chuẩn Google Screen Time (An Toàn Ngân Hàng)';
+        dashChildStatus.appendChild(engineBadge);
       }
 
       if (dashOfflineNotice) {
@@ -3097,10 +3108,10 @@
       const dashOtaNoticeDetail = document.getElementById('dashOtaNoticeDetail');
       if (dashOtaNoticeDetail) {
         const appVer = deviceData.appVersion ? `v${deviceData.appVersion}` : 'Bản cũ (chưa rõ)';
-        if (deviceData.appVersion === '1.2.5') {
-          dashOtaNoticeDetail.textContent = `Máy con: v1.2.5 (Mới nhất) - Đã tối ưu nhận diện app`;
+        if (deviceData.appVersion === '1.2.6') {
+          dashOtaNoticeDetail.textContent = `Máy con: v1.2.6 (Mới nhất) - Chuẩn Google Screen Time (An toàn Ngân hàng)`;
         } else {
-          dashOtaNoticeDetail.textContent = `Máy con đang chạy: ${appVer} → Cần nâng cấp v1.2.5 để nhận diện app`;
+          dashOtaNoticeDetail.textContent = `Máy con đang chạy: ${appVer} → Cần nâng cấp v1.2.6 để tương thích app ngân hàng`;
         }
       }
 

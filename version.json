@@ -1,17 +1,16 @@
 {
-  "versionCode": 25,
-  "versionName": "1.2.5",
-  "latestVersionCode": 25,
-  "latestVersionName": "1.2.5",
+  "versionCode": 26,
+  "versionName": "1.2.6",
+  "latestVersionCode": 26,
+  "latestVersionName": "1.2.6",
   "minSupportedVersion": 1,
   "isForceUpdate": false,
-  "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.2.5.apk",
-  "sha256": "13A37900B8A9559042996F255531C1F1CEFAA17D5E8110F5B0A53D7D9741F684",
   "fileSize": "5.79 MB",
+  "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.2.6.apk",
+  "sha256": "248F07B13A3A1E472F2BBBED949C228B3D9411BD0B9400FAFB52FE74C6DEC72B",
   "changelog": [
-    "Cải tiến nhận diện ứng dụng foreground trên Xiaomi HyperOS / MIUI bằng cơ chế Dual-Trigger và quét sâu AccessibilityWindowInfo",
-    "Thêm thông báo hệ thống tự động phát hiện bản cập nhật OTA ngầm trong UsageTrackerService",
-    "Bảo toàn tab hiển thị và tự động cảnh báo phiên bản cũ trên Web Portal phụ huynh"
+    "Chuyển đổi kiến trúc Chuẩn Google Screen Time (UsageStatsManager): Đo đạc thời lượng và nhận diện ứng dụng độc lập 100%, triệt tiêu cảnh báo bảo mật từ các ứng dụng ngân hàng, bổ sung danh sách loại trừ ngân hàng và phân tầng quyền hạn On-Demand."
   ],
-  "releaseNotes": "Bản cập nhật v1.2.5 tối ưu hóa nhận diện ứng dụng trên Xiaomi HyperOS và bổ sung thông báo cập nhật ngầm tức thời."
+  "releaseNotes": "Chuyển đổi kiến trúc Chuẩn Google Screen Time (UsageStatsManager): Đo đạc thời lượng và nhận diện ứng dụng độc lập 100%, triệt tiêu cảnh báo bảo mật từ các ứng dụng ngân hàng, bổ sung danh sách loại trừ ngân hàng và phân tầng quyền hạn On-Demand.",
+  "updatedAt": 1789897440947
 }

@@ -15,8 +15,15 @@
 ## 2. CÁC RÀNG BUỘC KỸ THUẬT BẮT BUỘC (HARD CONSTRAINTS)
 
 ### 2.1. Phía Android App (Kotlin Native):
-- **Bất biến phần cứng (Hardware Invariant)**:
-  - Khi màn hình tắt (`ACTION_SCREEN_OFF`), NGAY LẬP TỨC ngắt trạng thái Online và chốt phiên đếm giờ của app hiện tại. Tuyệt đối cấm đếm giờ ảo khi máy tắt màn hình hoặc khóa máy.
+- **Kiến trúc Giám sát Tiền cảnh & Chuẩn Google Screen Time (UsageStatsManager)**:
+  - Hệ thống áp dụng kiến trúc phân tầng quyền hạn On-Demand: Mặc định sử dụng `UsageStatsManager` (`PACKAGE_USAGE_STATS` - Chuẩn Google Screen Time) để phát hiện và đo đạc thời lượng ứng dụng mà không cần bật quyền Trợ năng (Accessibility), loại bỏ hoàn toàn nguy cơ bị các giải pháp bảo mật RASP của ngân hàng quét và cảnh báo.
+  - Quyền Trợ năng (Accessibility) chỉ đóng vai trò tùy chọn nâng cao khi phụ huynh cần tính năng can thiệp/chặn web trực tiếp trên trình duyệt.
+  - **Loại trừ tuyệt đối ứng dụng Ngân hàng (RASP Bank Safety)**: Khai báo danh sách `BANK_PACKAGES` (Vietcombank, MB Bank, Techcombank, BIDV, VPBank, VietinBank, Agribank, TPBank, MoMo, Sacombank, SHB, ACB, HDBank, MyVIB, SeABank, OCB...) cùng các gói chứa tiền tố `mbanking`/`ebanking`. Khi phát hiện ứng dụng thuộc danh sách này, hệ thống lập tức thoát, không quét View Tree, không can thiệp, không thu thập telemetry nhạy cảm và chốt phiên an toàn.
+- **Bất biến phần cứng (Hardware Invariant) & Cơ chế Chốt Phiên Polling Độc Lập**:
+  - Khi màn hình tắt (`ACTION_SCREEN_OFF`), khóa máy Keyguard (`isKeyguardLocked`), hoặc dịch vụ bị hủy (`onDestroy`), NGAY LẬP TỨC ngắt trạng thái Online và chốt phiên đếm giờ của app hiện tại. Tuyệt đối cấm đếm giờ ảo khi máy tắt màn hình hoặc khóa máy.
+  - **Non-blocking & Dispatchers.IO Invariant**: Hàm `closePolledSession()` và các luồng xử lý phần cứng (`ACTION_SCREEN_OFF`, `handleScreenOff`) chỉ chụp snapshot trạng thái trong RAM và reset biến bộ đếm dưới lock trong thời gian ngắn nhất (< 1ms). Mọi thao tác đĩa (`recordAppSession`) và cập nhật mạng (`reportActiveApp`) BẮT BUỘC phải được dispatch sang background coroutine `Dispatchers.IO`, kèm session token chống ghi nhận trùng lặp (`polled_${pkg}_${startTime}`) và stale epoch fencing. Tuyệt đối không thực hiện I/O đĩa hoặc mạng chặn luồng BroadcastReceiver.
+  - **Đồng bộ hóa & Chống Race Condition trong Polling**: State machine của polling (`lastPolledForegroundPkg`, `lastPolledForegroundStartTime`) được bảo vệ nguyên tử bằng `synchronized(statsLock)`. Trước khi ghi nhận state mới, bắt buộc phải double-check `isScreenOnState` và `telemetryEpoch` để ngăn ngừa race condition khi màn hình tắt giữa chu kỳ polling.
+  - **Fallback tiền cảnh nghiêm ngặt**: Khi không có sự kiện `ACTIVITY_RESUMED` trong 30 giây, fallback qua `UsageStats` bắt buộc phải phối hợp đối chiếu với `ActivityManager.runningAppProcesses` có `importance == IMPORTANCE_FOREGROUND` (100) và vượt qua kiểm định `GuardianAccessibilityService.evaluateForegroundEvidence()`. Nghiêm cấm nhận bừa stale package chỉ dựa vào `lastTimeUsed`.
   - Phân biệt triệt để ứng dụng chạy Foreground (chiếm màn hình) vs Background. Nhận diện cả process con mang tên `package:processName` có tầm quan trọng `IMPORTANCE_FOREGROUND` (100).
   - `LruSessionSet` kế thừa `LinkedHashSet<String>`, bị chặn tối đa 500 entries để chống rò rỉ bộ nhớ (OOM), đồng bộ toàn diện trên toàn bộ giao diện Collection (`size`, `isEmpty`, `contains`, `add`, `remove`, `clear`, `iterator`, `containsAll`, `addAll`, `removeAll`, `retainAll`, `equals`, `hashCode`, `removeIf`, `forEach`, `spliterator`, `toArray`, `clone`). Phương thức `addAll` được trang bị self-reference guard (`if (elements === this) return false`) để tránh biến đổi thứ tự ngoài ý muốn khi truyền chính nó.
   - Chuẩn ngữ nghĩa LRU trên cả thao tác đọc và ghi:
@@ -53,15 +60,17 @@
     3. Ngữ nghĩa LRU access-order của `LruSessionSet` trên cả thao tác đọc (`contains`) và ghi (`add`), cùng snapshot iterator chống đệ quy.
     4. An toàn đa luồng trên `sessionLock` và `statsLock`.
     5. Fencing logic kiểm tra điều kiện phần cứng (`evaluateHardwareOnline`, `shouldAllowTelemetryUpdate`).
+    6. Kiểm chứng động cơ polling độc lập UsageStatsManager, tính năng chốt phiên khi tắt màn hình, loại trừ ứng dụng ngân hàng và fallback foreground process matching.
   - *Đặc tả phần cứng thực tế*: Việc kiểm thử các lifecycle thực tế phụ thuộc hệ điều hành Android (`ACTION_SCREEN_OFF`, `ACTION_USER_PRESENT`, tối ưu hóa pin OEM) khi chạy trong môi trường CI không có thiết bị thật/emulator kết nối được bảo vệ bằng thiết kế phòng thủ theo chuẩn tài liệu Android Developers (defensive bounded timeouts 3000ms, non-blocking coroutine dispatch, 1-shot retry, và unregister receiver an toàn).
 - **Tính toàn vẹn bản phát hành OTA**:
-  - Tệp `version.json`, tệp binary `apk/CVA-SmartGuardian-v1.2.5.apk` và node `/app_release.json` trên Firebase RTDB trực tuyến bắt buộc phải đồng nhất 100% về `versionCode`, `versionName` và `sha256`.
+  - Tệp `version.json`, tệp binary `apk/CVA-SmartGuardian-v1.2.6.apk` và node `/app_release.json` trên Firebase RTDB trực tuyến bắt buộc phải đồng nhất 100% về `versionCode` (26), `versionName` ("1.2.6") và `sha256`.
+  - Trường `changelog` trong `version.json` bắt buộc là mảng các chuỗi (`Array<String>`) để đảm bảo tính tương thích ngược tuyệt đối với toàn bộ các client và parser cũ.
 
 ---
 
 ## 3. TIÊU CHÍ NGHIỆM THU CỦA CODEX AUDITOR
 - [ ] Mọi thay đổi mã nguồn phải thỏa mãn 100% các điều khoản trong mục 2.
 - [ ] Không có bẫy logic hoặc hồi quy (regression) làm mất tính năng đã có.
-- [ ] Toàn bộ tính năng mới và các bản sửa lỗi bắt buộc phải chạy debug và kiểm thử thành công 100% (Pass 100% toàn bộ 51/51 unit tests trên Android Studio JBR JVM, 0 failures, 0 errors, 0 skipped, compilation sạch, DOM runtime verification đạt).
+- [ ] Toàn bộ tính năng mới và các bản sửa lỗi bắt buộc phải chạy debug và kiểm thử thành công 100% (Bảo toàn toàn bộ 51 bài kiểm thử gốc của SPEC và các bài kiểm thử mới, 0 failures, 0 errors, 0 skipped, compilation sạch, DOM runtime verification đạt).
 - [ ] Tính toàn vẹn OTA được xác thực đồng thời trên cả tệp local và Firebase RTDB `/app_release.json`.
 - [ ] Được Codex Auditor phê duyệt `[APPROVED]`. Nếu `[REJECTED]`, bắt buộc phải viết lại (Self-Healing Loop).

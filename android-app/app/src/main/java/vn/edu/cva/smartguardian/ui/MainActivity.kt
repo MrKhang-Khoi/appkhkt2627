@@ -389,18 +389,29 @@ class MainActivity : AppCompatActivity() {
             handleConnectPairing()
         }
 
-        // Tamper-Proof 4 Cards: Read-only, click hiện thông báo cảnh báo bảo mật
-        val tamperProofToast = View.OnClickListener {
-            Toast.makeText(
-                this,
-                "🔒 Quyền này được khóa an toàn bởi Phụ Huynh. Học sinh không thể tắt!",
-                Toast.LENGTH_SHORT
-            ).show()
+        // 4 Thẻ Giám Sát: Hỗ trợ kiểm tra quyền và hướng dẫn giao dịch ngân hàng an toàn
+        cardStudentAccessibility.setOnClickListener {
+            val hasA11y = hasAccessibilityPermission()
+            if (hasA11y) {
+                AlertDialog.Builder(this)
+                    .setTitle("⚡ Quyền Trợ Năng (Accessibility)")
+                    .setMessage("Quyền Trợ Năng đang BẬT để lọc và chặn website độc hại trên trình duyệt.\n\n💡 Mẹo Giao Dịch Ngân Hàng:\nNếu bạn mở app ngân hàng (Vietcombank, MB, Techcombank...) và nhận được cảnh báo bảo mật, bạn có thể bấm 'MỞ CÀI ĐẶT' để tạm tắt Trợ Năng.\n\nỨng dụng vẫn giám sát thời gian sử dụng chuẩn xác qua Quyền Dữ Liệu Google!")
+                    .setPositiveButton("MỞ CÀI ĐẶT") { _, _ -> openAccessibilitySettings() }
+                    .setNegativeButton("Đóng", null)
+                    .show()
+            } else {
+                handleSmartPermissionWizardClick()
+            }
         }
-        cardStudentAccessibility.setOnClickListener(tamperProofToast)
-        cardStudentWebFilter.setOnClickListener(tamperProofToast)
-        cardStudentSync.setOnClickListener(tamperProofToast)
-        cardStudentBattery.setOnClickListener(tamperProofToast)
+        cardStudentSync.setOnClickListener {
+            handleSmartPermissionWizardClick()
+        }
+        cardStudentWebFilter.setOnClickListener {
+            Toast.makeText(this, "🌐 Bộ lọc web độc hại đang bảo vệ danh sách phụ huynh yêu cầu", Toast.LENGTH_SHORT).show()
+        }
+        cardStudentBattery.setOnClickListener {
+            Toast.makeText(this, "🔋 Đang tối ưu hóa pin và đồng bộ thời gian thực chuẩn Google", Toast.LENGTH_SHORT).show()
+        }
 
         // Bấm vào thiết bị con trong Parent Hub -> Mở Bảng Giám Sát Đồng Hành
         findViewById<View>(R.id.layoutParentChildRow).setOnClickListener {
@@ -1786,38 +1797,41 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun handleSmartPermissionWizardClick() {
-        val hasA11y = hasAccessibilityPermission()
         val hasUsage = hasUsageStatsPermission()
+        val hasA11y = hasAccessibilityPermission()
 
-        if (!hasA11y) {
-            // Bước 1: Quyền Trợ năng (Xiaomi HyperOS / Android 14-16)
+        if (!hasUsage) {
+            // Bước 1 (Cốt lõi - Chuẩn Google Screen Time): Quyền Dữ liệu sử dụng
             AlertDialog.Builder(this)
-                .setTitle("⚡ Kích Hoạt Quyền Trợ Năng (1-Chạm)")
-                .setMessage("Dành cho Xiaomi HyperOS / Android 14-16:\n\n1. Bấm 'MỞ CÀI ĐẶT' bên dưới\n2. Chọn 'Ứng dụng đã tải xuống'\n3. Chọn 'CVA-SmartGuardian' -> BẬT\n\n*(Lưu ý: Nếu Xiaomi hiển thị 'Cài đặt bị hạn chế', hãy bấm nút 'Mở khóa ⋮' bên dưới, nhấn dấu 3 chấm góc phải trên cùng -> Chọn 'Cho phép cài đặt bị hạn chế')*")
-                .setPositiveButton("MỞ CÀI ĐẶT NGAY") { _, _ ->
-                    openAccessibilitySettings()
-                }
-                .setNeutralButton("Mở Khóa ⋮") { _, _ ->
-                    openAppDetailsSettings()
-                }
-                .setNegativeButton("Đóng", null)
-                .show()
-        } else if (!hasUsage) {
-            // Bước 2: Quyền Dữ liệu sử dụng
-            AlertDialog.Builder(this)
-                .setTitle("📊 Kích Hoạt Quyền Dữ Liệu (Bước 2)")
-                .setMessage("Chỉ còn 1 bước để kích hoạt bảo vệ toàn diện:\n\n👉 Bấm 'MỞ CÀI ĐẶT' -> Tìm 'CVA-SmartGuardian' -> BẬT Cho phép truy cập dữ liệu sử dụng.")
+                .setTitle("🟢 Kích Hoạt Quyền Giám Sát (Chuẩn Google)")
+                .setMessage("Để theo dõi thời lượng sử dụng và phân loại ứng dụng học tập/giải trí chuẩn xác mà 100% KHÔNG BỊ APP NGÂN HÀNG BÁO ĐỘNG ĐỎ:\n\n1. Bấm 'MỞ CÀI ĐẶT' bên dưới\n2. Tìm 'CVA-SmartGuardian'\n3. BẬT 'Cho phép truy cập dữ liệu sử dụng'\n\n*(Chuẩn Google Digital Wellbeing / Family Link, an toàn tuyệt đối với mọi ứng dụng ngân hàng)*")
                 .setPositiveButton("MỞ CÀI ĐẶT NGAY") { _, _ ->
                     openUsageAccessSettings()
                 }
                 .setNegativeButton("Đóng", null)
                 .show()
-        } else {
-            // Đã đủ 100%
+        } else if (!hasA11y) {
+            // Bước 2 (Tùy chọn nâng cao): Quyền Trợ năng (Lọc web)
             AlertDialog.Builder(this)
-                .setTitle("🛡️ Bảo Vệ Toàn Diện Đang Hoạt Động (100%)")
-                .setMessage("Hệ thống đã nhận diện đầy đủ các quyền:\n\n✅ Quyền Trợ Năng: Đang bắt ứng dụng trực tuyến thời gian thực\n✅ Quyền Dữ Liệu: Đang theo dõi thời lượng khoa học\n✅ Thuật Toán Zero-Phantom-Time: Tự động đóng băng khi tắt/khóa màn hình để triệt tiêu thời gian ảo\n✅ Tường Lửa Cloudflare Family: Đang bảo vệ")
-                .setPositiveButton("Tuyệt Vời", null)
+                .setTitle("🛡️ Chế Độ Chuẩn Google Đang Hoạt Động")
+                .setMessage("✅ Quyền Dữ Liệu: Đang hoạt động chuẩn xác 100%.\n✅ An toàn tuyệt đối với App Ngân Hàng: Không bao giờ bị cảnh báo bảo mật.\n\n👉 TÙY CHỌN NÂNG CAO (Lọc Web):\nBạn có muốn bật thêm Quyền Trợ Năng để lọc và chặn website độc hại trực tiếp trên trình duyệt Chrome không?\n\n*(Lưu ý: Nếu bạn thường xuyên chuyển tiền trên máy này, bạn có thể không cần bật quyền Trợ năng mà app vẫn giám sát thời gian hoàn hảo)*")
+                .setPositiveButton("BẬT TRỢ NĂNG (TÙY CHỌN)") { _, _ ->
+                    openAccessibilitySettings()
+                }
+                .setNeutralButton("Mở Khóa ⋮ (Xiaomi)") { _, _ ->
+                    openAppDetailsSettings()
+                }
+                .setNegativeButton("Giữ Chuẩn An Toàn", null)
+                .show()
+        } else {
+            // Đã bật cả hai
+            AlertDialog.Builder(this)
+                .setTitle("🛡️ Bảo Vệ Toàn Diện & Trợ Năng")
+                .setMessage("Hệ thống đã nhận diện đầy đủ các quyền:\n\n✅ Quyền Dữ Liệu (Chuẩn Google): Đang đo thời lượng khoa học\n✅ Quyền Trợ Năng: Đang hỗ trợ lọc website độc hại\n✅ Bảo Vệ Ngân Hàng: Đã tự động loại trừ mọi app ngân hàng khỏi danh sách giám sát\n\n💡 MẸO GIAO DỊCH NGÂN HÀNG:\nNếu app ngân hàng yêu cầu tắt Trợ năng trước khi chuyển tiền, bạn có thể bấm 'Cài Đặt Trợ Năng' bên dưới để tạm tắt, sau khi giao dịch xong có thể bật lại.")
+                .setPositiveButton("Đã Hiểu", null)
+                .setNeutralButton("Cài Đặt Trợ Năng") { _, _ ->
+                    openAccessibilitySettings()
+                }
                 .show()
         }
     }

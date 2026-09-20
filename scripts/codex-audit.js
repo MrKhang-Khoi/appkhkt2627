@@ -191,16 +191,18 @@ const allRepoFiles = getSourceFilesRecursively(process.cwd(), (name) => {
 
 let repoEmptyCatchCount = 0;
 const emptyCatchRegex = /catch\s*(\([^\)]*\))?\s*\{\s*\}/g;
+const underscoreCatchRegex = /catch\s*\(_[^)]*\)/g;
 for (const f of allRepoFiles) {
   const content = fs.readFileSync(f, 'utf8');
   const matches = content.match(emptyCatchRegex) || [];
-  if (matches.length > 0) {
-    repoEmptyCatchCount += matches.length;
-    console.error(`Phát hiện empty catch tại: ${f}`);
+  const underscoreMatches = content.match(underscoreCatchRegex) || [];
+  if (matches.length > 0 || underscoreMatches.length > 0) {
+    repoEmptyCatchCount += (matches.length + underscoreMatches.length);
+    console.error(`Phát hiện empty / underscore catch tại: ${f}`);
   }
 }
 if (repoEmptyCatchCount > 0) {
-  console.error('\x1b[31m%s\x1b[0m', `❌ LỖI TOÀN BỘ MÃ NGUỒN: Phát hiện ${repoEmptyCatchCount} khối catch nuốt lỗi rỗng!`);
+  console.error('\x1b[31m%s\x1b[0m', `❌ LỖI TOÀN BỘ MÃ NGUỒN: Phát hiện ${repoEmptyCatchCount} khối catch nuốt lỗi rỗng hoặc dùng underscore catch!`);
   process.exit(1);
 }
 allSourceAuditReport = `All source languages static scan (${allRepoFiles.length} files: .kt, .js, .html, .ps1): 0 empty catch across entire repository.`;
@@ -636,7 +638,7 @@ try {
   }
 
   if (totalTests < 51) {
-    throw new Error(`Số lượng bài test (${totalTests}) chưa đạt yêu cầu toàn diện (tối thiểu 51 tests bao phủ đầy đủ các chốt chặn)!`);
+    throw new Error(`Số lượng bài test (${totalTests}) chưa đạt yêu cầu toàn diện (tối thiểu 51 tests theo quy định của SPEC)!`);
   }
 
   // Danh sách các bài test chạy trực tiếp mã nguồn Kotlin production mới bổ sung:
@@ -650,7 +652,16 @@ try {
     'testAppUpdateManagerHandlesMissingFieldsAndMalformedJsonSafely',
     'testUsageTrackerServiceBackgroundOtaConstants',
     'testAppUpdateManagerSha256ValidationAndIntegrity',
-    'testAppUpdateManagerNetworkFailureHandling'
+    'testAppUpdateManagerNetworkFailureHandling',
+    'testUsageTrackerServiceClosePolledSessionResetsStateAndRecordsSession',
+    'testUsageTrackerServiceClosePolledSessionThreadSafetyAndDeduplication',
+    'testUsageTrackerServiceClosePolledSessionIgnoresShortDuration',
+    'testBankPackagesExcludedFromMonitoring',
+    'testForegroundEvidenceRequiresImportanceForegroundForProcessMatch',
+    'testEvaluateForegroundEvidenceAcceptsSubProcessWithColon',
+    'testAccessibilityClosesPreviousSessionWhenBankAppOpened',
+    'testUsageStatsManagerPollingOperatesConcurrentlyWithAccessibility',
+    'testDualEngineSessionDeduplicationPreventsDoubleAccounting'
   ];
 
   for (const testName of requiredProductionFeatureTests) {
@@ -703,21 +714,23 @@ try {
   vm.createContext(portalSandbox);
   vm.runInContext(extractedFnUpdate, portalSandbox);
 
-  // 2A: Máy con chạy bản cũ (appVersion không có hoặc < 1.2.5) -> Hiện cảnh báo nâng cấp v1.2.5
+  const currentAuditVer = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'version.json'), 'utf8')).versionName;
+
+  // 2A: Máy con chạy bản cũ (appVersion không có hoặc < currentAuditVer) -> Hiện cảnh báo nâng cấp
   portalSandbox.updateChildDashboardLive({ deviceModel: 'Xiaomi', appVersion: '1.2.4', active_app: { appName: 'TikTok' } }, { isOnline: true, text: 'Trực tuyến', color: '#10b981' });
   const detail1 = getPortalElement('dashOtaNoticeDetail').textContent;
-  if (!detail1.includes('Cần nâng cấp v1.2.5')) {
+  if (!detail1.includes(`Cần nâng cấp v${currentAuditVer}`)) {
     throw new Error(`Test DOM thất bại: Web Portal không hiển thị cảnh báo nâng cấp cho bản cũ: "${detail1}"`);
   }
 
-  // 2B: Máy con chạy bản mới 1.2.5 -> Xác nhận đã ở bản mới nhất
-  portalSandbox.updateChildDashboardLive({ deviceModel: 'Xiaomi', appVersion: '1.2.5', active_app: { appName: 'TikTok' } }, { isOnline: true, text: 'Trực tuyến', color: '#10b981' });
+  // 2B: Máy con chạy bản mới currentAuditVer -> Xác nhận đã ở bản mới nhất
+  portalSandbox.updateChildDashboardLive({ deviceModel: 'Xiaomi', appVersion: currentAuditVer, active_app: { appName: 'TikTok' } }, { isOnline: true, text: 'Trực tuyến', color: '#10b981' });
   const detail2 = getPortalElement('dashOtaNoticeDetail').textContent;
   if (!detail2.includes('Mới nhất')) {
-    throw new Error(`Test DOM thất bại: Web Portal không ghi nhận bản v1.2.5 là Mới nhất: "${detail2}"`);
+    throw new Error(`Test DOM thất bại: Web Portal không ghi nhận bản v${currentAuditVer} là Mới nhất: "${detail2}"`);
   }
 
-  featureDebugReport = `Feature Debug Verification Suite: Toàn bộ ${requiredProductionFeatureTests.length} bài kiểm thử tính năng mới chạy TRỰC TIẾP trên mã nguồn Kotlin production (GuardianAccessibilityService.evaluateForegroundEvidence, AppUpdateManager.parseUpdateInfo, UsageTrackerService OTA constants) trên máy ảo Android JBR JVM đã PASS 100%. Kiểm thử trực tiếp hàm production updateChildDashboardLive từ index.html trên DOM Sandbox đã xác nhận cảnh báo nâng cấp v1.2.5 và trạng thái mới nhất PASS 100%.`;
+  featureDebugReport = `Feature Debug Verification Suite: Toàn bộ ${requiredProductionFeatureTests.length} bài kiểm thử tính năng mới chạy TRỰC TIẾP trên mã nguồn Kotlin production (GuardianAccessibilityService.evaluateForegroundEvidence, AppUpdateManager.parseUpdateInfo, UsageTrackerService OTA constants) trên máy ảo Android JBR JVM đã PASS 100%. Kiểm thử trực tiếp hàm production updateChildDashboardLive từ index.html trên DOM Sandbox đã xác nhận cảnh báo nâng cấp v${currentAuditVer} và trạng thái mới nhất PASS 100%.`;
   console.log('\x1b[32m%s\x1b[0m', `✅ ${featureDebugReport}`);
 } catch (e) {
   console.error('\x1b[31m%s\x1b[0m', `❌ LỖI DEBUG TÍNH NĂNG MỚI: ${e.message}`);

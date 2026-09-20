@@ -1,5 +1,6 @@
 package vn.edu.cva.smartguardian.service
 
+import android.app.ActivityManager
 import android.app.KeyguardManager
 import android.app.Notification
 import android.app.NotificationChannel
@@ -1375,6 +1376,199 @@ class UsageTrackerService : Service() {
             collectAndSave(context)
         }
 
+        @Volatile
+        internal var lastPolledForegroundPkg: String = ""
+        @Volatile
+        internal var lastPolledForegroundStartTime: Long = 0L
+
+        /**
+         * Chốt phiên làm việc tiền cảnh của cơ chế polling độc lập (Chuẩn Google Screen Time)
+         * Đảm bảo Hardware Invariant & Non-blocking: Khi màn hình tắt (ACTION_SCREEN_OFF), khóa máy (Keyguard),
+         * hoặc dịch vụ bị hủy (onDestroy), phiên phải được reset ngay lập tức trong RAM dưới monitor lock (< 1ms).
+         * Mọi thao tác I/O đĩa (recordAppSession) và cập nhật mạng (reportActiveApp) được dispatch sang Dispatchers.IO,
+         * tuyệt đối không chặn luồng BroadcastReceiver / UI.
+         */
+        fun closePolledSession(context: Context, reason: String = "SCREEN_OFF") {
+            val (closedPkg, closedStart) = synchronized(statsLock) {
+                val pkg = lastPolledForegroundPkg
+                val start = lastPolledForegroundStartTime
+                lastPolledForegroundPkg = ""
+                lastPolledForegroundStartTime = 0L
+                Pair(pkg, start)
+            }
+
+            if (closedPkg.isNotEmpty() && closedStart > 0L) {
+                val now = System.currentTimeMillis()
+                val duration = now - closedStart
+                if (duration in 1000L..1800000L) {
+                    val sessionToken = "polled_${closedPkg}_${closedStart}"
+                    syncScope.launch(Dispatchers.IO) {
+                        recordAppSession(context, closedPkg, duration, sessionToken)
+                        Log.d("UsageTrackerService", "Đã chốt phiên độc lập $closedPkg: ${duration}ms (Lý do: $reason)")
+                    }
+                }
+            }
+
+            if (reason == "SCREEN_OFF" && closedPkg.isNotEmpty()) {
+                syncScope.launch(Dispatchers.IO) {
+                    reportActiveApp(
+                        context = context,
+                        packageName = "SCREEN_OFF",
+                        appName = "Màn hình đã tắt",
+                        category = "system",
+                        categoryLabel = "Hệ thống",
+                        isForeground = false
+                    )
+                }
+            }
+        }
+
+        /**
+         * ĐỘNG CƠ GIÁM SÁT TIỀN CẢNH ĐỘC LẬP QUA USAGESTATSMANAGER (CHUẨN GOOGLE SCREEN TIME)
+         * Phát hiện chính xác ứng dụng đang hiển thị (Foreground App) bằng UsageEvents mà KHÔNG CẦN
+         * bật quyền Trợ năng (Accessibility), loại bỏ hoàn toàn nguy cơ bị app ngân hàng báo động.
+         * Tuân thủ triệt để Hardware Invariant, Non-blocking IO và Atomic Fencing đa tầng.
+         */
+        fun pollForegroundAppFromUsageEvents(context: Context) {
+            val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+            val km = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+            val isScreenInteractive = pm?.isInteractive ?: false
+            val isLocked = km?.isKeyguardLocked ?: false
+
+            // Hardware Invariant: Tuyệt đối không đo khi màn hình tắt hoặc đang khóa máy Keyguard
+            if (!isScreenInteractive || isLocked || !GuardianAccessibilityService.isScreenOnState) {
+                closePolledSession(context, "SCREEN_OFF")
+                return
+            }
+
+            val startEpoch = GuardianAccessibilityService.telemetryEpoch.get()
+            val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager ?: return
+            val now = System.currentTimeMillis()
+            val events = usm.queryEvents(now - 30_000L, now)
+            val event = android.app.usage.UsageEvents.Event()
+            var currentPkg: String? = null
+            var lastEventTime = 0L
+
+            while (events.hasNextEvent()) {
+                events.getNextEvent(event)
+                if (event.eventType == android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED) {
+                    if (event.timeStamp >= lastEventTime) {
+                        currentPkg = event.packageName
+                        lastEventTime = event.timeStamp
+                    }
+                }
+            }
+
+            // Fallback: Khi không có ACTIVITY_RESUMED trong 30s (người dùng giữ nguyên app),
+            // BẮT BUỘC kiểm tra RunningAppProcessInfo IMPORTANCE_FOREGROUND để tránh nhận nhầm stale package
+            if (currentPkg.isNullOrEmpty()) {
+                val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+                val runningProcesses: List<ActivityManager.RunningAppProcessInfo>? = am?.runningAppProcesses
+                val targetProcess: ActivityManager.RunningAppProcessInfo? = runningProcesses?.firstOrNull { proc ->
+                    proc.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND &&
+                        proc.processName != "com.android.systemui" &&
+                        !proc.processName.contains("keyguard") &&
+                        !proc.processName.contains("inputmethod") &&
+                        !proc.processName.contains("keyboard")
+                }
+                val rawProcPkg = targetProcess?.pkgList?.firstOrNull() ?: targetProcess?.processName
+                val candProcessPkg: String? = if (rawProcPkg != null && rawProcPkg.contains(":")) {
+                    rawProcPkg.substringBefore(":")
+                } else {
+                    rawProcPkg
+                }
+
+                if (!candProcessPkg.isNullOrEmpty() && targetProcess != null) {
+                    val stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, now - 60_000L, now)
+                    val matchedStat = stats?.firstOrNull { it.packageName == candProcessPkg && (now - it.lastTimeUsed <= 60_000L) }
+                    if (matchedStat != null) {
+                        val isEvidenceValid = GuardianAccessibilityService.evaluateForegroundEvidence(
+                            activeRootPkg = null,
+                            foregroundProcessPkg = targetProcess.processName,
+                            processImportance = targetProcess.importance,
+                            usageStatsLastResumedPkg = matchedStat.packageName,
+                            targetPkg = matchedStat.packageName
+                        )
+                        if (isEvidenceValid) {
+                            currentPkg = matchedStat.packageName
+                        }
+                    }
+                }
+            }
+
+            // Stale Fencing: Nếu epoch thay đổi hoặc màn hình bị tắt trong lúc truy vấn, hủy ngay
+            if (GuardianAccessibilityService.telemetryEpoch.get() != startEpoch || !GuardianAccessibilityService.isScreenOnState) {
+                Log.w("UsageTrackerService", "Epoch thay đổi trong lúc polling, hủy bỏ cập nhật")
+                return
+            }
+
+            if (!currentPkg.isNullOrEmpty() && currentPkg != context.packageName) {
+                // Loại trừ System UI, Launcher, Keyboard
+                if (currentPkg == "com.android.systemui" || currentPkg.contains("keyguard") ||
+                    currentPkg.contains("inputmethod") || currentPkg.contains("keyboard")
+                ) {
+                    return
+                }
+
+                // Loại trừ tuyệt đối toàn bộ app ngân hàng & ví điện tử (Chuẩn an toàn RASP)
+                if (GuardianAccessibilityService.isBankPackage(currentPkg)) {
+                    closePolledSession(context, "BANK_APP_OPENED")
+                    return
+                }
+
+                // State machine chuyển đổi app được bảo vệ nguyên tử bằng statsLock
+                synchronized(statsLock) {
+                    // Double-check hardware invariant & epoch fencing ngay trước khi ghi
+                    if (!GuardianAccessibilityService.isScreenOnState ||
+                        GuardianAccessibilityService.telemetryEpoch.get() != startEpoch
+                    ) {
+                        return
+                    }
+
+                    if (currentPkg != lastPolledForegroundPkg) {
+                        val prevPkg = lastPolledForegroundPkg
+                        val prevStart = lastPolledForegroundStartTime
+                        lastPolledForegroundPkg = currentPkg
+                        lastPolledForegroundStartTime = now
+
+                        if (prevPkg.isNotEmpty() && prevStart > 0L) {
+                            val sessionDuration = now - prevStart
+                            if (sessionDuration in 1000L..1800000L) {
+                                val sessionToken = "polled_${prevPkg}_${prevStart}"
+                                syncScope.launch(Dispatchers.IO) {
+                                    recordAppSession(context, prevPkg, sessionDuration, sessionToken)
+                                }
+                            }
+                        }
+
+                        val pkgMgr = context.packageManager
+                        val appInfo = try {
+                            pkgMgr.getApplicationInfo(currentPkg, 0)
+                        } catch (e: android.content.pm.PackageManager.NameNotFoundException) {
+                            Log.w("UsageTrackerService", "Không tìm thấy package: $currentPkg: ${e.message}")
+                            null
+                        } catch (e: Exception) {
+                            Log.w("UsageTrackerService", "Lỗi truy xuất ApplicationInfo cho $currentPkg: ${e.message}")
+                            null
+                        }
+                        val appLabel = appInfo?.let { pkgMgr.getApplicationLabel(it).toString() } ?: currentPkg
+                        val metadata = AppClassifier.classify(currentPkg, appLabel, appInfo)
+
+                        syncScope.launch(Dispatchers.IO) {
+                            reportActiveApp(
+                                context = context,
+                                packageName = currentPkg,
+                                appName = appLabel,
+                                category = metadata.category.name,
+                                categoryLabel = metadata.category.displayName,
+                                isForeground = true
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         fun collectAndSave(context: Context) {
             val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
 
@@ -1666,6 +1860,9 @@ class UsageTrackerService : Service() {
                     lastHeartbeatSentTimestamp.set(0L)
                     cancelActiveOnlineCalls()
 
+                    // CHỐT PHIÊN ĐỘC LẬP NGAY LẬP TỨC CHO ĐỘNG CƠ POLLING USAGESTATS
+                    closePolledSession(ctx, "SCREEN_OFF")
+
                     val accessService = GuardianAccessibilityService.instance
                     if (accessService != null) {
                         accessService.handleScreenOff(screenOffEpoch)
@@ -1771,6 +1968,7 @@ class UsageTrackerService : Service() {
             Log.w("UsageTrackerService", "Failed to unregister screenStateReceiver: ${e.message}")
         }
         GuardianAccessibilityService.isScreenOnState = false
+        closePolledSession(applicationContext, "SERVICE_DESTROYED")
         cancelActiveOnlineCalls()
         sendUrgentOfflineStatus(applicationContext, GuardianAccessibilityService.telemetryEpoch.incrementAndGet())
         serviceJob.cancel()
@@ -1895,6 +2093,14 @@ class UsageTrackerService : Service() {
                     collectAndSave(this@UsageTrackerService)
                 } catch (e: Exception) {
                     Log.w("UsageTrackerService", "collectAndSave failed: ${e.message}")
+                }
+
+                // 4b. Động cơ Giám sát Tiền cảnh Độc lập qua UsageStatsManager (Chuẩn Google Screen Time)
+                // Chạy liên tục và độc lập theo ticker bất kể AccessibilityService có bật hay không
+                try {
+                    pollForegroundAppFromUsageEvents(this@UsageTrackerService)
+                } catch (e: Exception) {
+                    Log.w("UsageTrackerService", "pollForegroundAppFromUsageEvents error: ${e.message}")
                 }
 
                 // 5. Định kỳ kiểm tra OTA Update và bắn Notification hệ thống nếu có bản mới!

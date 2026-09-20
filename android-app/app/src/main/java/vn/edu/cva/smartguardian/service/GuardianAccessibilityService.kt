@@ -36,6 +36,40 @@ class GuardianAccessibilityService : AccessibilityService() {
         val telemetryEpoch = java.util.concurrent.atomic.AtomicLong(0L)
         internal val sessionLock = Any()
 
+        val BANK_PACKAGES = setOf(
+            "com.vcb",                    // Vietcombank
+            "com.vcb.digibank",           // VCB Digibank
+            "com.mbmobile",               // MB Bank
+            "vn.com.techcombank.bb.app",  // Techcombank
+            "com.vnpay.bidv",             // BIDV
+            "com.vnpay.vpbankonline",     // VPBank
+            "com.vietinbank.ipay",        // VietinBank iPay
+            "com.vnpay.agribank",         // Agribank E-Mobile
+            "com.tpb.mb.gprsandroid",     // TPBank Mobile
+            "vn.momo.platform",           // MoMo
+            "com.mservice.momotransfer",  // MoMo transfer
+            "vn.com.sacombank.mbanking",  // Sacombank mBanking
+            "com.shb.mobilebanking",      // SHB Mobile
+            "com.acb.mobilebanking",      // ACB ONE
+            "com.hdbank.mbanking",        // HDBank
+            "com.vnpay.vib",              // MyVIB
+            "com.seabank.mbanking",       // SeABank
+            "com.vnpay.ocb"               // OCB OMNI
+        )
+
+        fun isBankPackage(pkg: String?): Boolean {
+            if (pkg.isNullOrEmpty()) return false
+            val lower = pkg.lowercase().trim()
+            return BANK_PACKAGES.contains(lower) ||
+                lower.startsWith("com.vcb") ||
+                lower.contains("mbanking") ||
+                lower.contains("ebanking") ||
+                lower.contains("digibank") ||
+                lower.contains("vietcombank") ||
+                lower.contains("techcombank") ||
+                lower.contains("momo")
+        }
+
         fun evaluateForegroundEvidence(
             activeRootPkg: String?,
             foregroundProcessPkg: String?,
@@ -55,9 +89,11 @@ class GuardianAccessibilityService : AccessibilityService() {
                 return true
             }
 
-            // 2. ActivityManager (BẮT BUỘC: foregroundProcessPkg khớp targetPkg hoặc là named process của targetPkg VÀ importance là 100)
+            // 2. ActivityManager (BẮT BUỘC: foregroundProcessPkg khớp targetPkg hoặc là process con dạng targetPkg:subProcess VÀ importance là 100)
             val matchesTargetProcess = !foregroundProcessPkg.isNullOrEmpty() &&
-                (foregroundProcessPkg == targetPkg || foregroundProcessPkg.startsWith("$targetPkg:"))
+                (foregroundProcessPkg == targetPkg ||
+                 foregroundProcessPkg.startsWith("$targetPkg:") ||
+                 (foregroundProcessPkg.contains(":") && foregroundProcessPkg.substringBefore(":") == targetPkg))
             if (matchesTargetProcess &&
                 processImportance != null &&
                 processImportance == android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
@@ -156,6 +192,7 @@ class GuardianAccessibilityService : AccessibilityService() {
         heartbeatJob?.cancel()
         val currentEpoch = if (passedEpoch != -1L) passedEpoch else telemetryEpoch.incrementAndGet()
         UsageTrackerService.cancelActiveOnlineCalls()
+        UsageTrackerService.closePolledSession(applicationContext, "SCREEN_OFF")
 
         // 2. Chụp snapshot và reset biến bộ nhớ RAM ngay lập tức dưới sessionLock (Thread-safe atomic closing)
         val now = System.currentTimeMillis()
@@ -272,6 +309,32 @@ class GuardianAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
 
+        val eventPkg = event.packageName?.toString() ?: return
+
+        // BẢO VỆ TUYỆT ĐỐI ỨNG DỤNG NGÂN HÀNG & VÍ ĐIỆN TỬ (CHUẨN RASP)
+        // Khi mở app ngân hàng: chốt an toàn phiên ứng dụng trước đó, tuyệt đối không quét node, không đọc cây UI, không can thiệp
+        if (isBankPackage(eventPkg)) {
+            val now = System.currentTimeMillis()
+            val (closedPkg, closedStart) = synchronized(sessionLock) {
+                val pkg = currentForegroundPackage
+                val start = currentForegroundStartTime
+                currentForegroundPackage = ""
+                currentForegroundStartTime = 0L
+                lastActivePackage = "BANK_APP_PROTECTED"
+                Pair(pkg, start)
+            }
+
+            if (closedPkg.isNotEmpty() && closedStart > 0L && now - closedStart >= 1000L) {
+                val sessionDuration = now - closedStart
+                val sessionToken = "${closedPkg}_${closedStart}"
+                serviceScope.launch(Dispatchers.IO) {
+                    UsageTrackerService.recordAppSession(applicationContext, closedPkg, sessionDuration, sessionToken)
+                }
+            }
+            UsageTrackerService.closePolledSession(applicationContext, "BANK_APP_OPENED")
+            return
+        }
+
         val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
         if (!isScreenOnState || (pm != null && !pm.isInteractive)) {
             return
@@ -289,14 +352,14 @@ class GuardianAccessibilityService : AccessibilityService() {
 
         // Chỉ lọc các sự kiện chuyển đổi cửa sổ tiền cảnh
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-            handleWindowStateChanged(packageName)
+            handleWindowStateChanged(eventPkg)
         } else if (event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
             // Hỗ trợ bắt ngay ứng dụng đang mở nếu TYPE_WINDOW_STATE_CHANGED ban đầu bị hệ điều hành OEM (Xiaomi/HyperOS) làm trễ lúc chuyển cảnh
             val isCurrentDifferent = synchronized(sessionLock) {
-                currentForegroundPackage != packageName && lastActivePackage != packageName
+                currentForegroundPackage != eventPkg && lastActivePackage != eventPkg
             }
-            if (isCurrentDifferent && !isDefaultLauncher(packageName) && packageName != "com.android.systemui" && packageName != "android") {
-                handleWindowStateChanged(packageName)
+            if (isCurrentDifferent && !isDefaultLauncher(eventPkg) && eventPkg != "com.android.systemui" && eventPkg != "android") {
+                handleWindowStateChanged(eventPkg)
             }
         }
     }
