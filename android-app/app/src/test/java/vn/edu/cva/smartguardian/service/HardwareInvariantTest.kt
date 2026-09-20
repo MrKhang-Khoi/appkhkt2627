@@ -19,6 +19,9 @@ import org.junit.Test
 import vn.edu.cva.smartguardian.ui.MainActivity
 import vn.edu.cva.smartguardian.ui.MainActivity.PinAuthResult
 import vn.edu.cva.smartguardian.update.AppUpdateManager
+import vn.edu.cva.smartguardian.update.UpdateInfo
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import kotlinx.coroutines.launch
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
@@ -41,6 +44,7 @@ class HardwareInvariantTest {
         UsageTrackerService.activeOnlineCalls.clear()
         UsageTrackerService.activeOfflineCalls.clear()
         UsageTrackerService.recordedSessionTokens.clear()
+        AppUpdateManager.mainDispatcher = kotlinx.coroutines.Dispatchers.Unconfined
     }
 
     @Test
@@ -1459,6 +1463,285 @@ class HardwareInvariantTest {
     }
 
     @Test
+    fun testAppUpdateManagerCandidateDownloadUrlsAndFallbackResolution() {
+        val json = JSONObject().apply {
+            put("versionCode", 28)
+            put("versionName", "1.2.8")
+            put("apkUrl", "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.2.8.apk")
+            put("apkFallbackUrl", "https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/CVA-SmartGuardian-v1.2.8.apk")
+            put("sha256", "7ED3F653AA14E959170051DECE438D79A9A7F3342F0B4C679D43FEDAFD3727BB")
+            put("fileSize", "5.83 MB")
+        }
+
+        val updateInfo = AppUpdateManager.parseUpdateInfo(json, currentVersionCode = 27)
+        assertNotNull("UpdateInfo must not be null", updateInfo)
+        assertEquals("https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.2.8.apk", updateInfo?.apkUrl)
+        assertEquals("https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/CVA-SmartGuardian-v1.2.8.apk", updateInfo?.apkFallbackUrl)
+
+        val safeUpdateInfo = updateInfo ?: throw AssertionError("UpdateInfo must not be null")
+        val candidates = AppUpdateManager.getCandidateDownloadUrls(safeUpdateInfo)
+        assertTrue("Candidates must contain primary URL", candidates.contains(safeUpdateInfo.apkUrl))
+        assertTrue("Candidates must contain fallback URL", candidates.contains(safeUpdateInfo.apkFallbackUrl))
+        assertTrue("Candidates must contain raw GitHub URL", candidates.any { it.contains("raw.githubusercontent.com") })
+        assertEquals(3, candidates.size)
+    }
+
+    @Test
+    fun testAppUpdateManagerDownloadFallbackOnHttp404() {
+        kotlinx.coroutines.runBlocking {
+            val testPayload = "Test APK Content for SmartGuardian".toByteArray()
+            val md = java.security.MessageDigest.getInstance("SHA-256")
+            val expectedSha = md.digest(testPayload).joinToString("") { "%02x".format(it) }
+
+            val primaryUrl = "https://primary-cdn.com/apk/CVA-SmartGuardian-v1.2.8.apk"
+            val fallbackUrl = "https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/CVA-SmartGuardian-v1.2.8.apk"
+
+            val updateInfo = UpdateInfo(
+                versionCode = 28,
+                versionName = "1.2.8",
+                apkUrl = primaryUrl,
+                fileSize = "5.83 MB",
+                sha256 = expectedSha,
+                changelog = listOf("Fix 404"),
+                isForceUpdate = false,
+                apkFallbackUrl = fallbackUrl
+            )
+
+            var primaryTried = false
+            var fallbackTried = false
+
+            val testClient = OkHttpClient.Builder()
+                .addInterceptor { chain ->
+                    val request = chain.request()
+                    val url = request.url.toString()
+                    if (url.contains("primary-cdn.com")) {
+                        primaryTried = true
+                        // Simulate HTTP 404 on primary URL
+                        okhttp3.Response.Builder()
+                            .request(request)
+                            .protocol(okhttp3.Protocol.HTTP_1_1)
+                            .code(404)
+                            .message("Not Found")
+                            .body(okhttp3.ResponseBody.create("text/plain".toMediaTypeOrNull(), "Not Found"))
+                            .build()
+                    } else if (url.contains("raw.githubusercontent.com")) {
+                        fallbackTried = true
+                        // Fallback URL returns HTTP 200 with matching payload
+                        okhttp3.Response.Builder()
+                            .request(request)
+                            .protocol(okhttp3.Protocol.HTTP_1_1)
+                            .code(200)
+                            .message("OK")
+                            .body(okhttp3.ResponseBody.create("application/vnd.android.package-archive".toMediaTypeOrNull(), testPayload))
+                            .build()
+                    } else {
+                        chain.proceed(request)
+                    }
+                }
+                .build()
+
+            val origClient = AppUpdateManager.httpClient
+            try {
+                AppUpdateManager.httpClient = testClient
+                val fakePrefs = FakeSharedPreferences()
+                val fakeContext = FakeTestContext(fakePrefs)
+
+                val result = AppUpdateManager.downloadAndVerifyApk(fakeContext, updateInfo) { }
+                assertTrue("Primary 404 must trigger fallback and succeed: ${result.exceptionOrNull()?.message}", result.isSuccess)
+                assertTrue("Primary URL must have been attempted first", primaryTried)
+                assertTrue("Fallback URL must have been used after primary 404", fallbackTried)
+
+                val downloadedFile = result.getOrNull()
+                assertNotNull(downloadedFile)
+                assertTrue(downloadedFile?.exists() == true)
+                downloadedFile?.delete()
+            } finally {
+                AppUpdateManager.httpClient = origClient
+            }
+        }
+    }
+
+    @Test
+    fun testAppUpdateManagerDownloadFallbackOnMismatchedSha256() {
+        kotlinx.coroutines.runBlocking {
+            val goodPayload = "Valid SmartGuardian Payload".toByteArray()
+            val md = java.security.MessageDigest.getInstance("SHA-256")
+            val expectedSha = md.digest(goodPayload).joinToString("") { "%02x".format(it) }
+
+            val corruptedPayload = "Corrupted Fake Payload".toByteArray()
+
+            val primaryUrl = "https://primary-cdn.com/apk/CVA-SmartGuardian-v1.2.8.apk"
+            val fallbackUrl = "https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/CVA-SmartGuardian-v1.2.8.apk"
+
+            val updateInfo = UpdateInfo(
+                versionCode = 28,
+                versionName = "1.2.8",
+                apkUrl = primaryUrl,
+                fileSize = "5.83 MB",
+                sha256 = expectedSha,
+                changelog = listOf("Fix checksum fallback"),
+                isForceUpdate = false,
+                apkFallbackUrl = fallbackUrl
+            )
+
+            var fallbackUsed = false
+
+            val testClient = OkHttpClient.Builder()
+                .addInterceptor { chain ->
+                    val request = chain.request()
+                    val url = request.url.toString()
+                    if (url.contains("primary-cdn.com")) {
+                        // Returns corrupted payload with wrong SHA-256
+                        okhttp3.Response.Builder()
+                            .request(request)
+                            .protocol(okhttp3.Protocol.HTTP_1_1)
+                            .code(200)
+                            .message("OK")
+                            .body(okhttp3.ResponseBody.create("application/vnd.android.package-archive".toMediaTypeOrNull(), corruptedPayload))
+                            .build()
+                    } else if (url.contains("raw.githubusercontent.com")) {
+                        fallbackUsed = true
+                        // Returns good payload with matching SHA-256
+                        okhttp3.Response.Builder()
+                            .request(request)
+                            .protocol(okhttp3.Protocol.HTTP_1_1)
+                            .code(200)
+                            .message("OK")
+                            .body(okhttp3.ResponseBody.create("application/vnd.android.package-archive".toMediaTypeOrNull(), goodPayload))
+                            .build()
+                    } else {
+                        chain.proceed(request)
+                    }
+                }
+                .build()
+
+            val origClient = AppUpdateManager.httpClient
+            try {
+                AppUpdateManager.httpClient = testClient
+                val fakePrefs = FakeSharedPreferences()
+                val fakeContext = FakeTestContext(fakePrefs)
+
+                val result = AppUpdateManager.downloadAndVerifyApk(fakeContext, updateInfo) { }
+                assertTrue("Checksum mismatch on primary must trigger fallback and succeed: ${result.exceptionOrNull()?.message}", result.isSuccess)
+                assertTrue("Fallback URL must have been used after primary checksum failure", fallbackUsed)
+
+                val downloadedFile = result.getOrNull()
+                assertNotNull(downloadedFile)
+                assertTrue(downloadedFile?.exists() == true)
+                downloadedFile?.delete()
+            } finally {
+                AppUpdateManager.httpClient = origClient
+            }
+        }
+    }
+
+    @Test
+    fun testAppUpdateManagerDownloadFailsWhenAllCandidatesFail() {
+        kotlinx.coroutines.runBlocking {
+            val primaryUrl = "https://primary-cdn.com/apk/CVA-SmartGuardian-v1.2.8.apk"
+            val fallbackUrl = "https://fallback-cdn.com/apk/CVA-SmartGuardian-v1.2.8.apk"
+
+            val updateInfo = UpdateInfo(
+                versionCode = 28,
+                versionName = "1.2.8",
+                apkUrl = primaryUrl,
+                fileSize = "5.83 MB",
+                sha256 = "1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF",
+                changelog = listOf("All fail test"),
+                isForceUpdate = false,
+                apkFallbackUrl = fallbackUrl
+            )
+
+            val testClient = OkHttpClient.Builder()
+                .addInterceptor { chain ->
+                    val request = chain.request()
+                    // All endpoints return HTTP 404
+                    okhttp3.Response.Builder()
+                        .request(request)
+                        .protocol(okhttp3.Protocol.HTTP_1_1)
+                        .code(404)
+                        .message("Not Found")
+                        .body(okhttp3.ResponseBody.create("text/plain".toMediaTypeOrNull(), "Not Found"))
+                        .build()
+                }
+                .build()
+
+            val origClient = AppUpdateManager.httpClient
+            try {
+                AppUpdateManager.httpClient = testClient
+                val fakePrefs = FakeSharedPreferences()
+                val fakeContext = FakeTestContext(fakePrefs)
+
+                val result = AppUpdateManager.downloadAndVerifyApk(fakeContext, updateInfo) { }
+                assertTrue("When all candidates fail, result must be failure", result.isFailure)
+                val err = result.exceptionOrNull()
+                assertNotNull(err)
+            } finally {
+                AppUpdateManager.httpClient = origClient
+            }
+        }
+    }
+
+    @Test
+    fun testAppUpdateManagerDownloadPreservesCoroutineCancellation() {
+        kotlinx.coroutines.runBlocking {
+            val primaryUrl = "https://primary-cdn.com/apk/CVA-SmartGuardian-v1.2.8.apk"
+            val updateInfo = UpdateInfo(
+                versionCode = 28,
+                versionName = "1.2.8",
+                apkUrl = primaryUrl,
+                fileSize = "5.83 MB",
+                sha256 = "1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF",
+                changelog = listOf("Cancellation test"),
+                isForceUpdate = false
+            )
+
+            var onProgressCalled = false
+            var cancellationCaught = false
+            val fakePrefs = FakeSharedPreferences()
+            val fakeContext = FakeTestContext(fakePrefs)
+
+            val testPayload = ByteArray(16384) { 0x42 }
+            val testClient = OkHttpClient.Builder()
+                .addInterceptor { chain ->
+                    val request = chain.request()
+                    okhttp3.Response.Builder()
+                        .request(request)
+                        .protocol(okhttp3.Protocol.HTTP_1_1)
+                        .code(200)
+                        .message("OK")
+                        .body(okhttp3.ResponseBody.create("application/vnd.android.package-archive".toMediaTypeOrNull(), testPayload))
+                        .build()
+                }
+                .build()
+
+            val origClient = AppUpdateManager.httpClient
+            try {
+                AppUpdateManager.httpClient = testClient
+
+                val job = launch(kotlinx.coroutines.Dispatchers.IO) {
+                    try {
+                        AppUpdateManager.downloadAndVerifyApk(fakeContext, updateInfo) {
+                            onProgressCalled = true
+                            // Cancel self during active progress update stream
+                            throw kotlinx.coroutines.CancellationException("Test Cancellation In Stream")
+                        }
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        cancellationCaught = true
+                        throw e
+                    }
+                }
+
+                job.join()
+                assertTrue("onProgress callback must be invoked with active byte stream", onProgressCalled)
+                assertTrue("CancellationException must be propagated and never swallowed", cancellationCaught)
+            } finally {
+                AppUpdateManager.httpClient = origClient
+            }
+        }
+    }
+
+    @Test
     fun testUsageTrackerServiceClosePolledSessionResetsStateAndRecordsSession() {
         val fakePrefs = FakeSharedPreferences()
         val context = FakeTestContext(fakePrefs)
@@ -2263,5 +2546,11 @@ class HardwareInvariantTest {
         override fun getApplicationContext(): Context = this
         override fun getPackageName(): String = "vn.edu.cva.smartguardian"
         override fun getSystemService(name: String): Any? = null
+        override fun getFilesDir(): java.io.File {
+            val temp = java.io.File(System.getProperty("java.io.tmpdir"), "test_guardian_ctx")
+            if (!temp.exists()) temp.mkdirs()
+            return temp
+        }
+        override fun getExternalFilesDir(type: String?): java.io.File? = getFilesDir()
     }
 }

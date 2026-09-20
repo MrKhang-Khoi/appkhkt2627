@@ -77,9 +77,11 @@
 - **Tiêu chuẩn Thiết kế Giao diện Trực quan & Chống Rớt Dòng (Responsive Mobile Standards)**:
   - Tab phân loại trên dialog giám sát rút gọn nhãn để hiển thị trọn vẹn trên 1 dòng ở mọi kích thước màn hình: `"🌐 Mạng XH"`, `"📚 Học tập"`, `"🎮 Game"`, `"📱 Tất cả"`, kèm thuộc tính `singleLine="true"` và `ellipsize="end"`.
   - Hiển thị Empty State trực quan (`layoutDialogEmptyState`) khi danh mục ứng dụng được lọc trống rỗng, kèm nút dẫn hướng xem tất cả ứng dụng.
-- **Tính toàn vẹn bản phát hành OTA**:
+- **Tính toàn vẹn bản phát hành OTA & Chốt Chặn Tải File Trực Tuyến (Zero HTTP 404)**:
   - Tệp `version.json`, tệp binary `apk/CVA-SmartGuardian-v1.2.8.apk` và node `/app_release.json` trên Firebase RTDB trực tuyến bắt buộc phải đồng nhất 100% về `versionCode` (28), `versionName` ("1.2.8") và `sha256`.
   - Trường `changelog` trong `version.json` bắt buộc là mảng các chuỗi (`Array<String>`) để đảm bảo tính tương thích ngược tuyệt đối với toàn bộ các client và parser cũ.
+  - **Cơ chế Tải Đa Nguồn Dự Phòng (Resilient Multi-Source Fallback)**: `AppUpdateManager` bắt buộc phải duyệt danh sách URL ứng viên (`apkUrl`, `apkFallbackUrl`, và raw GitHub mirror). Khi gặp lỗi HTTP 404 ở nguồn chính (do độ trễ deploy của GitHub Pages), hệ thống tự động fallback tức thời sang nguồn dự phòng mà không làm gián đoạn người dùng.
+  - **Chốt Chặn Kiểm Thử Tải File Trực Tuyến (Live OTA Download Gatekeeper)**: Bắt buộc kịch bản kiểm định (`scripts/verify-ota-download.js` và `scripts/codex-audit.js`) phải thực hiện tải byte thực tế qua mạng, xác thực HTTP 200 và kiểm tra SHA-256 của luồng tải về. Nghiêm cấm đưa lên Git (`git push`) nếu việc tải file chưa thành công 100%.
 
 ---
 
@@ -88,4 +90,5 @@
 - [ ] Không có bẫy logic hoặc hồi quy (regression) làm mất tính năng đã có.
 - [ ] Toàn bộ tính năng mới và các bản sửa lỗi bắt buộc phải chạy debug và kiểm thử thành công 100% (Bảo toàn toàn bộ 51 bài kiểm thử gốc của SPEC và các bài kiểm thử mới, 0 failures, 0 errors, 0 skipped, compilation sạch, DOM runtime verification đạt).
 - [ ] Tính toàn vẹn OTA được xác thực đồng thời trên cả tệp local và Firebase RTDB `/app_release.json`.
+- [ ] Kiểm thử tải thực tế file APK qua mạng (Live Remote APK Download & Checksum Gatekeeper) đạt 100% thành công với HTTP 200, triệt tiêu hoàn toàn mã lỗi HTTP 404 trước khi push Git.
 - [ ] Được Codex Auditor phê duyệt `[APPROVED]`. Nếu `[REJECTED]`, bắt buộc phải viết lại (Self-Healing Loop).

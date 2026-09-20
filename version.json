@@ -7,6 +7,7 @@
   "isForceUpdate": false,
   "fileSize": "5.83 MB",
   "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.2.8.apk",
+  "apkFallbackUrl": "https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/CVA-SmartGuardian-v1.2.8.apk",
   "sha256": "7ED3F653AA14E959170051DECE438D79A9A7F3342F0B4C679D43FEDAFD3727BB",
   "changelog": [
     "Trung tâm Đa Con Hub Carousel: Hỗ trợ quản lý đồng thời nhiều học sinh/con trên một máy Phụ huynh với thanh chọn danh sách Squircle sang trọng và nút thêm con trực quan.",
