@@ -3950,6 +3950,105 @@ class HardwareInvariantTest {
         }
     }
 
+    @Test
+    fun testScreenOffRaceDuringWindowStateChangeStrictlyAbortsWithoutReinfectingForeground() {
+        // Red-Team Karl Popper Falsification Test Mandated by OpenAI Codex:
+        // Proves that when handleScreenOff() executes while isForegroundApp() is in-flight,
+        // any delayed window state transition strictly aborts under sessionLock without reinfecting RAM.
+
+        // 1. Setup initial screen ON state with an active foreground app
+        GuardianAccessibilityService.isScreenOnState = true
+        val epochBefore = GuardianAccessibilityService.telemetryEpoch.incrementAndGet()
+        val now = System.currentTimeMillis()
+
+        synchronized(GuardianAccessibilityService.sessionLock) {
+            GuardianAccessibilityService.currentForegroundPackage = "com.google.android.youtube"
+            GuardianAccessibilityService.currentForegroundStartTime = now - 5000L
+            GuardianAccessibilityService.lastActivePackage = "com.google.android.youtube"
+            GuardianAccessibilityService.lastActiveUploadTimestamp = now - 5000L
+        }
+
+        assertEquals("com.google.android.youtube", GuardianAccessibilityService.currentForegroundPackage)
+        assertEquals("com.google.android.youtube", GuardianAccessibilityService.lastActivePackage)
+
+        // 2. Simulate in-flight window change captured expectedEpoch = epochBefore
+        val inFlightExpectedEpoch = epochBefore
+        val targetInFlightPkg = "com.facebook.katana"
+
+        // 3. User turns screen OFF while isForegroundApp() is running
+        // handleScreenOff() sets hardware flag to false, increments epoch, and resets RAM under sessionLock:
+        GuardianAccessibilityService.isScreenOnState = false
+        val screenOffEpoch = GuardianAccessibilityService.telemetryEpoch.incrementAndGet()
+        val screenOffTime = System.currentTimeMillis()
+
+        val (closedPkg, closedStart) = synchronized(GuardianAccessibilityService.sessionLock) {
+            val pkg = GuardianAccessibilityService.currentForegroundPackage
+            val start = GuardianAccessibilityService.currentForegroundStartTime
+            GuardianAccessibilityService.currentForegroundPackage = ""
+            GuardianAccessibilityService.currentForegroundStartTime = 0L
+            GuardianAccessibilityService.lastActivePackage = "SCREEN_OFF"
+            GuardianAccessibilityService.lastActiveUploadTimestamp = screenOffTime
+            Pair(pkg, start)
+        }
+
+        assertEquals("com.google.android.youtube", closedPkg)
+        assertEquals("", GuardianAccessibilityService.currentForegroundPackage)
+        assertEquals("SCREEN_OFF", GuardianAccessibilityService.lastActivePackage)
+
+        // 4. Now the in-flight window change finishes isForegroundApp() and attempts to commit
+        // with stale expectedEpoch and screen off
+        val transitionResult = GuardianAccessibilityService.transitionAppSessionAtomic(
+            packageName = targetInFlightPkg,
+            expectedEpoch = inFlightExpectedEpoch,
+            now = System.currentTimeMillis()
+        )
+
+        // 5. INVARIANTS VERIFICATION:
+        // a) Transition must return null (aborted)
+        assertNull("transitionAppSessionAtomic must strictly return null when screen is off or epoch is stale", transitionResult)
+
+        // b) RAM must NOT be re-infected:
+        assertEquals("currentForegroundPackage in RAM must remain empty after SCREEN_OFF", "", GuardianAccessibilityService.currentForegroundPackage)
+        assertEquals("currentForegroundStartTime in RAM must remain 0L after SCREEN_OFF", 0L, GuardianAccessibilityService.currentForegroundStartTime)
+        assertEquals("lastActivePackage in RAM must remain SCREEN_OFF", "SCREEN_OFF", GuardianAccessibilityService.lastActivePackage)
+
+        // 6. Adversarial variant: Even if expectedEpoch was somehow forged to match screenOffEpoch,
+        // the !isScreenOnState hardware invariant fence inside sessionLock MUST still abort!
+        val forgedTransitionResult = GuardianAccessibilityService.transitionAppSessionAtomic(
+            packageName = targetInFlightPkg,
+            expectedEpoch = screenOffEpoch,
+            now = System.currentTimeMillis()
+        )
+        assertNull("transitionAppSessionAtomic must strictly return null when isScreenOnState is false even if epoch matches", forgedTransitionResult)
+        assertEquals("currentForegroundPackage must still remain empty", "", GuardianAccessibilityService.currentForegroundPackage)
+        assertEquals("lastActivePackage must still remain SCREEN_OFF", "SCREEN_OFF", GuardianAccessibilityService.lastActivePackage)
+
+        // 7. Verify bank, lock, and home transitions also strictly abort when screen is off:
+        val bankResult = GuardianAccessibilityService.transitionBankSessionAtomic(
+            expectedEpoch = screenOffEpoch,
+            now = System.currentTimeMillis()
+        )
+        assertNull("transitionBankSessionAtomic must strictly return null when screen is off", bankResult)
+
+        val homeResult = GuardianAccessibilityService.transitionOfflineSessionAtomic(
+            targetPackage = "HOME",
+            expectedEpoch = screenOffEpoch,
+            now = System.currentTimeMillis()
+        )
+        assertNull("transitionOfflineSessionAtomic for HOME must strictly return null when screen is off", homeResult)
+
+        val lockResult = GuardianAccessibilityService.transitionOfflineSessionAtomic(
+            targetPackage = "SCREEN_OFF",
+            expectedEpoch = screenOffEpoch,
+            now = System.currentTimeMillis()
+        )
+        assertNull("transitionOfflineSessionAtomic for SCREEN_OFF must strictly return null when screen is off", lockResult)
+
+        // Final invariant check: RAM is 100% pristine and uninfected
+        assertEquals("", GuardianAccessibilityService.currentForegroundPackage)
+        assertEquals("SCREEN_OFF", GuardianAccessibilityService.lastActivePackage)
+    }
+
     private class FakeTestContext(
         val prefs: FakeSharedPreferences
     ) : ContextWrapper(null) {

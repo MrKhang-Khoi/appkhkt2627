@@ -108,6 +108,130 @@ class GuardianAccessibilityService : AccessibilityService() {
 
             return false
         }
+
+        @Volatile
+        internal var currentForegroundPackage: String = ""
+
+        @Volatile
+        internal var currentForegroundStartTime: Long = 0L
+
+        @Volatile
+        internal var lastActivePackage: String = ""
+
+        @Volatile
+        internal var lastActiveUploadTimestamp: Long = 0L
+
+        internal data class WindowTransitionSnapshot(
+            val shouldUpload: Boolean,
+            val isDifferent: Boolean,
+            val prevPkg: String,
+            val prevStart: Long,
+            val prevToken: String
+        )
+
+        @JvmStatic
+        internal fun transitionAppSessionAtomic(
+            packageName: String,
+            expectedEpoch: Long,
+            now: Long
+        ): WindowTransitionSnapshot? {
+            return synchronized(sessionLock) {
+                if (!isScreenOnState || telemetryEpoch.get() != expectedEpoch) {
+                    return null
+                }
+
+                val prevPkg = currentForegroundPackage
+                val prevStart = currentForegroundStartTime
+                val prevToken = if (prevPkg.isNotEmpty() && prevStart > 0L) "${prevPkg}_${prevStart}" else ""
+                val isDiff = (prevPkg != packageName)
+
+                if (isDiff) {
+                    currentForegroundPackage = packageName
+                    currentForegroundStartTime = now
+                }
+
+                val shouldDebounce = if (packageName == lastActivePackage && now - lastActiveUploadTimestamp < 10_000L) {
+                    true
+                } else {
+                    lastActivePackage = packageName
+                    lastActiveUploadTimestamp = now
+                    false
+                }
+
+                WindowTransitionSnapshot(
+                    shouldUpload = !shouldDebounce,
+                    isDifferent = isDiff,
+                    prevPkg = prevPkg,
+                    prevStart = prevStart,
+                    prevToken = prevToken
+                )
+            }
+        }
+
+        @JvmStatic
+        internal fun transitionBankSessionAtomic(
+            expectedEpoch: Long,
+            now: Long
+        ): WindowTransitionSnapshot? {
+            return synchronized(sessionLock) {
+                if (!isScreenOnState || telemetryEpoch.get() != expectedEpoch) {
+                    return null
+                }
+                val prevPkg = currentForegroundPackage
+                val prevStart = currentForegroundStartTime
+                val prevToken = if (prevPkg.isNotEmpty() && prevStart > 0L) "${prevPkg}_${prevStart}" else ""
+                val isDiff = prevPkg.isNotEmpty()
+                currentForegroundPackage = ""
+                currentForegroundStartTime = 0L
+                val shouldUpload = if (lastActivePackage != "BANK_APP_PROTECTED") {
+                    lastActivePackage = "BANK_APP_PROTECTED"
+                    lastActiveUploadTimestamp = now
+                    true
+                } else {
+                    false
+                }
+                WindowTransitionSnapshot(
+                    shouldUpload = shouldUpload,
+                    isDifferent = isDiff,
+                    prevPkg = prevPkg,
+                    prevStart = prevStart,
+                    prevToken = prevToken
+                )
+            }
+        }
+
+        @JvmStatic
+        internal fun transitionOfflineSessionAtomic(
+            targetPackage: String,
+            expectedEpoch: Long,
+            now: Long
+        ): WindowTransitionSnapshot? {
+            return synchronized(sessionLock) {
+                if (!isScreenOnState || telemetryEpoch.get() != expectedEpoch) {
+                    return null
+                }
+                val prevPkg = currentForegroundPackage
+                val prevStart = currentForegroundStartTime
+                val prevToken = if (prevPkg.isNotEmpty() && prevStart > 0L) "${prevPkg}_${prevStart}" else ""
+                val isDiff = prevPkg.isNotEmpty()
+                currentForegroundPackage = ""
+                currentForegroundStartTime = 0L
+                val shouldUpload = if (lastActivePackage != targetPackage) {
+                    lastActivePackage = targetPackage
+                    lastActiveUploadTimestamp = now
+                    true
+                } else {
+                    false
+                }
+                WindowTransitionSnapshot(
+                    shouldUpload = shouldUpload,
+                    isDifferent = isDiff,
+                    prevPkg = prevPkg,
+                    prevStart = prevStart,
+                    prevToken = prevToken
+                )
+            }
+        }
     }
 
     private val BROWSER_PACKAGES = setOf(
@@ -133,11 +257,7 @@ class GuardianAccessibilityService : AccessibilityService() {
     private var lastCheckedUrl: String = ""
     private var lastBlockTimestamp: Long = 0L
     private var lastHeartbeatTimestamp: Long = 0L
-    private var lastActivePackage: String = ""
-    private var lastActiveUploadTimestamp: Long = 0L
     private var lastWebActivityReportTimestamp: Long = 0L
-    private var currentForegroundPackage: String = ""
-    private var currentForegroundStartTime: Long = 0L
 
     override fun onCreate() {
         super.onCreate()
@@ -471,7 +591,7 @@ class GuardianAccessibilityService : AccessibilityService() {
         )
     }
 
-    private suspend fun handleWindowStateChangedLocked(packageName: String, expectedEpoch: Long): (suspend () -> Unit)? {
+    internal suspend fun handleWindowStateChangedLocked(packageName: String, expectedEpoch: Long): (suspend () -> Unit)? {
         val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
         val km = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
         val isInteractive = pm?.isInteractive ?: false
@@ -483,35 +603,19 @@ class GuardianAccessibilityService : AccessibilityService() {
         }
 
         val now = System.currentTimeMillis()
-        val (prevPkg, prevStart, prevToken) = synchronized(sessionLock) {
-            val p = currentForegroundPackage
-            val s = currentForegroundStartTime
-            val t = if (p.isNotEmpty() && s > 0L) "${p}_${s}" else ""
-            Triple(p, s, t)
-        }
-
         val isHome = isDefaultLauncher(packageName)
         val isLock = packageName == "com.android.systemui" || packageName.contains("keyguard")
         val isBank = isBankPackage(packageName)
 
         // Ứng dụng ngân hàng / Ví điện tử (Chuẩn RASP): Chốt phiên an toàn và chuyển trạng thái bảo vệ nguyên tử
         if (isBank) {
-            val shouldUploadBank = synchronized(sessionLock) {
-                currentForegroundPackage = ""
-                currentForegroundStartTime = 0L
-                if (lastActivePackage != "BANK_APP_PROTECTED") {
-                    lastActivePackage = "BANK_APP_PROTECTED"
-                    lastActiveUploadTimestamp = now
-                    true
-                } else {
-                    false
-                }
-            }
-            if (prevPkg.isNotEmpty() && prevStart > 0L && now - prevStart >= 1000L && prevToken.isNotEmpty()) {
-                val sessionDuration = now - prevStart
+            val transition = transitionBankSessionAtomic(expectedEpoch, now) ?: return null
+
+            if (transition.prevPkg.isNotEmpty() && transition.prevStart > 0L && now - transition.prevStart >= 1000L && transition.prevToken.isNotEmpty()) {
+                val sessionDuration = now - transition.prevStart
                 serviceScope.launch(Dispatchers.IO) {
                     if (telemetryEpoch.get() == expectedEpoch) {
-                        UsageTrackerService.recordAppSession(applicationContext, prevPkg, sessionDuration, prevToken, expectedEpoch)
+                        UsageTrackerService.recordAppSession(applicationContext, transition.prevPkg, sessionDuration, transition.prevToken, expectedEpoch)
                     }
                 }
             }
@@ -525,7 +629,7 @@ class GuardianAccessibilityService : AccessibilityService() {
                         ?.apply()
                 }
             }
-            if (shouldUploadBank) {
+            if (transition.shouldUpload) {
                 return UsageTrackerService.prepareActiveAppLocked(
                     context = this@GuardianAccessibilityService,
                     packageName = "BANK_APP_PROTECTED",
@@ -541,22 +645,13 @@ class GuardianAccessibilityService : AccessibilityService() {
 
         // Màn hình khóa (Keyguard/Lockscreen) hoặc KeyguardManager báo đang khóa
         if (isLock || isLocked) {
-            val shouldUploadOff = synchronized(sessionLock) {
-                currentForegroundPackage = ""
-                currentForegroundStartTime = 0L
-                if (lastActivePackage != "SCREEN_OFF") {
-                    lastActivePackage = "SCREEN_OFF"
-                    lastActiveUploadTimestamp = now
-                    true
-                } else {
-                    false
-                }
-            }
-            if (prevPkg.isNotEmpty() && prevStart > 0L && now - prevStart >= 1500L && prevToken.isNotEmpty()) {
-                val sessionDuration = now - prevStart
+            val transition = transitionOfflineSessionAtomic("SCREEN_OFF", expectedEpoch, now) ?: return null
+
+            if (transition.prevPkg.isNotEmpty() && transition.prevStart > 0L && now - transition.prevStart >= 1500L && transition.prevToken.isNotEmpty()) {
+                val sessionDuration = now - transition.prevStart
                 serviceScope.launch(Dispatchers.IO) {
                     if (telemetryEpoch.get() == expectedEpoch) {
-                        UsageTrackerService.recordAppSession(applicationContext, prevPkg, sessionDuration, prevToken, expectedEpoch)
+                        UsageTrackerService.recordAppSession(applicationContext, transition.prevPkg, sessionDuration, transition.prevToken, expectedEpoch)
                     }
                 }
             }
@@ -571,7 +666,7 @@ class GuardianAccessibilityService : AccessibilityService() {
                 }
             }
 
-            if (shouldUploadOff) {
+            if (transition.shouldUpload) {
                 return UsageTrackerService.prepareActiveAppLocked(
                     context = this@GuardianAccessibilityService,
                     packageName = "SCREEN_OFF",
@@ -586,22 +681,13 @@ class GuardianAccessibilityService : AccessibilityService() {
         }
 
         if (isHome) {
-            val shouldUploadHome = synchronized(sessionLock) {
-                currentForegroundPackage = ""
-                currentForegroundStartTime = 0L
-                if (lastActivePackage != "HOME") {
-                    lastActivePackage = "HOME"
-                    lastActiveUploadTimestamp = now
-                    true
-                } else {
-                    false
-                }
-            }
-            if (prevPkg.isNotEmpty() && prevStart > 0L && now - prevStart >= 1500L && prevToken.isNotEmpty()) {
-                val sessionDuration = now - prevStart
+            val transition = transitionOfflineSessionAtomic("HOME", expectedEpoch, now) ?: return null
+
+            if (transition.prevPkg.isNotEmpty() && transition.prevStart > 0L && now - transition.prevStart >= 1500L && transition.prevToken.isNotEmpty()) {
+                val sessionDuration = now - transition.prevStart
                 serviceScope.launch(Dispatchers.IO) {
                     if (telemetryEpoch.get() == expectedEpoch) {
-                        UsageTrackerService.recordAppSession(applicationContext, prevPkg, sessionDuration, prevToken, expectedEpoch)
+                        UsageTrackerService.recordAppSession(applicationContext, transition.prevPkg, sessionDuration, transition.prevToken, expectedEpoch)
                     }
                 }
             }
@@ -615,7 +701,7 @@ class GuardianAccessibilityService : AccessibilityService() {
                 }
             }
 
-            if (shouldUploadHome) {
+            if (transition.shouldUpload) {
                 return UsageTrackerService.prepareActiveAppLocked(
                     context = this@GuardianAccessibilityService,
                     packageName = packageName,
@@ -634,19 +720,18 @@ class GuardianAccessibilityService : AccessibilityService() {
             return null
         }
 
-        // Ghi nhận ứng dụng tiền cảnh thông thường
-        if (currentForegroundPackage != packageName) {
-            if (prevPkg.isNotEmpty() && prevStart > 0L && now - prevStart >= 1500L && prevToken.isNotEmpty()) {
-                val sessionDuration = now - prevStart
+        // Bất biến nguyên tử dưới sessionLock:
+        // Chặn đứng hoàn toàn race-condition khi màn hình đã tắt (SCREEN_OFF) hoặc epoch thay đổi trong lúc isForegroundApp đang truy vấn IPC/IO
+        val appTransition = transitionAppSessionAtomic(packageName, expectedEpoch, now) ?: return null
+
+        if (appTransition.isDifferent) {
+            if (appTransition.prevPkg.isNotEmpty() && appTransition.prevStart > 0L && now - appTransition.prevStart >= 1500L && appTransition.prevToken.isNotEmpty()) {
+                val sessionDuration = now - appTransition.prevStart
                 serviceScope.launch(Dispatchers.IO) {
                     if (telemetryEpoch.get() == expectedEpoch) {
-                        UsageTrackerService.recordAppSession(applicationContext, prevPkg, sessionDuration, prevToken, expectedEpoch)
+                        UsageTrackerService.recordAppSession(applicationContext, appTransition.prevPkg, sessionDuration, appTransition.prevToken, expectedEpoch)
                     }
                 }
-            }
-            synchronized(sessionLock) {
-                currentForegroundPackage = packageName
-                currentForegroundStartTime = now
             }
 
             serviceScope.launch(Dispatchers.IO) {
@@ -660,16 +745,7 @@ class GuardianAccessibilityService : AccessibilityService() {
             }
         }
 
-        val shouldDebounce = synchronized(sessionLock) {
-            if (packageName == lastActivePackage && now - lastActiveUploadTimestamp < 10_000L) {
-                true
-            } else {
-                lastActivePackage = packageName
-                lastActiveUploadTimestamp = now
-                false
-            }
-        }
-        if (shouldDebounce) {
+        if (!appTransition.shouldUpload) {
             return null
         }
 

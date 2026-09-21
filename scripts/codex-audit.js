@@ -861,7 +861,8 @@ try {
     'testBankPackageAtomicallyTransitionsStateUnderSessionLock',
     'testIsForegroundAppRejectsSplitScreenInactiveWindowAndRequiresFocusOrUsageStatsFallback',
     'testCasPreconditionFailed412FetchesFreshNodeStateAndAbortsOnNewerGeneration',
-    'testCasColdStartWithEmptyETagCachePerformsPreGetAndPreventsStaleOverwrite'
+    'testCasColdStartWithEmptyETagCachePerformsPreGetAndPreventsStaleOverwrite',
+    'testScreenOffRaceDuringWindowStateChangeStrictlyAbortsWithoutReinfectingForeground'
   ];
 
   for (const testName of requiredProductionFeatureTests) {
