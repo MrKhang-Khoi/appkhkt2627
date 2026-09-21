@@ -863,7 +863,8 @@ try {
     'testCasPreconditionFailed412FetchesFreshNodeStateAndAbortsOnNewerGeneration',
     'testCasColdStartWithEmptyETagCachePerformsPreGetAndPreventsStaleOverwrite',
     'testScreenOffRaceDuringWindowStateChangeStrictlyAbortsWithoutReinfectingForeground',
-    'testForegroundProcessAndSubprocessResolutionInvariants'
+    'testForegroundProcessAndSubprocessResolutionInvariants',
+    'testSecondaryWindowFallbackRequiresUsageStatsAgreementAndRejectsStaleWindow'
   ];
 
   for (const testName of requiredProductionFeatureTests) {
@@ -1083,6 +1084,7 @@ async function runAudit() {
     }
   }
 
+  let artifactFreshnessReport = '';
   for (const f of changedAndroidFiles) {
     const fPath = path.join(process.cwd(), f);
     if (fs.existsSync(fPath) && fs.statSync(fPath).mtimeMs > apkMtime) {
@@ -1093,7 +1095,9 @@ async function runAudit() {
       process.exit(1);
     }
   }
-  console.log('\x1b[32m%s\x1b[0m', `✅ Artifact Freshness Gatekeeper: File APK v${versionJson.versionName} vừa được biên dịch mới nhất khớp với mã nguồn.`);
+  const apkStat = fs.statSync(localApkPath);
+  artifactFreshnessReport = `Physical Compiler Proof: assembleRelease output APK (size: ${(apkStat.size / (1024 * 1024)).toFixed(2)} MB, mtime: ${new Date(apkMtime).toISOString()}) is strictly newer than all ${changedAndroidFiles.length} modified source files. Output-metadata.json confirmed versionCode=${versionJson.versionCode}, versionName=${versionJson.versionName}. Git HEAD commit: ${headCommit || 'HEAD'}.`;
+  console.log('\x1b[32m%s\x1b[0m', `✅ ${artifactFreshnessReport}`);
 
   // Khử nhạy cảm (sanitization) toàn bộ secrets hoặc API keys khỏi diff và prompt
   const sensitiveKeys = [process.env.OPENAI_API_KEY, process.env.FIREBASE_TOKEN].filter(Boolean);
@@ -1141,7 +1145,7 @@ BÁO CÁO DỮ LIỆU TỪ HỆ THỐNG KIỂM TRA ĐỘC LẬP & ARTIFACT:
 3. Global Multi-Language Static Audit: ${allSourceAuditReport}
 4. Hardware Invariant & Concurrency Verification: ${hardwareInvariantReport}
 5. Compiler & Real Unit Tests: ${buildReport}
-6. Local Release Integrity: ${releaseIntegrityReport}
+6. Local Release Integrity & Binary Freshness Proof: ${releaseIntegrityReport} | ${artifactFreshnessReport}
 7. Live Firebase RTDB OTA Verification: ${firebaseOtaReport}
 8. Live Remote APK Download & Checksum Verification: ${liveDownloadReport}
 9. Feature Debug Verification: ${featureDebugReport}

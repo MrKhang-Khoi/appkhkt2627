@@ -2340,6 +2340,8 @@ class MainActivity : AppCompatActivity() {
                     lp.width = maxCardWidth
                     if (lp is FrameLayout.LayoutParams) {
                         lp.gravity = Gravity.CENTER_HORIZONTAL
+                    } else if (lp is androidx.constraintlayout.widget.ConstraintLayout.LayoutParams) {
+                        lp.matchConstraintMaxWidth = maxCardWidth
                     }
                     layoutDialogMainCard.layoutParams = lp
                 }

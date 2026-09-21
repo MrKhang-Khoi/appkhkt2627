@@ -85,26 +85,45 @@ class GuardianAccessibilityService : AccessibilityService() {
             targetPkg: String,
             now: Long = System.currentTimeMillis(),
             lastEventTime: Long = 0L,
-            maxEventAgeMs: Long = 15_000L
+            maxEventAgeMs: Long = 15_000L,
+            secondaryWindowPkg: String? = null
         ): Boolean {
             if (targetPkg.isEmpty()) return false
 
-            // Xung đột cửa sổ: Nếu activeRootPkg thuộc về ứng dụng KHÁC, tuyệt đối không được nhận diện là targetPkg
+            // Xung đột cửa sổ tiền cảnh chính: Nếu activeRootPkg thuộc về ứng dụng KHÁC, tuyệt đối không được nhận diện là targetPkg
             if (!activeRootPkg.isNullOrEmpty() && !isPackageProcessOf(activeRootPkg, targetPkg)) {
                 return false
             }
 
-            // 1. Accessibility Window Hierarchy (Cửa sổ tiền cảnh đang hiển thị khớp chính xác hoặc là tiến trình con)
+            // Xung đột cửa sổ phụ: Nếu secondaryWindowPkg thuộc về ứng dụng KHÁC, tuyệt đối không được nhận diện
+            if (!secondaryWindowPkg.isNullOrEmpty() && !isPackageProcessOf(secondaryWindowPkg, targetPkg)) {
+                return false
+            }
+
+            // 1. Accessibility Window Hierarchy (Cửa sổ tiền cảnh chính đang hiển thị khớp chính xác hoặc là tiến trình con)
             if (!activeRootPkg.isNullOrEmpty() && (activeRootPkg == targetPkg || isPackageProcessOf(activeRootPkg, targetPkg))) {
+                // Nếu UsageStats ghi nhận ứng dụng KHÁC được resumed gần đây (< 3000ms) -> Xung đột trạng thái chuyển cảnh, fail-closed
+                if (!usageStatsLastResumedPkg.isNullOrEmpty() && !isPackageProcessOf(usageStatsLastResumedPkg, targetPkg)) {
+                    if (lastEventTime > 0L && now >= lastEventTime && now - lastEventTime < 3_000L) {
+                        return false
+                    }
+                }
                 return true
             }
 
-            // 2. UsageStatsManager: Chỉ chấp nhận khi activeRootPkg tạm thời là null (quá trình chuyển cảnh cửa sổ)
-            // VÀ event ACTIVITY_RESUMED khớp targetPkg trong khoảng thời gian hợp lệ (Fail-Closed: bắt buộc lastEventTime > 0L)
-            if (activeRootPkg.isNullOrEmpty() && (usageStatsLastResumedPkg == targetPkg || isPackageProcessOf(usageStatsLastResumedPkg, targetPkg))) {
-                if (lastEventTime > 0L && now >= lastEventTime && now - lastEventTime <= maxEventAgeMs) {
-                    return true
-                }
+            // 2. Trường hợp activeRootPkg là null (chuyển cảnh hoặc split screen transition):
+            val isUsageStatsMatch = (usageStatsLastResumedPkg == targetPkg || isPackageProcessOf(usageStatsLastResumedPkg, targetPkg)) &&
+                lastEventTime > 0L && now >= lastEventTime && now - lastEventTime <= maxEventAgeMs
+
+            // Nếu dựa vào cửa sổ phụ (secondary window), BẮT BUỘC phải có sự đồng thuận từ UsageStatsManager (Dual-Engine Consensus).
+            // Nếu cửa sổ phụ khớp nhưng UsageStats không khớp hoặc đã stale -> KHÓA NGAY (Fail-closed).
+            if (!secondaryWindowPkg.isNullOrEmpty() && isPackageProcessOf(secondaryWindowPkg, targetPkg)) {
+                return isUsageStatsMatch
+            }
+
+            // 3. Nếu không có cửa sổ phụ và activeRootPkg là null (chuyển cảnh cửa sổ tạm thời):
+            if (activeRootPkg.isNullOrEmpty() && secondaryWindowPkg.isNullOrEmpty()) {
+                return isUsageStatsMatch
             }
 
             return false
@@ -492,13 +511,14 @@ class GuardianAccessibilityService : AccessibilityService() {
     private fun handleWindowStateChanged(packageName: String) {
         if (!isScreenOnState) return
         val currentEpoch = telemetryEpoch.get()
+        val startGen = UsageTrackerService.foregroundGeneration.get()
         serviceScope.launch(Dispatchers.IO) {
             val (uploadAction, actionGen) = UsageTrackerService.telemetryMutex.withLock {
-                // Kiểm tra nguyên tử: Nếu màn hình đã tắt hoặc epoch đã thay đổi, bỏ qua ngay
-                if (!isScreenOnState || telemetryEpoch.get() != currentEpoch) {
+                // Kiểm tra nguyên tử: Nếu màn hình đã tắt hoặc epoch hoặc gen đã thay đổi, bỏ qua ngay
+                if (!isScreenOnState || telemetryEpoch.get() != currentEpoch || UsageTrackerService.foregroundGeneration.get() != startGen) {
                     return@withLock Pair(null, -1L)
                 }
-                val act = handleWindowStateChangedLocked(packageName, currentEpoch)
+                val act = handleWindowStateChangedLocked(packageName, currentEpoch, startGen)
                 Pair(act, UsageTrackerService.foregroundGeneration.get())
             }
             if (uploadAction != null && actionGen != -1L) {
@@ -513,49 +533,49 @@ class GuardianAccessibilityService : AccessibilityService() {
         if (packageName.isEmpty()) return false
 
         // 1. Accessibility Window Hierarchy check: Cửa sổ tiền cảnh đang active
-        val rawActivePkg = try {
+        var directRootPkg: String? = null
+        var secondaryMatchingPkg: String? = null
+        var conflictingWindowPkg: String? = null
+
+        try {
             val root = rootInActiveWindow
             val rootPkg = root?.packageName?.toString()?.trim()
             if (isPackageProcessOf(rootPkg, packageName)) {
-                rootPkg
+                directRootPkg = rootPkg
+            } else if (!rootPkg.isNullOrEmpty()) {
+                conflictingWindowPkg = rootPkg
             } else {
                 // Kiểm tra danh sách windows tương tác: Chỉ chấp nhận cửa sổ TYPE_APPLICATION có isActive hoặc isFocused
                 val appWindows = windows?.filter { win ->
                     win.type == AccessibilityWindowInfo.TYPE_APPLICATION && (win.isActive || win.isFocused)
                 }
-                // Tìm cửa sổ active/focused khớp target package (kể cả process con)
                 val matchingWindow = appWindows?.firstOrNull { win ->
                     val winPkg = win.root?.packageName?.toString()?.trim()
                     isPackageProcessOf(winPkg, packageName)
                 }
                 if (matchingWindow != null) {
-                    matchingWindow.root?.packageName?.toString()?.trim() ?: packageName
+                    secondaryMatchingPkg = matchingWindow.root?.packageName?.toString()?.trim() ?: packageName
                 } else {
-                    // Nếu không có cửa sổ khớp targetPkg, lấy cửa sổ active/focused bất kỳ để phát hiện xung đột
-                    val activeWindow = appWindows?.firstOrNull { it.isActive || it.isFocused }
-                    activeWindow?.root?.packageName?.toString()?.trim() ?: rootPkg
+                    val activeOther = appWindows?.firstOrNull { win ->
+                        val winPkg = win.root?.packageName?.toString()?.trim()
+                        !winPkg.isNullOrEmpty() && !isPackageProcessOf(winPkg, packageName)
+                    }
+                    if (activeOther != null) {
+                        conflictingWindowPkg = activeOther.root?.packageName?.toString()?.trim()
+                    }
                 }
             }
         } catch (e: Exception) {
-            Log.w("GuardianAccess", "rootInActiveWindow check failed: ${e.message}")
-            null
-        }
-
-        val activePkg = rawActivePkg
-
-        // Nếu root window hoặc cửa sổ tương tác đã xác nhận chính xác packageName hoặc process con -> 100% Foreground
-        if (isPackageProcessOf(activePkg, packageName)) {
-            return true
+            Log.w("GuardianAccess", "Window hierarchy check failed: ${e.message}")
         }
 
         // Bất biến xung đột cửa sổ: Nếu active root window thuộc về ứng dụng khác (kể cả Launcher/SystemUI),
-        // tuyệt đối từ chối targetPkg để chống stale UsageStats khi bấm Home hoặc đổi app.
-        if (!activePkg.isNullOrEmpty() && !isPackageProcessOf(activePkg, packageName)) {
+        // tuyệt đối từ chối targetPkg ngay lập tức (Fail-Closed).
+        if (!conflictingWindowPkg.isNullOrEmpty()) {
             return false
         }
 
         // 2. UsageStatsManager Event-Driven check (Google Android 10+ Standard: ACTIVITY_RESUMED)
-        // Triệt tiêu hoàn toàn Dead API ActivityManager.getRunningAppProcesses()
         var lastResumedPkg: String? = null
         var lastResumedTime: Long = 0L
         val now = System.currentTimeMillis()
@@ -587,24 +607,31 @@ class GuardianAccessibilityService : AccessibilityService() {
         }
 
         // 3. Bất biến phần cứng & an toàn số: Ủy quyền cho evaluateForegroundEvidence xác minh
+        // Nếu chỉ có secondaryMatchingPkg mà không có directRootPkg, evaluateForegroundEvidence
+        // BẮT BUỘC phải yêu cầu UsageStatsManager đồng thuận trong vòng 15s (Fail-Closed nếu stale hoặc lệch)
         return evaluateForegroundEvidence(
-            activeRootPkg = activePkg,
+            activeRootPkg = directRootPkg,
             usageStatsLastResumedPkg = lastResumedPkg,
             targetPkg = packageName,
             now = now,
             lastEventTime = lastResumedTime,
-            maxEventAgeMs = 15_000L
+            maxEventAgeMs = 15_000L,
+            secondaryWindowPkg = secondaryMatchingPkg
         )
     }
 
-    internal suspend fun handleWindowStateChangedLocked(packageName: String, expectedEpoch: Long): (suspend () -> Unit)? {
+    internal suspend fun handleWindowStateChangedLocked(
+        packageName: String,
+        expectedEpoch: Long,
+        expectedGen: Long = UsageTrackerService.foregroundGeneration.get()
+    ): (suspend () -> Unit)? {
         val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
         val km = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
         val isInteractive = pm?.isInteractive ?: false
         val isLocked = km?.isKeyguardLocked ?: false
 
-        if (!isScreenOnState || !isInteractive || telemetryEpoch.get() != expectedEpoch) {
-            // Bất biến phần cứng: Màn hình đang tắt hoặc epoch đã thay đổi -> Bỏ qua ngay lập tức mọi sự kiện đổi cửa sổ đến muộn
+        if (!isScreenOnState || !isInteractive || telemetryEpoch.get() != expectedEpoch || UsageTrackerService.foregroundGeneration.get() != expectedGen) {
+            // Bất biến phần cứng: Màn hình đang tắt, epoch hoặc generation đã thay đổi -> Bỏ qua ngay lập tức mọi sự kiện đổi cửa sổ đến muộn
             return null
         }
 
@@ -636,6 +663,9 @@ class GuardianAccessibilityService : AccessibilityService() {
                 }
             }
             if (transition.shouldUpload) {
+                if (UsageTrackerService.foregroundGeneration.get() != expectedGen || telemetryEpoch.get() != expectedEpoch || !isScreenOnState) {
+                    return null
+                }
                 return UsageTrackerService.prepareActiveAppLocked(
                     context = this@GuardianAccessibilityService,
                     packageName = "BANK_APP_PROTECTED",
@@ -673,6 +703,9 @@ class GuardianAccessibilityService : AccessibilityService() {
             }
 
             if (transition.shouldUpload) {
+                if (UsageTrackerService.foregroundGeneration.get() != expectedGen || telemetryEpoch.get() != expectedEpoch || !isScreenOnState) {
+                    return null
+                }
                 return UsageTrackerService.prepareActiveAppLocked(
                     context = this@GuardianAccessibilityService,
                     packageName = "SCREEN_OFF",
@@ -708,6 +741,9 @@ class GuardianAccessibilityService : AccessibilityService() {
             }
 
             if (transition.shouldUpload) {
+                if (UsageTrackerService.foregroundGeneration.get() != expectedGen || telemetryEpoch.get() != expectedEpoch || !isScreenOnState) {
+                    return null
+                }
                 return UsageTrackerService.prepareActiveAppLocked(
                     context = this@GuardianAccessibilityService,
                     packageName = packageName,
@@ -723,6 +759,11 @@ class GuardianAccessibilityService : AccessibilityService() {
 
         // Kiểm tra xác thực cửa sổ tiền cảnh (Dual-Engine Foreground Verification) CHỈ áp dụng cho ứng dụng người dùng
         if (!isForegroundApp(packageName)) {
+            return null
+        }
+
+        // Chốt chặn generation fencing sau khi isForegroundApp hoàn tất truy vấn IPC/IO
+        if (UsageTrackerService.foregroundGeneration.get() != expectedGen || telemetryEpoch.get() != expectedEpoch || !isScreenOnState) {
             return null
         }
 
@@ -752,6 +793,10 @@ class GuardianAccessibilityService : AccessibilityService() {
         }
 
         if (!appTransition.shouldUpload) {
+            return null
+        }
+
+        if (UsageTrackerService.foregroundGeneration.get() != expectedGen || telemetryEpoch.get() != expectedEpoch || !isScreenOnState) {
             return null
         }
 

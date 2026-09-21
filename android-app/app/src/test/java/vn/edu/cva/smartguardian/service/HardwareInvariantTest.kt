@@ -4135,6 +4135,98 @@ class HardwareInvariantTest {
         assertFalse("Active window belonging to Package B must immediately reject Package A even if UsageStats was for A", rapidSwitchConflict)
     }
 
+    @Test
+    fun testSecondaryWindowFallbackRequiresUsageStatsAgreementAndRejectsStaleWindow() {
+        val target = "com.example.browser"
+        val now = 100_000L
+
+        // Falsification Case 1: Secondary window alone without UsageStats agreement MUST NOT be trusted
+        // When activeRootPkg is null (e.g. app switching or OEM UI lag), secondary window matches target,
+        // but usageStatsLastResumedPkg is null -> Fail-closed: returns false
+        val noUsageAgreement = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = null,
+            usageStatsLastResumedPkg = null,
+            targetPkg = target,
+            now = now,
+            lastEventTime = 0L,
+            maxEventAgeMs = 15_000L,
+            secondaryWindowPkg = target
+        )
+        assertFalse("Secondary window alone without UsageStats agreement must fail closed", noUsageAgreement)
+
+        // Falsification Case 2: Stale secondary window (UsageStats had target earlier, but event is older than maxEventAgeMs)
+        // User exited app to Home 25s ago; OEM left window in windows list
+        val staleSecondaryWindow = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = null,
+            usageStatsLastResumedPkg = target,
+            targetPkg = target,
+            now = now,
+            lastEventTime = now - 25_000L,
+            maxEventAgeMs = 15_000L,
+            secondaryWindowPkg = target
+        )
+        assertFalse("Stale secondary window older than 15s must be rejected as background linger", staleSecondaryWindow)
+
+        // Falsification Case 3: Conflicting UsageStats (secondary window claims target, but UsageStats reports launcher was resumed)
+        val conflictingUsageStats = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = null,
+            usageStatsLastResumedPkg = "com.google.android.apps.nexuslauncher",
+            targetPkg = target,
+            now = now,
+            lastEventTime = now - 1000L,
+            maxEventAgeMs = 15_000L,
+            secondaryWindowPkg = target
+        )
+        assertFalse("Conflicting UsageStats showing launcher must override secondary window and reject target", conflictingUsageStats)
+
+        // Positive Case 4: Dual-engine consensus (activeRootPkg is null during transition, secondary window matches AND UsageStats agrees within 15s)
+        val consensusMatch = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = null,
+            usageStatsLastResumedPkg = target,
+            targetPkg = target,
+            now = now,
+            lastEventTime = now - 2000L,
+            maxEventAgeMs = 15_000L,
+            secondaryWindowPkg = target
+        )
+        assertTrue("Dual-engine consensus between secondary window and recent UsageStats must be accepted", consensusMatch)
+
+        // Positive Case 5: Dual-engine consensus with sub-process (com.example.browser:renderer)
+        val subProcessConsensus = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = null,
+            usageStatsLastResumedPkg = "com.example.browser:renderer",
+            targetPkg = target,
+            now = now,
+            lastEventTime = now - 1500L,
+            maxEventAgeMs = 15_000L,
+            secondaryWindowPkg = "com.example.browser:renderer"
+        )
+        assertTrue("Dual-engine consensus with sub-process renderer must be accepted", subProcessConsensus)
+
+        // Falsification Case 6: Conflicting secondary window belongs to different package
+        val conflictingSecondaryWindow = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = null,
+            usageStatsLastResumedPkg = target,
+            targetPkg = target,
+            now = now,
+            lastEventTime = now - 1000L,
+            maxEventAgeMs = 15_000L,
+            secondaryWindowPkg = "com.other.app"
+        )
+        assertFalse("Conflicting secondary window of another package must be strictly rejected", conflictingSecondaryWindow)
+
+        // Falsification Case 7: Rapid switch conflict even with direct root window (UsageStats shows another app resumed < 3000ms ago)
+        val rapidSwitchConflict = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = target,
+            usageStatsLastResumedPkg = "com.other.app",
+            targetPkg = target,
+            now = now,
+            lastEventTime = now - 500L,
+            maxEventAgeMs = 15_000L
+        )
+        assertFalse("Rapid switch conflict where another app resumed within 3000ms must fail closed", rapidSwitchConflict)
+    }
+
     private class FakeTestContext(
         val prefs: FakeSharedPreferences
     ) : ContextWrapper(null) {
