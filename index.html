@@ -3680,10 +3680,12 @@
           targetData.web_activity = devData.web_activity;
         }
 
-        // Chọn trạng thái active_app có mốc thời gian mới nhất, tránh bị đè bởi bản ghi cũ
+        // Chọn trạng thái active_app có sequence foregroundGeneration (và timestamp) mới nhất, tránh bị đè bởi bản ghi cũ
+        const devAppGen = Number(devData?.active_app?.foregroundGeneration || 0);
+        const actAppGen = Number(actData?.foregroundGeneration || 0);
         const devAppTime = Number(devData?.active_app?.timestamp || 0);
         const actAppTime = Number(actData?.timestamp || 0);
-        if (actData && actAppTime >= devAppTime) {
+        if (actData && (actAppGen > devAppGen || (actAppGen === devAppGen && actAppTime >= devAppTime))) {
           targetData.active_app = actData;
         } else if (devData?.active_app) {
           targetData.active_app = devData.active_app;

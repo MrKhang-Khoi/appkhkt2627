@@ -328,13 +328,17 @@ if (fs.existsSync(guardianAccessFile) && fs.existsSync(usageTrackerFile) && fs.e
     testCode.includes('testHomeAndKeyguardTransitionDoesNotBlockTelemetryMutexUnderSlowDiskIo') &&
     testCode.includes('testForegroundGenerationMonotonicFencingPreventsOutdatedNetworkDispatchOnRapidSwitching');
 
+  const hasCasProtection = utCode.includes('lastKnownETags = java.util.concurrent.ConcurrentHashMap<String, String>()') &&
+    utCode.includes(`isPutActiveApp && resp.code ${EQ2} 412`) &&
+    testCode.includes('testReversedArrivalOrderWithCasPreservesLatestForegroundStateOnServer');
+
   if (!hasVolatileScreen || !hasTelemetryEpoch || !hasSyncScreenOff || !hasConcurrentCallSet ||
       !hasUrgentOffline || !hasSingleEpochScreenOff || !hasSingleEpochScreenOn || !noEarlyRejection ||
       !hasSessionDeduplication || !hasZeroRawClose || !webActivityGuarded || !collectAndSaveGuarded ||
       !testsDirectProduction || !hasPreMutationGuard || !hasHardwareBootCheck || !hasLastWrittenEpochGuard ||
       !hasHomeBeforeForegroundCheck || !hasNoRunBlockingInDestroy || !hasDoubleCheckInExecuteOnline ||
       !noUnsynchronizedPrefsWrite || !hasStaleScreenOffFencing || !hasKeyguardStrictLockCheck ||
-      !hasStatsLock || !hasSessionLock || !hasForegroundGeneration || !testsLifecycleRace) {
+      !hasStatsLock || !hasSessionLock || !hasForegroundGeneration || !testsLifecycleRace || !hasCasProtection) {
     console.error('\x1b[31m%s\x1b[0m', '❌ LỖI BẤT BIẾN PHẦN CỨNG: Vi phạm một trong các tiêu chuẩn an toàn:');
     console.error({
       hasVolatileScreen, hasTelemetryEpoch, hasSyncScreenOff, hasConcurrentCallSet,
@@ -343,11 +347,11 @@ if (fs.existsSync(guardianAccessFile) && fs.existsSync(usageTrackerFile) && fs.e
       hasPreMutationGuard, hasHardwareBootCheck, hasLastWrittenEpochGuard,
       hasHomeBeforeForegroundCheck, hasNoRunBlockingInDestroy, hasDoubleCheckInExecuteOnline,
       noUnsynchronizedPrefsWrite, hasStaleScreenOffFencing, hasKeyguardStrictLockCheck,
-      hasStatsLock, hasForegroundGeneration, testsLifecycleRace
+      hasStatsLock, hasForegroundGeneration, testsLifecycleRace, hasCasProtection
     });
     process.exit(1);
   }
-  hardwareInvariantReport = 'Concurrency & hardware invariants: @Volatile isScreenOnState, atomic telemetryEpoch, session deduplication set preventing double accounting, in-flight calls tracking via ConcurrentHashMap.newKeySet(), independent session accounting on SCREEN_OFF, double-check fencing in executeOnlineGuarded, Keyguard interactive verification, and statsLock multi-threaded safety.';
+  hardwareInvariantReport = 'Concurrency & hardware invariants: @Volatile isScreenOnState, atomic telemetryEpoch, session deduplication set preventing double accounting, in-flight calls tracking via ConcurrentHashMap.newKeySet(), independent session accounting on SCREEN_OFF, double-check fencing in executeOnlineGuarded, Keyguard interactive verification, statsLock multi-threaded safety, and server-side CAS ETag protection.';
   console.log('\x1b[32m%s\x1b[0m', `✅ ${hardwareInvariantReport}`);
 }
 
@@ -845,7 +849,8 @@ try {
     'testGpsCommandProtocolStateTransitionsAndInvariants',
     'testParentDashboardSubtitleEvaluationAndAntiSpoofing',
     'testGpsCommandHardwareFencingAndTimeoutInvariants',
-    'testHomeAndKeyguardTransitionDoesNotBlockTelemetryMutexUnderSlowDiskIo'
+    'testHomeAndKeyguardTransitionDoesNotBlockTelemetryMutexUnderSlowDiskIo',
+    'testReversedArrivalOrderWithCasPreservesLatestForegroundStateOnServer'
   ];
 
   for (const testName of requiredProductionFeatureTests) {

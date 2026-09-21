@@ -22,6 +22,8 @@ import vn.edu.cva.smartguardian.ui.MainActivity.PinAuthResult
 import vn.edu.cva.smartguardian.update.AppUpdateManager
 import vn.edu.cva.smartguardian.update.UpdateInfo
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.withLock
@@ -3466,6 +3468,173 @@ class HardwareInvariantTest {
         // its internal generation guard drops execution immediately
         actionA.invoke()
         assertEquals("Direct invocation of stale actionA must still be dropped by inner generation guard", listOf("APP_C"), dispatchedActions)
+    }
+
+    private class CasTestServer : AutoCloseable {
+        val serverSocket = java.net.ServerSocket(0)
+        val port = serverSocket.localPort
+        val initialETag = "etag_init_1000"
+        var currentServerETag = initialETag
+        var currentServerState = JSONObject().apply {
+            put("appName", "Launcher")
+            put("foregroundGeneration", 9L)
+        }
+        @Volatile var running = true
+        private val thread = Thread {
+            while (running) {
+                try {
+                    val socket = serverSocket.accept()
+                    handleClient(socket)
+                } catch (e: Exception) {
+                    break
+                }
+            }
+        }.apply { start() }
+
+        private fun handleClient(socket: java.net.Socket) {
+            socket.use { s ->
+                val reader = s.getInputStream().bufferedReader(Charsets.UTF_8)
+                val firstLine = reader.readLine() ?: return
+                val parts = firstLine.split(" ")
+                val method = if (parts.isNotEmpty()) parts[0] else "GET"
+                var ifMatch: String? = null
+                var contentLength = 0
+                while (true) {
+                    val line = reader.readLine() ?: break
+                    if (line.isEmpty()) break
+                    val lower = line.lowercase()
+                    if (lower.startsWith("if-match:")) {
+                        ifMatch = line.substring(line.indexOf(':') + 1).trim()
+                    } else if (lower.startsWith("content-length:")) {
+                        contentLength = line.substring(line.indexOf(':') + 1).trim().toIntOrNull() ?: 0
+                    }
+                }
+
+                val body = if (contentLength > 0) {
+                    val chars = CharArray(contentLength)
+                    var read = 0
+                    while (read < contentLength) {
+                        val r = reader.read(chars, read, contentLength - read)
+                        if (r == -1) break
+                        read += r
+                    }
+                    String(chars, 0, read)
+                } else ""
+
+                val writer = java.io.OutputStreamWriter(s.getOutputStream(), Charsets.UTF_8)
+                if (method.equals("GET", ignoreCase = true)) {
+                    val respBody = currentServerState.toString()
+                    val bytes = respBody.toByteArray(Charsets.UTF_8)
+                    writer.write("HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nETag: $currentServerETag\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\n\r\n$respBody")
+                    writer.flush()
+                } else if (method.equals("PUT", ignoreCase = true)) {
+                    if (ifMatch != null && ifMatch != currentServerETag) {
+                        // 412 Precondition Failed
+                        val respBody = currentServerState.toString()
+                        val bytes = respBody.toByteArray(Charsets.UTF_8)
+                        writer.write("HTTP/1.1 412 Precondition Failed\r\nContent-Type: application/json; charset=utf-8\r\nETag: $currentServerETag\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\n\r\n$respBody")
+                        writer.flush()
+                    } else {
+                        // 200 OK
+                        currentServerState = JSONObject(body)
+                        currentServerETag = "etag_" + java.util.UUID.randomUUID().toString().take(8)
+                        val respBody = currentServerState.toString()
+                        val bytes = respBody.toByteArray(Charsets.UTF_8)
+                        writer.write("HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nETag: $currentServerETag\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\n\r\n$respBody")
+                        writer.flush()
+                    }
+                }
+            }
+        }
+
+        override fun close() {
+            running = false
+            try { serverSocket.close() } catch (e: Exception) {}
+        }
+    }
+
+    @Test
+    fun testReversedArrivalOrderWithCasPreservesLatestForegroundStateOnServer() {
+        // Red-Team Karl Popper Falsification Test:
+        // Simulates two real HTTP requests A and B where network delivers B first,
+        // and delayed A arrives later with a stale ETag.
+        // Proves that server-side CAS with ETag (HTTP 412) strictly prevents stale App A
+        // from overwriting newer App B on the server, guaranteeing server consistency.
+        val server = CasTestServer()
+        val port = server.port
+        val activeAppUrl = "http://127.0.0.1:$port/active_app.json"
+
+        try {
+            val fakePrefs = FakeSharedPreferences()
+            fakePrefs.data["paired_code"] = "CVA-TEST"
+            fakePrefs.data["device_id"] = "TEST_DEV_01"
+            val context = FakeTestContext(fakePrefs)
+
+            // Seed initial ETag into UsageTrackerService
+            UsageTrackerService.lastKnownETags[activeAppUrl] = server.initialETag
+
+            // 1. Build Request A (App A, Gen 10) targeting activeAppUrl
+            val bodyA = JSONObject().apply {
+                put("appName", "App_A")
+                put("foregroundGeneration", 10L)
+            }.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+            val reqA = okhttp3.Request.Builder().url(activeAppUrl).put(bodyA).build()
+
+            // 2. Rapid switch: Build Request B (App B, Gen 11) targeting activeAppUrl
+            val bodyB = JSONObject().apply {
+                put("appName", "App_B")
+                put("foregroundGeneration", 11L)
+            }.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+            val reqB = okhttp3.Request.Builder().url(activeAppUrl).put(bodyB).build()
+
+            // 3. CHAOS: Network delivers Request B FIRST to the server!
+            GuardianAccessibilityService.isScreenOnState = true
+            UsageTrackerService.foregroundGeneration.set(11L)
+            val successB = UsageTrackerService.executeOnlineGuarded(reqB, context, expectedEpoch = -1L, expectedGen = 11L)
+            assertTrue("Request B must succeed on server when ETag matches", successB)
+            assertEquals("Server state must now be App_B after Request B commits", "App_B", server.currentServerState.getString("appName"))
+            assertEquals("Server generation must be 11", 11L, server.currentServerState.getLong("foregroundGeneration"))
+            val etagAfterB = server.currentServerETag
+
+            // 4. Delayed Request A now arrives at the server with stale ETag (initialETag != etagAfterB)!
+            val delayedReqAWithStaleEtag = reqA.newBuilder()
+                .header("X-Firebase-ETag", "true")
+                .header("if-match", server.initialETag)
+                .build()
+
+            // When executed directly against the server, server-side CAS MUST return 412 and refuse write
+            val client = okhttp3.OkHttpClient()
+            val callA = client.newCall(delayedReqAWithStaleEtag)
+            val respA = callA.execute()
+            respA.use { rA ->
+                assertEquals("Server must return HTTP 412 Precondition Failed for stale delayed request A", 412, rA.code)
+                val returnedBody = JSONObject(rA.body?.string() ?: "{}")
+                assertEquals("Server returned body must be the current committed state (App_B)", "App_B", returnedBody.getString("appName"))
+                assertEquals("Server returned generation must be 11", 11L, returnedBody.getLong("foregroundGeneration"))
+            }
+
+            // 5. Verify final server state remains strictly App_B (gen 11), App_A was completely rejected!
+            val verifyCall = client.newCall(okhttp3.Request.Builder().url(activeAppUrl).get().build())
+            val verifyResp = verifyCall.execute()
+            verifyResp.use { vr ->
+                assertEquals(200, vr.code)
+                val finalServerJson = JSONObject(vr.body?.string() ?: "{}")
+                assertEquals("Final server state MUST remain App_B, never overwritten by delayed Request A", "App_B", finalServerJson.getString("appName"))
+                assertEquals(11L, finalServerJson.getLong("foregroundGeneration"))
+            }
+
+            // 6. Test executeOnlineGuarded CAS rejection on stale generation:
+            // When executeOnlineGuarded executes with an old expectedGen (10) against an already committed newer state (11),
+            // it safely aborts and avoids overwriting
+            val staleCallRes = UsageTrackerService.executeOnlineGuarded(
+                delayedReqAWithStaleEtag, context, expectedEpoch = -1L, expectedGen = 10L
+            )
+            assertFalse("executeOnlineGuarded must return false when server returns 412 with newer generation", staleCallRes)
+            assertEquals("Server state must still be App_B after stale executeOnlineGuarded call", "App_B", server.currentServerState.getString("appName"))
+        } finally {
+            server.close()
+            UsageTrackerService.lastKnownETags.remove(activeAppUrl)
+        }
     }
 
     private class FakeTestContext(
