@@ -68,12 +68,20 @@ if (headCommit) {
   candidateUrls.push(`https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/${headCommit}/apk/CVA-SmartGuardian-v${vJson.versionName}.apk`);
   candidateUrls.push(`https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/${headCommit}/apk/app-release.apk`);
 }
+candidateUrls.push(`https://api.github.com/repos/MrKhang-Khoi/appkhkt2627/contents/apk/CVA-SmartGuardian-v${vJson.versionName}.apk?ref=main`);
+candidateUrls.push('https://api.github.com/repos/MrKhang-Khoi/appkhkt2627/contents/apk/app-release.apk?ref=main');
 
 function downloadUrl(targetUrl, maxRedirects = 5) {
   return new Promise((resolve, reject) => {
     if (maxRedirects <= 0) return reject(new Error(`Quá nhiều lần redirect tại: ${targetUrl}`));
     const parsedUrl = new URL(targetUrl);
-    const req = https.get(parsedUrl, (res) => {
+    const options = {
+      headers: {
+        'User-Agent': 'CVA-SmartGuardian-OTA/1.3.8',
+        'Accept': parsedUrl.hostname === 'api.github.com' ? 'application/vnd.github.raw' : '*/*'
+      }
+    };
+    const req = https.get(parsedUrl, options, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         const nextUrl = new URL(res.headers.location, targetUrl).href;
         res.resume();
