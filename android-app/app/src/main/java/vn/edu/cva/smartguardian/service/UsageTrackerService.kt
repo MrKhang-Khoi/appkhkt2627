@@ -389,8 +389,15 @@ class UsageTrackerService : Service() {
 
             fun restoreSnapshotRaw(snapshot: List<String>) = synchronized(lock) {
                 super.clear()
-                for (item in snapshot) {
-                    super.add(item)
+                val boundedSnapshot = if (snapshot.size > maxEntries) {
+                    snapshot.subList(snapshot.size - maxEntries, snapshot.size)
+                } else {
+                    snapshot
+                }
+                for (item in boundedSnapshot) {
+                    if (item.isNotEmpty() && item.length <= 128) {
+                        super.add(item)
+                    }
                 }
             }
 
@@ -502,16 +509,37 @@ class UsageTrackerService : Service() {
                     val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                     val rawJson = prefs.getString("persisted_session_tokens_json", null)
                     if (!rawJson.isNullOrEmpty()) {
+                        // 1. Chống bẫy DoS/OOM: Giới hạn kích thước thô tối đa 64 KB
+                        if (rawJson.length > 64 * 1024) {
+                            Log.w("UsageTrackerService", "persisted_session_tokens_json vượt giới hạn 64KB (${rawJson.length} bytes), loại bỏ để chống OOM")
+                            prefs.edit().remove("persisted_session_tokens_json").commit()
+                            isSessionTokensRestored.set(true)
+                            return true
+                        }
                         val jsonArray = org.json.JSONArray(rawJson)
-                        // Nạp vào collection tạm, validate 100% hoàn tất trước khi swap vào RAM dưới lock
-                        val tempTokens = ArrayList<String>(jsonArray.length())
-                        for (i in 0 until jsonArray.length()) {
-                            tempTokens.add(jsonArray.getString(i))
+                        val count = jsonArray.length()
+                        // 2. Giới hạn nạp tối đa 500 tokens gần nhất (tail of array)
+                        val maxToLoad = MAX_RECORDED_SESSIONS
+                        val startIndex = if (count > maxToLoad) count - maxToLoad else 0
+                        val tempTokens = ArrayList<String>(Math.min(count, maxToLoad))
+                        for (i in startIndex until count) {
+                            val token = jsonArray.optString(i, "")
+                            if (token.isNotEmpty() && token.length <= 128) {
+                                tempTokens.add(token)
+                            }
                         }
-                        recordedSessionTokens.clear()
-                        for (token in tempTokens) {
-                            recordedSessionTokens.add(token)
-                        }
+                        (recordedSessionTokens as? LruSessionSet)?.restoreSnapshotRaw(tempTokens)
+                            ?: run {
+                                recordedSessionTokens.clear()
+                                val bounded = if (tempTokens.size > MAX_RECORDED_SESSIONS) {
+                                    tempTokens.subList(tempTokens.size - MAX_RECORDED_SESSIONS, tempTokens.size)
+                                } else {
+                                    tempTokens
+                                }
+                                for (token in bounded) {
+                                    recordedSessionTokens.add(token)
+                                }
+                            }
                     }
                     isSessionTokensRestored.set(true)
                     success = true

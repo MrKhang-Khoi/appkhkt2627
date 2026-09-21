@@ -8,17 +8,18 @@
   "fileSize": "5.88 MB",
   "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.3.8.apk",
   "apkFallbackUrl": "https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/CVA-SmartGuardian-v1.3.8.apk",
-  "sha256": "A42D4260F7826344D93F551B9311ECA23CEE753A89BC4D792D00F90019DCCAAF",
+  "sha256": "A7713F1BCBA598CAE3E02215EF5FA002BA25306DCE8B0FA35A842F4B621BA03B",
   "changelog": [
     "Di chuyển sendUrgentOfflineStatus ra ngoài hardwareTransitionLock để triệt tiêu hiện tượng giữ lock khi thực hiện I/O đĩa và mạng.",
     "Bổ sung diskStateLock và persistDeviceOfflineState / persistDeviceOnlineState với CAS logic nguyên tử kiểm soát last_written_epoch.",
     "Tách biệt hoàn toàn kế toán phiên ứng dụng khỏi stale-epoch fencing của telemetry mạng, đảm bảo không mất phiên khi bật tắt màn hình nhanh.",
     "Tích hợp hàng đợi pending_sessions_json bền vững kèm RAM fallback queue tự động lưu và retry sau SCREEN_ON hoặc restart.",
     "Tích hợp Atomic Durable File Journal (pending_sessions.journal) kèm post-write verification, chống mất phiên khi SharedPreferences gặp sự cố hoặc tiến trình bị kill.",
-    "Tích hợp Write-Ahead Log (pending_sessions.wal) append-only với CRC32 checksum per-record, hardware fsync và tự phục hồi khi file bị cắt dở do crash."
+    "Tích hợp Write-Ahead Log (pending_sessions.wal) append-only với CRC32 checksum per-record, hardware fsync và tự phục hồi khi file bị cắt dở do crash.",
+    "Cưỡng chế giới hạn cứng maxEntries trên restoreSnapshotRaw (slicing tail) và khử độc persisted_session_tokens_json (rào cản 64KB chống OOM/DoS)."
   ],
-  "releaseNotes": "Bản phát hành v1.3.8: Non-blocking hardwareTransitionLock, khóa đĩa diskStateLock nguyên tử kiểm soát last_written_epoch, tách biệt kế toán phiên, và CRC32 Write-Ahead Log (pending_sessions.wal).",
-  "updatedAt": 1789999331077,
-  "size": 6162815,
+  "releaseNotes": "Bản phát hành v1.3.8: Non-blocking hardwareTransitionLock, khóa đĩa diskStateLock nguyên tử, CRC32 WAL, và giới hạn cứng an toàn bộ nhớ LruSessionSet chống OOM/DoS.",
+  "updatedAt": 1790000000000,
+  "size": 6162987,
   "releaseDate": "2026-09-21"
 }

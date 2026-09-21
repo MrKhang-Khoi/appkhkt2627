@@ -257,9 +257,13 @@ if (fs.existsSync(guardianAccessFile) && fs.existsSync(usageTrackerFile) && fs.e
   // Kiểm tra session deduplication token chống tính giờ trùng lặp và rò rỉ bộ nhớ
   const hasSessionDeduplication = utCode.includes('val recordedSessionTokens') &&
     utCode.includes('recordedSessionTokens.add(sessionToken)') &&
+    utCode.includes('snapshot.subList(snapshot.size - maxEntries, snapshot.size)') &&
+    utCode.includes('rawJson.length > 64 * 1024') &&
     gaCode.includes('UsageTrackerService.recordAppSession(') &&
     testCode.includes('testSessionDeduplicationPreventsDoubleAccountingOnLifecycleRace') &&
-    testCode.includes('testBoundedSessionTokensEvictsOldestWithoutMemoryLeak');
+    testCode.includes('testBoundedSessionTokensEvictsOldestWithoutMemoryLeak') &&
+    testCode.includes('testLruSessionSetRestoreSnapshotRawStrictlyEnforcesMaxEntriesBound') &&
+    testCode.includes('testRestorePersistedSessionTokensRejectsOversizedJsonAndCapsAt500');
 
   const hasSessionLock = gaCode.includes('val sessionLock = Any()') &&
     gaCode.includes('synchronized(sessionLock)') &&
@@ -921,7 +925,9 @@ try {
     'testRecordAppSessionEnqueuesToPendingQueueOnCommitFailureAndFlushesSuccessfully',
     'testEnqueuePendingSessionSurvivesProcessKillViaDurableFileJournalWhenSharedPrefsFails',
     'testWalJournalRecoversValidSessionsWhenFileIsTruncatedOrCorruptAndPreservesSessionAWhenAddingSessionB',
-    'testWalJournalRejectsMismatchedCrcAndDoesNotExecuteCorruptRecord'
+    'testWalJournalRejectsMismatchedCrcAndDoesNotExecuteCorruptRecord',
+    'testLruSessionSetRestoreSnapshotRawStrictlyEnforcesMaxEntriesBound',
+    'testRestorePersistedSessionTokensRejectsOversizedJsonAndCapsAt500'
   ];
 
   for (const testName of requiredProductionFeatureTests) {

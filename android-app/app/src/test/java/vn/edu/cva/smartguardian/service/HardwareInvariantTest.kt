@@ -5049,6 +5049,77 @@ class HardwareInvariantTest {
         assertNull("Malformed line must be rejected (null)", parsedCorrupt)
     }
 
+    @Test
+    fun testLruSessionSetRestoreSnapshotRawStrictlyEnforcesMaxEntriesBound() {
+        val maxCap = 10
+        val set = UsageTrackerService.Companion.LruSessionSet(maxCap)
+        val oversizedList = (0 until 35).map { "token_$it" }
+
+        set.restoreSnapshotRaw(oversizedList)
+
+        assertEquals("restoreSnapshotRaw must strictly enforce maxEntries bound", maxCap, set.size)
+        // Ensure it kept the latest 10 elements: token_25 to token_34
+        for (i in 0 until 25) {
+            assertFalse("Old element token_$i must have been discarded", set.contains("token_$i"))
+        }
+        for (i in 25 until 35) {
+            assertTrue("Tail element token_$i must be preserved", set.contains("token_$i"))
+        }
+
+        // Test filtering: empty strings and oversized strings (> 128 chars) must be discarded
+        val oversizedString = "A".repeat(129)
+        val invalidList = listOf("", "valid_tok_1", oversizedString, "valid_tok_2")
+        set.restoreSnapshotRaw(invalidList)
+        assertEquals("restoreSnapshotRaw must filter out empty and >128-char tokens", 2, set.size)
+        assertTrue(set.contains("valid_tok_1"))
+        assertTrue(set.contains("valid_tok_2"))
+    }
+
+    @Test
+    fun testRestorePersistedSessionTokensRejectsOversizedJsonAndCapsAt500() {
+        UsageTrackerService.recordedSessionTokens.clear()
+        UsageTrackerService.isSessionTokensRestored.set(false)
+
+        val fakePrefs = FakeSharedPreferences()
+        val fakeContext = FakeTestContext(fakePrefs)
+
+        // 1. Test capping at 500 items when JSON contains 1200 items (< 64KB)
+        val jsonArray = org.json.JSONArray()
+        for (i in 0 until 1200) {
+            jsonArray.put("session_tok_$i")
+        }
+        fakePrefs.data["persisted_session_tokens_json"] = jsonArray.toString()
+
+        val restored = UsageTrackerService.restorePersistedSessionTokens(fakeContext)
+        assertTrue("restorePersistedSessionTokens must succeed for valid 1200 tokens", restored)
+        assertEquals("recordedSessionTokens size must be strictly capped at 500", 500, UsageTrackerService.recordedSessionTokens.size)
+
+        // Verify it preserved the newest 500 tokens (indices 700 to 1199)
+        assertFalse("Old token 0 must not exist in capped set", UsageTrackerService.recordedSessionTokens.contains("session_tok_0"))
+        assertFalse("Old token 699 must not exist in capped set", UsageTrackerService.recordedSessionTokens.contains("session_tok_699"))
+        assertTrue("Newest token 700 must exist in capped set", UsageTrackerService.recordedSessionTokens.contains("session_tok_700"))
+        assertTrue("Newest token 1199 must exist in capped set", UsageTrackerService.recordedSessionTokens.contains("session_tok_1199"))
+
+        // 2. Test payload > 64KB: Must be dropped and removed to protect against OOM / DoS
+        UsageTrackerService.recordedSessionTokens.clear()
+        UsageTrackerService.isSessionTokensRestored.set(false)
+
+        // Create an oversized JSON payload > 64KB
+        val bigToken = "X".repeat(100)
+        val largeArray = org.json.JSONArray()
+        for (i in 0 until 700) {
+            largeArray.put("prefix_${i}_$bigToken")
+        }
+        val oversizedJson = largeArray.toString()
+        assertTrue("Payload must exceed 64KB", oversizedJson.length > 64 * 1024)
+
+        fakePrefs.data["persisted_session_tokens_json"] = oversizedJson
+        val resultOversized = UsageTrackerService.restorePersistedSessionTokens(fakeContext)
+        assertTrue("Oversized payload must be safely handled without throwing OOM", resultOversized)
+        assertNull("Oversized poison key must be removed from SharedPreferences", fakePrefs.data["persisted_session_tokens_json"])
+        assertEquals("recordedSessionTokens must remain empty after dropping oversized payload", 0, UsageTrackerService.recordedSessionTokens.size)
+    }
+
     private class FakeTestContext(
         val prefs: FakeSharedPreferences
     ) : ContextWrapper(null) {
