@@ -5895,6 +5895,131 @@ class HardwareInvariantTest {
         assertEquals("YouTube must remain unchanged, not overwritten by stale task", "com.google.android.youtube", fakePrefs.data["last_foreground_pkg"])
     }
 
+    @Test
+    fun testScreenOnTransitionCancellableJobFencingOnScreenOff() {
+        val fakePrefs = FakeSharedPreferences(commitReturnsSuccess = true)
+        fakePrefs.data["paired_code"] = "TEST_FAMILY_123"
+        fakePrefs.data["device_id"] = "TEST_DEVICE_456"
+        val fakeContext = FakeTestContext(fakePrefs)
+
+        GuardianAccessibilityService.isScreenOnState = true
+        GuardianAccessibilityService.telemetryEpoch.set(100L)
+        UsageTrackerService.foregroundGeneration.set(50L)
+        UsageTrackerService.activeOnlineCalls.clear()
+
+        val enteredIoLatch = CountDownLatch(1)
+        val releaseIoLatch = CountDownLatch(1)
+        val pingAttempted = java.util.concurrent.atomic.AtomicBoolean(false)
+
+        val coroutineScope = kotlinx.coroutines.CoroutineScope(Dispatchers.Default)
+        val initialEpoch = 100L
+        val initialGen = 50L
+
+        // Simulate screenOnTransitionJob launched upon SCREEN_ON
+        val screenOnJob = coroutineScope.launch {
+            if (!GuardianAccessibilityService.isScreenOnState ||
+                GuardianAccessibilityService.telemetryEpoch.get() != initialEpoch ||
+                UsageTrackerService.foregroundGeneration.get() != initialGen
+            ) {
+                return@launch
+            }
+
+            // Signal entered IO block and wait for external event (simulating slow IO / screen off transition)
+            enteredIoLatch.countDown()
+            releaseIoLatch.await(5, TimeUnit.SECONDS)
+
+            // Step after simulated IO: strictly re-check fencing before dispatching heartbeat
+            if (!GuardianAccessibilityService.isScreenOnState ||
+                GuardianAccessibilityService.telemetryEpoch.get() != initialEpoch ||
+                UsageTrackerService.foregroundGeneration.get() != initialGen
+            ) {
+                return@launch
+            }
+
+            pingAttempted.set(true)
+            UsageTrackerService.sendHeartbeatPing(
+                context = fakeContext,
+                force = true,
+                expectedEpoch = initialEpoch,
+                expectedGen = initialGen
+            )
+        }
+
+        // Wait until coroutine is executing and blocked in IO
+        assertTrue("Coroutine must reach IO block", enteredIoLatch.await(2, TimeUnit.SECONDS))
+
+        // Simulate SCREEN_OFF event arriving concurrently:
+        // 1. Turn off screen flag
+        GuardianAccessibilityService.isScreenOnState = false
+        // 2. Cancel screenOnTransitionJob
+        screenOnJob.cancel()
+        // 3. Monotonically increment epoch & generation
+        val offEpoch = GuardianAccessibilityService.telemetryEpoch.incrementAndGet() // 101L
+        UsageTrackerService.foregroundGeneration.incrementAndGet() // 51L
+        // 4. Cancel active online calls
+        UsageTrackerService.cancelActiveOnlineCalls()
+
+        // Release the blocked IO
+        releaseIoLatch.countDown()
+
+        // Wait for coroutine completion
+        kotlinx.coroutines.runBlocking {
+            screenOnJob.join()
+        }
+
+        // Invariant Assertions:
+        assertTrue("screenOnJob must be cancelled", screenOnJob.isCancelled)
+        assertFalse("Screen state must be off", GuardianAccessibilityService.isScreenOnState)
+        assertEquals("Epoch must have advanced to 101", 101L, offEpoch)
+        assertFalse("Fencing must have prevented ping execution after screen-off", pingAttempted.get())
+        assertEquals("0 active online calls must be present", 0, UsageTrackerService.activeOnlineCalls.size)
+    }
+
+    @Test
+    fun testSendHeartbeatPingFencingRejectsStaleEpochOrGenerationDirectly() {
+        val fakePrefs = FakeSharedPreferences(commitReturnsSuccess = true)
+        fakePrefs.data["paired_code"] = "TEST_FAMILY_123"
+        fakePrefs.data["device_id"] = "TEST_DEVICE_456"
+        val fakeContext = FakeTestContext(fakePrefs)
+
+        GuardianAccessibilityService.isScreenOnState = true
+        GuardianAccessibilityService.telemetryEpoch.set(200L)
+        UsageTrackerService.foregroundGeneration.set(100L)
+        UsageTrackerService.lastHeartbeatSentTimestamp.set(0L)
+        UsageTrackerService.activeOnlineCalls.clear()
+
+        // 1. Stale epoch: expectedEpoch 199L != current 200L
+        UsageTrackerService.sendHeartbeatPing(
+            context = fakeContext,
+            force = true,
+            expectedEpoch = 199L,
+            expectedGen = 100L
+        )
+        assertEquals("Ping with stale epoch must be immediately rejected", 0L, UsageTrackerService.lastHeartbeatSentTimestamp.get())
+        assertEquals("0 online calls must be enqueued on stale epoch", 0, UsageTrackerService.activeOnlineCalls.size)
+
+        // 2. Stale generation: expectedGen 99L != current 100L
+        UsageTrackerService.sendHeartbeatPing(
+            context = fakeContext,
+            force = true,
+            expectedEpoch = 200L,
+            expectedGen = 99L
+        )
+        assertEquals("Ping with stale generation must be immediately rejected", 0L, UsageTrackerService.lastHeartbeatSentTimestamp.get())
+        assertEquals("0 online calls must be enqueued on stale generation", 0, UsageTrackerService.activeOnlineCalls.size)
+
+        // 3. Screen off: isScreenOnState = false
+        GuardianAccessibilityService.isScreenOnState = false
+        UsageTrackerService.sendHeartbeatPing(
+            context = fakeContext,
+            force = true,
+            expectedEpoch = 200L,
+            expectedGen = 100L
+        )
+        assertEquals("Ping when screen is off must be immediately rejected", 0L, UsageTrackerService.lastHeartbeatSentTimestamp.get())
+        assertEquals("0 online calls must be enqueued when screen is off", 0, UsageTrackerService.activeOnlineCalls.size)
+    }
+
     private class FakeTestContext(
         val prefs: FakeSharedPreferences
     ) : ContextWrapper(null) {

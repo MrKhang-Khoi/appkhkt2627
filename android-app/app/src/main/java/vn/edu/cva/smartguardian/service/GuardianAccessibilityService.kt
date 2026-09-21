@@ -321,6 +321,7 @@ class GuardianAccessibilityService : AccessibilityService() {
     private val serviceJob = SupervisorJob()
     private val serviceScope = CoroutineScope(Dispatchers.Default + serviceJob)
     private var heartbeatJob: Job? = null
+    internal var screenOnTransitionJob: Job? = null
 
     private var lastCheckedUrl: String = ""
     private var lastBlockTimestamp: Long = 0L
@@ -384,6 +385,7 @@ class GuardianAccessibilityService : AccessibilityService() {
             // 1. NGAY LẬP TỨC và ĐỒNG BỘ NGUYÊN TỬ: Ngắt cờ phần cứng, hủy heartbeat, tăng epoch và generation
             isScreenOnState = false
             heartbeatJob?.cancel()
+            screenOnTransitionJob?.cancel()
             val currentEpoch = telemetryEpoch.incrementAndGet()
             UsageTrackerService.foregroundGeneration.incrementAndGet() // Triệt tiêu ngay lập tức mọi foreground telemetry in-flight
 
@@ -413,7 +415,9 @@ class GuardianAccessibilityService : AccessibilityService() {
         val sessionToken = transition.sessionToken
         val now = System.currentTimeMillis()
 
-        // Fast-path cancel: Hủy toàn bộ call online in-flight HOÀN TOÀN NGOÀI hardwareTransitionLock
+        // Fast-path cancel: Hủy toàn bộ call online in-flight và job screen-on transition HOÀN TOÀN NGOÀI hardwareTransitionLock
+        screenOnTransitionJob?.cancel()
+        heartbeatJob?.cancel()
         UsageTrackerService.cancelActiveOnlineCalls()
 
         // 3. Chốt phiên polling độc lập (dispatches I/O to background coroutine)
@@ -454,6 +458,7 @@ class GuardianAccessibilityService : AccessibilityService() {
             if (!isHardwareOnline) {
                 isScreenOnState = false
                 heartbeatJob?.cancel()
+                screenOnTransitionJob?.cancel()
                 Log.d("GuardianAccess", "handleScreenOn: Thiết bị chưa online hoàn toàn (isInteractive=${pm?.isInteractive}, isKeyguardLocked=${km?.isKeyguardLocked}) -> Chưa kích hoạt heartbeat")
                 return@synchronized ScreenOnTransition(telemetryEpoch.get(), null, UsageTrackerService.foregroundGeneration.get(), false)
             }
@@ -484,14 +489,55 @@ class GuardianAccessibilityService : AccessibilityService() {
 
         // Hủy các cuộc gọi offline đang dở dang và khởi động heartbeat (hoàn toàn ngoài hardwareTransitionLock)
         UsageTrackerService.cancelActiveOfflineCalls()
+        screenOnTransitionJob?.cancel()
         startPeriodicHeartbeat()
 
         // Dispatch disk persistence sang Dispatchers.IO HOÀN TOÀN NGOÀI hardwareTransitionLock
-        serviceScope.launch(Dispatchers.IO) {
+        // Gắn vào Job có thể hủy (screenOnTransitionJob) kèm kiểm tra fencing nghiêm ngặt tại từng bước
+        screenOnTransitionJob = serviceScope.launch(Dispatchers.IO) {
+            // Kiểm tra fencing trước khi ghi đĩa online
+            if (!isScreenOnState || telemetryEpoch.get() != currentEpoch || UsageTrackerService.foregroundGeneration.get() != currentGen) {
+                Log.w("GuardianAccess", "Hủy bỏ screenOnTransitionJob trước khi ghi đĩa online")
+                return@launch
+            }
+
             UsageTrackerService.persistDeviceOnlineState(applicationContext, currentEpoch)
+
+            // Kiểm tra fencing sau khi ghi đĩa online
+            if (!isScreenOnState || telemetryEpoch.get() != currentEpoch || UsageTrackerService.foregroundGeneration.get() != currentGen) {
+                Log.w("GuardianAccess", "Hủy bỏ screenOnTransitionJob sau khi ghi đĩa online")
+                return@launch
+            }
+
             UsageTrackerService.flushPendingSessions(applicationContext)
+
+            // Kiểm tra fencing sau khi flushPendingSessions
+            if (!isScreenOnState || telemetryEpoch.get() != currentEpoch || UsageTrackerService.foregroundGeneration.get() != currentGen) {
+                Log.w("GuardianAccess", "Hủy bỏ screenOnTransitionJob sau flushPendingSessions")
+                return@launch
+            }
+
+            // Kiểm tra trạng thái phần cứng trực tiếp trước khi gửi heartbeat
+            val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
+            val km = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+            if (pm?.isInteractive != true || km?.isKeyguardLocked == true) {
+                Log.w("GuardianAccess", "Hủy bỏ sendHeartbeatPing: Phần cứng không còn interactive hoặc bị khóa")
+                return@launch
+            }
+
+            // Kiểm tra fencing lần cuối ngay trước khi gọi sendHeartbeatPing
+            if (!isScreenOnState || telemetryEpoch.get() != currentEpoch || UsageTrackerService.foregroundGeneration.get() != currentGen) {
+                Log.w("GuardianAccess", "Hủy bỏ sendHeartbeatPing: Trạng thái hardware thay đổi trước khi gửi")
+                return@launch
+            }
+
             // Phát nhịp tim khẩn cấp tức thời (< 500ms) lên Firebase để máy phụ huynh & Web nhận ngay trạng thái trực tuyến
-            UsageTrackerService.sendHeartbeatPing(applicationContext, force = true)
+            UsageTrackerService.sendHeartbeatPing(
+                context = applicationContext,
+                force = true,
+                expectedEpoch = currentEpoch,
+                expectedGen = currentGen
+            )
         }
 
         serviceScope.launch(Dispatchers.IO) {
@@ -1185,6 +1231,7 @@ class GuardianAccessibilityService : AccessibilityService() {
         }
         try {
             isScreenOnState = false
+            screenOnTransitionJob?.cancel()
             heartbeatJob?.cancel()
             val finalEpoch = telemetryEpoch.incrementAndGet()
             UsageTrackerService.cancelActiveOnlineCalls()

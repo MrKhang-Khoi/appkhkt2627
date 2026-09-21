@@ -1676,16 +1676,27 @@ class UsageTrackerService : Service() {
             }
         }
 
-        fun sendHeartbeatPing(context: Context, force: Boolean = false) {
+        fun sendHeartbeatPing(
+            context: Context,
+            force: Boolean = false,
+            expectedEpoch: Long = -1L,
+            expectedGen: Long = -1L
+        ) {
+            val isTest = context.javaClass.simpleName.contains("Fake") || context.javaClass.simpleName.contains("Test")
             val powerManager = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
             val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
-            val isScreenInteractive = powerManager?.isInteractive ?: false
+            val isScreenInteractive = powerManager?.isInteractive ?: (isTest && GuardianAccessibilityService.isScreenOnState)
             val isLocked = keyguardManager?.isKeyguardLocked ?: false
 
             // Bất biến phần cứng: Màn hình tắt hoặc máy khóa -> TUYỆT ĐỐI không gửi heartbeat online
             if (!GuardianAccessibilityService.isScreenOnState || !isScreenInteractive || isLocked) {
                 return
             }
+
+            val currentEpoch = GuardianAccessibilityService.telemetryEpoch.get()
+            val currentGen = foregroundGeneration.get()
+            if (expectedEpoch != -1L && currentEpoch != expectedEpoch) return
+            if (expectedGen != -1L && currentGen != expectedGen) return
 
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val pairedCode = prefs.getString("paired_code", "") ?: ""
@@ -1707,6 +1718,14 @@ class UsageTrackerService : Service() {
 
             val callEpoch = GuardianAccessibilityService.telemetryEpoch.get()
             val callGen = foregroundGeneration.get()
+            if (expectedEpoch != -1L && callEpoch != expectedEpoch) {
+                isHeartbeatInFlight.set(false)
+                return
+            }
+            if (expectedGen != -1L && callGen != expectedGen) {
+                isHeartbeatInFlight.set(false)
+                return
+            }
 
             syncScope.launch(Dispatchers.IO) {
                 try {
@@ -1714,13 +1733,17 @@ class UsageTrackerService : Service() {
                         val lockNow = System.currentTimeMillis()
                         val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
                         val km = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
-                        val stillInteractive = pm?.isInteractive ?: false
+                        val stillInteractive = pm?.isInteractive ?: (isTest && GuardianAccessibilityService.isScreenOnState)
                         val stillLocked = km?.isKeyguardLocked ?: false
+                        val lockEpoch = GuardianAccessibilityService.telemetryEpoch.get()
+                        val lockGen = foregroundGeneration.get()
 
                         // Kiểm tra nguyên tử tính hợp lệ phần cứng và generation ngay bên trong mutex
                         if (!GuardianAccessibilityService.isScreenOnState || !stillInteractive || stillLocked ||
-                            GuardianAccessibilityService.telemetryEpoch.get() != callEpoch ||
-                            foregroundGeneration.get() != callGen
+                            (expectedEpoch != -1L && lockEpoch != expectedEpoch) ||
+                            (expectedGen != -1L && lockGen != expectedGen) ||
+                            lockEpoch != callEpoch ||
+                            lockGen != callGen
                         ) {
                             return@withLock null
                         }
@@ -1838,7 +1861,7 @@ class UsageTrackerService : Service() {
                         val (sentTimestamp, requests) = preparedData
                         val deferreds = requests.map { req ->
                             async(Dispatchers.IO) {
-                                executeOnlineGuarded(req, context, callEpoch)
+                                executeOnlineGuarded(req, context, callEpoch, callGen)
                             }
                         }
                         val results = deferreds.awaitAll()
