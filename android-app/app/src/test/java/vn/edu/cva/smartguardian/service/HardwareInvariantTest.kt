@@ -454,80 +454,81 @@ class HardwareInvariantTest {
     @Test
     fun testForegroundEvidenceVerificationStrictlyRejectsBackgroundPackages() {
         val targetPkg = "com.background.service"
+        val now = 100_000L
 
-        // Scenario 1: CRITICAL AUDIT CASE - rootInActiveWindow is null, ActivityManager has no foreground, UsageStats has no resumed event
+        // Scenario 1: CRITICAL AUDIT CASE - rootInActiveWindow is null, UsageStats has no resumed event
         // Must strictly return FALSE (cấm coi root == null là bằng chứng foreground)
         val resultNullRootNoEvidence = GuardianAccessibilityService.evaluateForegroundEvidence(
             activeRootPkg = null,
-            foregroundProcessPkg = null,
-            processImportance = null,
             usageStatsLastResumedPkg = null,
-            targetPkg = targetPkg
+            targetPkg = targetPkg,
+            now = now
         )
         assertFalse(
             "When root is null and no engine confirms foreground, background app must NOT be accepted as foreground",
             resultNullRootNoEvidence
         )
 
-        // Scenario 2: Active process belongs to another app (e.g. Launcher with importance 100), background app fires event
-        // CRITICAL INVARIANT: Dù importance là 100 nhưng processName thuộc Launcher thì targetPkg background vẫn phải bị từ chối 100%
+        // Scenario 2: Active root window belongs to another app (e.g. Launcher), background app fires event
+        // CRITICAL INVARIANT: Root window thuộc Launcher thì targetPkg background vẫn phải bị từ chối 100%
         val resultOtherRoot = GuardianAccessibilityService.evaluateForegroundEvidence(
             activeRootPkg = "com.google.android.apps.nexuslauncher",
-            foregroundProcessPkg = "com.google.android.apps.nexuslauncher",
-            processImportance = 100 /* IMPORTANCE_FOREGROUND của Launcher */,
             usageStatsLastResumedPkg = "com.google.android.apps.nexuslauncher",
-            targetPkg = targetPkg
+            targetPkg = targetPkg,
+            now = now
         )
-        assertFalse("Background package must be rejected even when system launcher has importance 100", resultOtherRoot)
+        assertFalse("Background package must be rejected even when system launcher is active", resultOtherRoot)
 
-        // Scenario 3: Target process exists but importance is background/cached (e.g. 400)
-        val resultCachedProcess = GuardianAccessibilityService.evaluateForegroundEvidence(
+        // Scenario 3: UsageStats event exists but is stale (e.g. 20s old > 15s window) -> Must reject
+        val staleTime = now - 20_000L
+        val resultStaleEvent = GuardianAccessibilityService.evaluateForegroundEvidence(
             activeRootPkg = null,
-            foregroundProcessPkg = targetPkg,
-            processImportance = 400 /* IMPORTANCE_CACHED */,
-            usageStatsLastResumedPkg = null,
-            targetPkg = targetPkg
+            usageStatsLastResumedPkg = targetPkg,
+            targetPkg = targetPkg,
+            now = now,
+            lastEventTime = staleTime,
+            maxEventAgeMs = 15_000L
         )
-        assertFalse("Target package must be rejected if process importance is cached (not foreground)", resultCachedProcess)
+        assertFalse("Target package must be rejected if UsageStats event is stale (>15s)", resultStaleEvent)
 
         // Scenario 4: Genuine foreground via Accessibility Window Hierarchy
         val resultAccessibilityMatch = GuardianAccessibilityService.evaluateForegroundEvidence(
             activeRootPkg = targetPkg,
-            foregroundProcessPkg = null,
-            processImportance = null,
             usageStatsLastResumedPkg = null,
-            targetPkg = targetPkg
+            targetPkg = targetPkg,
+            now = now
         )
         assertTrue("Genuine Accessibility root window match must be accepted as foreground", resultAccessibilityMatch)
 
-        // Scenario 5: Genuine foreground via ActivityManager (processName == targetPkg AND importance == 100)
-        val resultActivityManagerMatch = GuardianAccessibilityService.evaluateForegroundEvidence(
-            activeRootPkg = null,
-            foregroundProcessPkg = targetPkg,
-            processImportance = 100,
+        // Scenario 5: Genuine foreground via Accessibility sub-process (e.g. targetPkg:renderer)
+        val resultSubProcessMatch = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = "$targetPkg:renderer",
             usageStatsLastResumedPkg = null,
-            targetPkg = targetPkg
+            targetPkg = targetPkg,
+            now = now
         )
-        assertTrue("ActivityManager IMPORTANCE_FOREGROUND with matching process must be accepted as foreground", resultActivityManagerMatch)
+        assertTrue("Sub-process via Accessibility window must be accepted as foreground", resultSubProcessMatch)
 
-        // Scenario 6: Genuine foreground via UsageStatsManager ACTIVITY_RESUMED
+        // Scenario 6: Genuine foreground via UsageStatsManager ACTIVITY_RESUMED within fresh window (<15s)
+        val freshTime = now - 3_000L
         val resultUsageStatsMatch = GuardianAccessibilityService.evaluateForegroundEvidence(
             activeRootPkg = null,
-            foregroundProcessPkg = null,
-            processImportance = null,
             usageStatsLastResumedPkg = targetPkg,
-            targetPkg = targetPkg
+            targetPkg = targetPkg,
+            now = now,
+            lastEventTime = freshTime,
+            maxEventAgeMs = 15_000L
         )
-        assertTrue("UsageStatsManager ACTIVITY_RESUMED event match must be accepted as foreground", resultUsageStatsMatch)
+        assertTrue("Fresh UsageStatsManager ACTIVITY_RESUMED event match must be accepted as foreground", resultUsageStatsMatch)
 
-        // Scenario 7: Invariant conflict check - activeRootPkg belongs to another app, but UsageStats returned stale targetPkg
+        // Scenario 7: Invariant conflict check - activeRootPkg belongs to another app, but UsageStats returned targetPkg
         // MUST BE STRICTLY REJECTED to prevent stale foreground false accounting
         val resultConflictingRootStaleUsageStats = GuardianAccessibilityService.evaluateForegroundEvidence(
             activeRootPkg = "com.other.active.app",
-            foregroundProcessPkg = null,
-            processImportance = null,
             usageStatsLastResumedPkg = targetPkg,
-            targetPkg = targetPkg
+            targetPkg = targetPkg,
+            now = now,
+            lastEventTime = freshTime
         )
         assertFalse("Stale UsageStats event must be strictly rejected when activeRootPkg belongs to a different app", resultConflictingRootStaleUsageStats)
     }
@@ -643,15 +644,20 @@ class HardwareInvariantTest {
         val targetPkg = "com.facebook.katana"
         val namedProcess = "com.facebook.katana:media"
 
-        // Named process running with IMPORTANCE_FOREGROUND must be recognized as target package
+        // Named process (e.g. package:name) in active window or UsageStats must be recognized as target package
         val result = GuardianAccessibilityService.evaluateForegroundEvidence(
-            activeRootPkg = null,
-            foregroundProcessPkg = namedProcess,
-            processImportance = 100,
+            activeRootPkg = namedProcess,
             usageStatsLastResumedPkg = null,
             targetPkg = targetPkg
         )
-        assertTrue("Named process (e.g. package:name) with IMPORTANCE_FOREGROUND must be accepted as foreground", result)
+        assertTrue("Named process (e.g. package:name) in active window must be accepted as foreground", result)
+
+        val resultUsage = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = null,
+            usageStatsLastResumedPkg = namedProcess,
+            targetPkg = targetPkg
+        )
+        assertTrue("Named process in UsageStats must be accepted as foreground", resultUsage)
     }
 
     @Test
@@ -1265,8 +1271,6 @@ class HardwareInvariantTest {
         // When activeRootPkg exactly matches targetPkg, it must be recognized
         val result = GuardianAccessibilityService.evaluateForegroundEvidence(
             activeRootPkg = "com.ss.android.ugc.trill",
-            foregroundProcessPkg = null,
-            processImportance = null,
             usageStatsLastResumedPkg = null,
             targetPkg = "com.ss.android.ugc.trill"
         )
@@ -1276,11 +1280,9 @@ class HardwareInvariantTest {
     @Test
     fun testEvaluateForegroundEvidenceRejectsConflictingActiveWindow() {
         // When activeRootPkg belongs to another app (e.g. Facebook), it MUST reject TikTok
-        // even if stale UsageStats or background process points to TikTok
+        // even if stale UsageStats points to TikTok
         val result = GuardianAccessibilityService.evaluateForegroundEvidence(
             activeRootPkg = "com.facebook.katana",
-            foregroundProcessPkg = "com.ss.android.ugc.trill",
-            processImportance = ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND,
             usageStatsLastResumedPkg = "com.ss.android.ugc.trill",
             targetPkg = "com.ss.android.ugc.trill"
         )
@@ -1290,35 +1292,36 @@ class HardwareInvariantTest {
     @Test
     fun testEvaluateForegroundEvidenceConfirmsForegroundProcessWhenWindowNull() {
         // During Xiaomi HyperOS gesture transition, activeRootPkg might be null.
-        // ActivityManager IMPORTANCE_FOREGROUND (100) on targetPkg confirms foreground app!
+        // UsageStats event on targetPkg confirms foreground app!
+        val now = 100_000L
         val result = GuardianAccessibilityService.evaluateForegroundEvidence(
             activeRootPkg = null,
-            foregroundProcessPkg = "vn.edu.azota",
-            processImportance = ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND,
-            usageStatsLastResumedPkg = null,
-            targetPkg = "vn.edu.azota"
+            usageStatsLastResumedPkg = "vn.edu.azota",
+            targetPkg = "vn.edu.azota",
+            now = now,
+            lastEventTime = now - 2_000L
         )
-        assertTrue("Matching foreground process (100) when window is null must resolve to true", result)
+        assertTrue("Matching foreground process event when window is null must resolve to true", result)
 
-        // Also test named sub-process (e.g. "vn.edu.azota:main")
+        // Also test named sub-process (e.g. "vn.edu.azota:player")
         val subProcessResult = GuardianAccessibilityService.evaluateForegroundEvidence(
             activeRootPkg = null,
-            foregroundProcessPkg = "vn.edu.azota:player",
-            processImportance = ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND,
-            usageStatsLastResumedPkg = null,
-            targetPkg = "vn.edu.azota"
+            usageStatsLastResumedPkg = "vn.edu.azota:player",
+            targetPkg = "vn.edu.azota",
+            now = now,
+            lastEventTime = now - 2_000L
         )
         assertTrue("Named sub-process of targetPkg must resolve to true", subProcessResult)
 
-        // Process with importance != 100 (e.g. cached 400) must be rejected
-        val cachedResult = GuardianAccessibilityService.evaluateForegroundEvidence(
+        // Stale event (> 15s) must be rejected
+        val staleResult = GuardianAccessibilityService.evaluateForegroundEvidence(
             activeRootPkg = null,
-            foregroundProcessPkg = "vn.edu.azota",
-            processImportance = 400,
-            usageStatsLastResumedPkg = null,
-            targetPkg = "vn.edu.azota"
+            usageStatsLastResumedPkg = "vn.edu.azota",
+            targetPkg = "vn.edu.azota",
+            now = now,
+            lastEventTime = now - 25_000L
         )
-        assertFalse("Cached process (importance 400) must be rejected", cachedResult)
+        assertFalse("Stale event (>15s) must be rejected", staleResult)
     }
 
     @Test
@@ -1326,8 +1329,6 @@ class HardwareInvariantTest {
         // Fallback to UsageStatsManager lastResumedPkg only when window is null/empty
         val result = GuardianAccessibilityService.evaluateForegroundEvidence(
             activeRootPkg = null,
-            foregroundProcessPkg = null,
-            processImportance = null,
             usageStatsLastResumedPkg = "com.google.android.youtube",
             targetPkg = "com.google.android.youtube"
         )
@@ -1336,8 +1337,6 @@ class HardwareInvariantTest {
         // Empty targetPkg must immediately return false
         val emptyResult = GuardianAccessibilityService.evaluateForegroundEvidence(
             activeRootPkg = null,
-            foregroundProcessPkg = null,
-            processImportance = null,
             usageStatsLastResumedPkg = "com.google.android.youtube",
             targetPkg = ""
         )
@@ -1842,26 +1841,27 @@ class HardwareInvariantTest {
     @Test
     fun testForegroundEvidenceRequiresImportanceForegroundForProcessMatch() {
         val target = "com.gaming.app"
+        val now = 100_000L
 
-        // Process matches target but importance is IMPORTANCE_CACHED (400) -> Must reject
+        // Stale event (> 15s) -> Must reject
         val cachedResult = GuardianAccessibilityService.evaluateForegroundEvidence(
             activeRootPkg = null,
-            foregroundProcessPkg = target,
-            processImportance = ActivityManager.RunningAppProcessInfo.IMPORTANCE_CACHED,
-            usageStatsLastResumedPkg = null,
-            targetPkg = target
+            usageStatsLastResumedPkg = target,
+            targetPkg = target,
+            now = now,
+            lastEventTime = now - 20_000L
         )
-        assertFalse("Cached process must NOT be accepted as foreground", cachedResult)
+        assertFalse("Stale event (>15s) must NOT be accepted as foreground", cachedResult)
 
-        // Process matches target and importance is IMPORTANCE_FOREGROUND (100) -> Must accept
+        // Fresh event (< 15s) -> Must accept
         val fgResult = GuardianAccessibilityService.evaluateForegroundEvidence(
             activeRootPkg = null,
-            foregroundProcessPkg = target,
-            processImportance = ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND,
-            usageStatsLastResumedPkg = null,
-            targetPkg = target
+            usageStatsLastResumedPkg = target,
+            targetPkg = target,
+            now = now,
+            lastEventTime = now - 2_000L
         )
-        assertTrue("Active foreground process must be accepted", fgResult)
+        assertTrue("Active foreground process event must be accepted", fgResult)
     }
 
     @Test
@@ -1869,25 +1869,24 @@ class HardwareInvariantTest {
         val basePkg = "com.supercell.clashofclans"
         val subProcess = "com.supercell.clashofclans:remote"
 
-        // Sub-process với dấu hai chấm (package:name) và IMPORTANCE_FOREGROUND -> BẮT BUỘC chấp nhận theo SPEC
+        // Sub-process với dấu hai chấm (package:name) trong active window -> BẮT BUỘC chấp nhận theo SPEC
         val result = GuardianAccessibilityService.evaluateForegroundEvidence(
-            activeRootPkg = null,
-            foregroundProcessPkg = subProcess,
-            processImportance = ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND,
-            usageStatsLastResumedPkg = basePkg,
-            targetPkg = basePkg
-        )
-        assertTrue("Sub-process package:name with IMPORTANCE_FOREGROUND must be accepted", result)
-
-        // Sub-process nhưng importance không phải FOREGROUND -> BẮT BUỘC từ chối
-        val cachedSubResult = GuardianAccessibilityService.evaluateForegroundEvidence(
-            activeRootPkg = null,
-            foregroundProcessPkg = subProcess,
-            processImportance = ActivityManager.RunningAppProcessInfo.IMPORTANCE_CACHED,
+            activeRootPkg = subProcess,
             usageStatsLastResumedPkg = null,
             targetPkg = basePkg
         )
-        assertFalse("Sub-process with CACHED importance must be rejected", cachedSubResult)
+        assertTrue("Sub-process package:name in active window must be accepted", result)
+
+        // Sub-process trong UsageStats event tươi mới -> BẮT BUỘC chấp nhận
+        val now = 100_000L
+        val usageSubResult = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = null,
+            usageStatsLastResumedPkg = subProcess,
+            targetPkg = basePkg,
+            now = now,
+            lastEventTime = now - 1_000L
+        )
+        assertTrue("Sub-process in UsageStats must be accepted", usageSubResult)
     }
 
     @Test
@@ -2623,7 +2622,7 @@ class HardwareInvariantTest {
         assertEquals("TRANG WEB ĐANG TRUY CẬP (REALTIME):", liveState.headerText)
         assertEquals("kenh14.vn • Kênh 14 - Tin tức giới trẻ", liveState.domainText)
         assertEquals("Google Chrome • Vừa truy cập", liveState.subtitleText)
-        assertEquals("🟢 ĐANG DUYỆT", liveState.badgeText)
+        assertEquals("ĐANG DUYỆT", liveState.badgeText)
         assertTrue("isLiveBrowsing must be true", liveState.isLiveBrowsing)
         assertFalse("isBlocked must be false", liveState.isBlocked)
 
@@ -2643,7 +2642,7 @@ class HardwareInvariantTest {
         assertEquals("TRANG WEB ĐANG TRUY CẬP (REALTIME):", staleState.headerText)
         assertEquals("tuoitre.vn • Báo Tuổi Trẻ", staleState.domainText)
         assertEquals("Google Chrome • 5m trước", staleState.subtitleText)
-        assertEquals("⚪ VỪA XEM", staleState.badgeText)
+        assertEquals("VỪA XEM", staleState.badgeText)
         assertFalse("isLiveBrowsing must be false when switched away", staleState.isLiveBrowsing)
         assertFalse(staleState.isBlocked)
 
@@ -2677,7 +2676,7 @@ class HardwareInvariantTest {
         assertTrue("Blocked banner must be visible", blockedState.isVisible)
         assertEquals("TRANG WEB ĐÃ BỊ CHẶN BỞI BỘ LỌC:", blockedState.headerText)
         assertEquals("violation-site.com • Web độc hại", blockedState.domainText)
-        assertEquals("🚫 ĐÃ CHẶN", blockedState.badgeText)
+        assertEquals("[ĐÃ CHẶN]", blockedState.badgeText)
         assertFalse("Live browsing flag must be false for blocked site", blockedState.isLiveBrowsing)
         assertTrue("isBlocked flag must be true", blockedState.isBlocked)
 
@@ -2697,11 +2696,11 @@ class HardwareInvariantTest {
         assertEquals("LẦN CUỐI GHI NHẬN TRƯỚC KHI NGOẠI TUYẾN:", offlineRecentState.headerText)
         assertEquals("dantri.com.vn • Báo Dân Trí", offlineRecentState.domainText)
         assertEquals("Google Chrome • 25m trước khi ngoại tuyến", offlineRecentState.subtitleText)
-        assertEquals("[🔴 OFFLINE]", offlineRecentState.badgeText)
+        assertEquals("[OFFLINE]", offlineRecentState.badgeText)
         assertFalse(offlineRecentState.isLiveBrowsing)
         assertFalse(offlineRecentState.isBlocked)
 
-        // Vector 5b: Offline recent <= 60m with blocked site (must preserve [🔴 OFFLINE] and indicate blocked)
+        // Vector 5b: Offline recent <= 60m with blocked site (must preserve [OFFLINE] and indicate blocked)
         val offlineBlockedState = MainActivity.evaluateWebBannerDisplay(
             isOnline = false,
             webDomain = "gambling-site.com",
@@ -2717,8 +2716,8 @@ class HardwareInvariantTest {
         assertEquals("LẦN CUỐI GHI NHẬN TRƯỚC KHI NGOẠI TUYẾN:", offlineBlockedState.headerText)
         assertEquals("gambling-site.com • Web Cờ Bạc", offlineBlockedState.domainText)
         assertEquals("Google Chrome • 15m trước khi ngoại tuyến", offlineBlockedState.subtitleText)
-        assertEquals("[🔴 OFFLINE] • 🚫 ĐÃ CHẶN", offlineBlockedState.badgeText)
-        assertTrue("Badge must contain [🔴 OFFLINE] indicator", offlineBlockedState.badgeText.contains("[🔴 OFFLINE]"))
+        assertEquals("[OFFLINE] • [ĐÃ CHẶN]", offlineBlockedState.badgeText)
+        assertTrue("Badge must contain [OFFLINE] indicator", offlineBlockedState.badgeText.contains("[OFFLINE]"))
         assertFalse("isLiveBrowsing must be false when offline", offlineBlockedState.isLiveBrowsing)
         assertTrue("isBlocked flag must be true", offlineBlockedState.isBlocked)
 
@@ -2834,7 +2833,7 @@ class HardwareInvariantTest {
             webTimestamp = now - 120_000L, // 2m ago
             now = now
         )
-        assertEquals("🟢 Đang hoạt động • Pixel 7 • 🌐 vnexpress.net", validSubtitle)
+        assertEquals("Đang hoạt động • Pixel 7 • vnexpress.net", validSubtitle)
 
         // 2. Offline device -> returns empty string (handled by offline branch)
         val offlineSubtitle = MainActivity.evaluateParentDashboardSubtitle(
@@ -2854,7 +2853,7 @@ class HardwareInvariantTest {
             webTimestamp = 0L,
             now = now
         )
-        assertEquals("🟢 Đang hoạt động • Pixel 7", zeroTimeSubtitle)
+        assertEquals("Đang hoạt động • Pixel 7", zeroTimeSubtitle)
 
         // 4. Negative timestamp -> NO web suffix
         val negTimeSubtitle = MainActivity.evaluateParentDashboardSubtitle(
@@ -2864,7 +2863,7 @@ class HardwareInvariantTest {
             webTimestamp = -5000L,
             now = now
         )
-        assertEquals("🟢 Đang hoạt động • Pixel 7", negTimeSubtitle)
+        assertEquals("Đang hoạt động • Pixel 7", negTimeSubtitle)
 
         // 5. Future timestamp (Anti-Telemetry Spoofing) -> NO web suffix
         val futureTimeSubtitle = MainActivity.evaluateParentDashboardSubtitle(
@@ -2874,7 +2873,7 @@ class HardwareInvariantTest {
             webTimestamp = now + 60_000L,
             now = now
         )
-        assertEquals("🟢 Đang hoạt động • Pixel 7", futureTimeSubtitle)
+        assertEquals("Đang hoạt động • Pixel 7", futureTimeSubtitle)
 
         // 6. Stale web activity (> 10m / 600_000L) -> NO web suffix
         val staleTimeSubtitle = MainActivity.evaluateParentDashboardSubtitle(
@@ -2884,7 +2883,7 @@ class HardwareInvariantTest {
             webTimestamp = now - 650_000L, // 10.8m ago
             now = now
         )
-        assertEquals("🟢 Đang hoạt động • Pixel 7", staleTimeSubtitle)
+        assertEquals("Đang hoạt động • Pixel 7", staleTimeSubtitle)
 
         // 7. Invalid domain format (spaces, illegal characters) -> NO web suffix
         val invalidDomainSubtitle = MainActivity.evaluateParentDashboardSubtitle(
@@ -2894,7 +2893,7 @@ class HardwareInvariantTest {
             webTimestamp = now - 120_000L,
             now = now
         )
-        assertEquals("🟢 Đang hoạt động • Pixel 7", invalidDomainSubtitle)
+        assertEquals("Đang hoạt động • Pixel 7", invalidDomainSubtitle)
 
         // 8. Localhost domain -> NO web suffix (RFC Domain Invariant)
         val localhostSubtitle = MainActivity.evaluateParentDashboardSubtitle(
@@ -2904,7 +2903,7 @@ class HardwareInvariantTest {
             webTimestamp = now - 120_000L,
             now = now
         )
-        assertEquals("🟢 Đang hoạt động • Pixel 7", localhostSubtitle)
+        assertEquals("Đang hoạt động • Pixel 7", localhostSubtitle)
 
         // 9. Empty domain -> NO web suffix
         val emptyDomainSubtitle = MainActivity.evaluateParentDashboardSubtitle(
@@ -2914,7 +2913,7 @@ class HardwareInvariantTest {
             webTimestamp = now - 120_000L,
             now = now
         )
-        assertEquals("🟢 Đang hoạt động • Pixel 7", emptyDomainSubtitle)
+        assertEquals("Đang hoạt động • Pixel 7", emptyDomainSubtitle)
     }
 
     @Test

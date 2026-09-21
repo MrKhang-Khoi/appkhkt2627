@@ -25,12 +25,18 @@ import android.provider.Settings
 import android.text.InputType
 import android.util.Log
 import android.view.Gravity
+import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import android.view.accessibility.AccessibilityManager
 import android.view.inputmethod.InputMethodManager
+import com.google.android.material.bottomsheet.BottomSheetBehavior
+import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -387,13 +393,13 @@ class MainActivity : AppCompatActivity() {
                             headerText = "TRANG WEB ĐÃ BỊ CHẶN BỞI BỘ LỌC:",
                             domainText = displayDomain,
                             subtitleText = subtitle,
-                            badgeText = "🚫 ĐÃ CHẶN",
+                            badgeText = "[ĐÃ CHẶN]",
                             isLiveBrowsing = false,
                             isBlocked = true
                         )
                     } else {
                         val isWebLive = (activeCat == "BROWSER" || activePkg.contains("chrome") || activePkg.contains("browser") || webAgeMins < 2L)
-                        val badge = if (isWebLive) "🟢 ĐANG DUYỆT" else "⚪ VỪA XEM"
+                        val badge = if (isWebLive) "ĐANG DUYỆT" else "VỪA XEM"
                         return WebBannerDisplayState(
                             isVisible = true,
                             headerText = "TRANG WEB ĐANG TRUY CẬP (REALTIME):",
@@ -419,7 +425,7 @@ class MainActivity : AppCompatActivity() {
                 // Zero-Phantom-Online Rule: Khi offline, cấm hiển thị nhãn "(REALTIME)" giả mạo
                 if (webAgeMins <= 60L) {
                     val subtitle = "$webBrowser • ${webAgeMins}m trước khi ngoại tuyến"
-                    val badge = if (webIsBlocked) "[🔴 OFFLINE] • 🚫 ĐÃ CHẶN" else "[🔴 OFFLINE]"
+                    val badge = if (webIsBlocked) "[OFFLINE] • [ĐÃ CHẶN]" else "[OFFLINE]"
                     return WebBannerDisplayState(
                         isVisible = true,
                         headerText = "LẦN CUỐI GHI NHẬN TRƯỚC KHI NGOẠI TUYẾN:",
@@ -462,14 +468,21 @@ class MainActivity : AppCompatActivity() {
             val isValidDomain = cleanDomain.isNotEmpty() && domainRegex.matches(cleanDomain)
 
             val isWebRecent = isValidDomain && webTimestamp > 0L && webTimestamp <= now && (now - webTimestamp) <= 600_000L
-            val webSuffix = if (isWebRecent) " • 🌐 $cleanDomain" else ""
-            return "🟢 Đang hoạt động • $deviceModel$webSuffix"
+            val webSuffix = if (isWebRecent) " • $cleanDomain" else ""
+            return "Đang hoạt động • $deviceModel$webSuffix"
         }
 
+        const val FIREBASE_RTDB_URL = "https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app"
+
+        @JvmStatic
+        fun formatCompactDuration(mins: Long): String {
+            val h = mins / 60
+            val m = mins % 60
+            return if (h > 0 && m > 0) "${h}h ${m}m" else if (h > 0) "${h}h" else "${m}m"
+        }
     }
 
     private val TAG = "MainActivity"
-    private val FIREBASE_RTDB_URL = "https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app"
 
     // 0. Onboarding & Role Management (One-Device One-Role Architecture)
     private lateinit var layoutRoleOnboarding: LinearLayout
@@ -579,7 +592,7 @@ class MainActivity : AppCompatActivity() {
     private var heartbeatJob: Job? = null
     private var parentHubPollingJob: Job? = null
     private var isVpnRunning = false
-    private val firebaseClient = OkHttpClient.Builder()
+    internal val firebaseClient = OkHttpClient.Builder()
         .connectTimeout(8, TimeUnit.SECONDS)
         .readTimeout(8, TimeUnit.SECONDS)
         .build()
@@ -1491,12 +1504,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun formatCompactDuration(mins: Long): String {
-        val h = mins / 60
-        val m = mins % 60
-        return if (h > 0 && m > 0) "${h}h ${m}m" else if (h > 0) "${h}h" else "${m}m"
-    }
-
     private fun updateActiveChildDashboard(familyCode: String, child: FamilyChildDevice) {
         currentFamilyCode = familyCode
         activeSelectedChildId = child.deviceId
@@ -1640,22 +1647,15 @@ class MainActivity : AppCompatActivity() {
                     layoutParams = cardLp
                 }
 
-                val lower = (app.packageName + app.appName).lowercase()
-                val iconStr = when {
-                    lower.contains("youtube") -> "🔴"
-                    lower.contains("tiktok") || lower.contains("trill") -> "🎵"
-                    lower.contains("facebook") -> "🔵"
-                    lower.contains("zalo") -> "📘"
-                    lower.contains("messenger") -> "💬"
-                    lower.contains("azota") || lower.contains("k12") || app.category == "STUDY" -> "📚"
-                    lower.contains("game") || app.category == "GAME" -> "🎮"
-                    else -> "📱"
-                }
-
-                val tvIcon = TextView(this).apply {
-                    text = iconStr
-                    textSize = 20f
-                    setPadding(0, 0, 24, 0)
+                val ivIcon = ImageView(this).apply {
+                    setImageResource(R.drawable.ic_apps_24)
+                    val iconLp = LinearLayout.LayoutParams(
+                        (24 * resources.displayMetrics.density).toInt(),
+                        (24 * resources.displayMetrics.density).toInt()
+                    )
+                    iconLp.setMargins(0, 0, (12 * resources.displayMetrics.density).toInt(), 0)
+                    layoutParams = iconLp
+                    contentDescription = "App Icon"
                 }
 
                 val infoLayout = LinearLayout(this).apply {
@@ -1675,7 +1675,7 @@ class MainActivity : AppCompatActivity() {
                     val timeStr = if (app.lastTimeUsed > 0) " • ${SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(app.lastTimeUsed))}" else ""
                     text = "${app.categoryLabel}$timeStr"
                     setTextColor(Color.parseColor("#94A3B8"))
-                    textSize = 11f
+                    textSize = 12f
                     isSingleLine = true
                 }
 
@@ -1689,7 +1689,7 @@ class MainActivity : AppCompatActivity() {
                     setTypeface(null, Typeface.BOLD)
                 }
 
-                appCard.addView(tvIcon)
+                appCard.addView(ivIcon)
                 appCard.addView(infoLayout)
                 appCard.addView(tvDur)
 
@@ -2212,6 +2212,466 @@ class MainActivity : AppCompatActivity() {
         var isOnline: Boolean
     )
 
+    class ChildCompanionBottomSheetDialogFragment : BottomSheetDialogFragment() {
+        companion object {
+            private const val ARG_PREFERRED_DEVICE_ID = "arg_preferred_device_id"
+            const val TAG = "ChildCompanionBottomSheet"
+
+            fun newInstance(preferredDeviceId: String? = null): ChildCompanionBottomSheetDialogFragment {
+                val fragment = ChildCompanionBottomSheetDialogFragment()
+                val args = Bundle()
+                if (!preferredDeviceId.isNullOrEmpty()) {
+                    args.putString(ARG_PREFERRED_DEVICE_ID, preferredDeviceId)
+                }
+                fragment.arguments = args
+                return fragment
+            }
+        }
+
+        override fun onCreateView(
+            inflater: LayoutInflater,
+            container: ViewGroup?,
+            savedInstanceState: Bundle?
+        ): View? {
+            return inflater.inflate(R.layout.dialog_child_companion, container, false)
+        }
+
+        override fun onStart() {
+            super.onStart()
+            val sheetDialog = dialog as? BottomSheetDialog ?: return
+            val bottomSheet = sheetDialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
+            bottomSheet?.let { sheet ->
+                val behavior = BottomSheetBehavior.from(sheet)
+                val density = resources.displayMetrics.density
+                behavior.maxWidth = (560 * density).toInt()
+                behavior.state = BottomSheetBehavior.STATE_EXPANDED
+                behavior.skipCollapsed = true
+                sheet.setBackgroundResource(android.R.color.transparent)
+            }
+            sheetDialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+            sheetDialog.window?.setDimAmount(0.65f)
+        }
+
+        override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+            super.onViewCreated(view, savedInstanceState)
+            val ctx = context ?: return
+            val prefs = ctx.getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
+            val currentCode = prefs.getString("family_code", "") ?: ""
+            if (currentCode.isEmpty()) {
+                Toast.makeText(ctx, "Chưa thiết lập mã gia đình!", Toast.LENGTH_SHORT).show()
+                dismissAllowingStateLoss()
+                return
+            }
+
+            val ivDialogChildAvatar = view.findViewById<ImageView>(R.id.ivDialogChildAvatar)
+            val tvDialogChildTitle = view.findViewById<TextView>(R.id.tvDialogChildTitle)
+            val tvDialogChildSubtitle = view.findViewById<TextView>(R.id.tvDialogChildSubtitle)
+            val tvDialogBalanceScore = view.findViewById<TextView>(R.id.tvDialogBalanceScore)
+
+            val tabDialogSocial = view.findViewById<TextView>(R.id.tabDialogSocial)
+            val tabDialogStudy = view.findViewById<TextView>(R.id.tabDialogStudy)
+            val tabDialogGame = view.findViewById<TextView>(R.id.tabDialogGame)
+            val tabDialogAll = view.findViewById<TextView>(R.id.tabDialogAll)
+
+            val layoutDialogActiveAppBanner = view.findViewById<LinearLayout>(R.id.layoutDialogActiveAppBanner)
+            val tvActiveAppTitle = view.findViewById<TextView>(R.id.tvActiveAppTitle)
+            val ivActiveAppIcon = view.findViewById<ImageView>(R.id.ivActiveAppIcon)
+            val tvActiveAppName = view.findViewById<TextView>(R.id.tvActiveAppName)
+            val tvActiveAppLiveBadge = view.findViewById<TextView>(R.id.tvActiveAppLiveBadge)
+
+            val layoutDialogActiveWebBanner = view.findViewById<LinearLayout>(R.id.layoutDialogActiveWebBanner)
+            val ivActiveWebIcon = view.findViewById<ImageView>(R.id.ivActiveWebIcon)
+            val tvActiveWebHeader = view.findViewById<TextView>(R.id.tvActiveWebHeader)
+            val tvActiveWebDomain = view.findViewById<TextView>(R.id.tvActiveWebDomain)
+            val tvActiveWebUrl = view.findViewById<TextView>(R.id.tvActiveWebUrl)
+            val tvActiveWebStatusBadge = view.findViewById<TextView>(R.id.tvActiveWebStatusBadge)
+
+            val layoutDialogAppListContainer = view.findViewById<LinearLayout>(R.id.layoutDialogAppListContainer)
+
+            val layoutDialogEmptyState = view.findViewById<LinearLayout>(R.id.layoutDialogEmptyState)
+            val tvDialogEmptyTitle = view.findViewById<TextView>(R.id.tvDialogEmptyTitle)
+            val tvDialogEmptyDesc = view.findViewById<TextView>(R.id.tvDialogEmptyDesc)
+            val btnDialogViewAllApps = view.findViewById<TextView>(R.id.btnDialogViewAllApps)
+
+            val btnDialogSendMessage = view.findViewById<Button>(R.id.btnDialogSendMessage)
+            val btnDialogClose = view.findViewById<Button>(R.id.btnDialogClose)
+
+            val layoutDialogLoading = view.findViewById<LinearLayout>(R.id.layoutDialogLoading)
+            val layoutDialogError = view.findViewById<LinearLayout>(R.id.layoutDialogError)
+            val layoutDialogContent = view.findViewById<LinearLayout>(R.id.layoutDialogContent)
+            val tvDialogErrorMessage = view.findViewById<TextView>(R.id.tvDialogErrorMessage)
+            val btnRetryCompanion = view.findViewById<Button>(R.id.btnRetryCompanion)
+
+            var currentTab = "SOCIAL"
+            val preferredDeviceId = arguments?.getString(ARG_PREFERRED_DEVICE_ID)
+            var targetChildDeviceId = preferredDeviceId ?: ""
+            val allAppsList = mutableListOf<CompanionAppItem>()
+
+            fun renderAppList() {
+                if (!isAdded) return
+                layoutDialogAppListContainer.removeAllViews()
+
+                val filteredList = when (currentTab) {
+                    "SOCIAL" -> allAppsList.filter { it.category == "SOCIAL" }
+                    "STUDY" -> allAppsList.filter { it.category == "STUDY" }
+                    "GAME" -> allAppsList.filter { it.category == "GAME" }
+                    else -> allAppsList
+                }
+
+                if (filteredList.isEmpty()) {
+                    layoutDialogEmptyState.visibility = View.VISIBLE
+                    layoutDialogAppListContainer.visibility = View.GONE
+                    when (currentTab) {
+                        "SOCIAL" -> {
+                            tvDialogEmptyTitle.text = "Chưa có hoạt động Mạng XH"
+                            tvDialogEmptyDesc.text = "Thiết bị con chưa mở ứng dụng mạng xã hội nào hôm nay."
+                        }
+                        "STUDY" -> {
+                            tvDialogEmptyTitle.text = "Chưa có hoạt động Học tập"
+                            tvDialogEmptyDesc.text = "Thiết bị con chưa mở ứng dụng học tập nào hôm nay."
+                        }
+                        "GAME" -> {
+                            tvDialogEmptyTitle.text = "Chưa có hoạt động Trò chơi"
+                            tvDialogEmptyDesc.text = "Thiết bị con chưa mở game nào hôm nay."
+                        }
+                        else -> {
+                            tvDialogEmptyTitle.text = "Chưa có dữ liệu ứng dụng"
+                            tvDialogEmptyDesc.text = "Dữ liệu hoạt động sẽ xuất hiện khi thiết bị đồng bộ."
+                        }
+                    }
+                    return
+                }
+
+                layoutDialogEmptyState.visibility = View.GONE
+                layoutDialogAppListContainer.visibility = View.VISIBLE
+
+                val sortedList = filteredList.sortedWith(
+                    compareByDescending<CompanionAppItem> { it.isOnline }
+                        .thenByDescending { it.durationMinutes }
+                        .thenByDescending { it.lastTimeUsed }
+                )
+
+                val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+                val inflater = LayoutInflater.from(view.context)
+
+                for (item in sortedList) {
+                    val itemView = inflater.inflate(R.layout.item_companion_app, layoutDialogAppListContainer, false)
+                    val ivItemAppIcon = itemView.findViewById<ImageView>(R.id.ivItemAppIcon)
+                    val tvItemAppName = itemView.findViewById<TextView>(R.id.tvItemAppName)
+                    val tvItemAppStatusBadge = itemView.findViewById<TextView>(R.id.tvItemAppStatusBadge)
+                    val tvItemAppDuration = itemView.findViewById<TextView>(R.id.tvItemAppDuration)
+                    val tvItemAppLastUsed = itemView.findViewById<TextView>(R.id.tvItemAppLastUsed)
+                    val tvItemAppCategory = itemView.findViewById<TextView>(R.id.tvItemAppCategory)
+
+                    ivItemAppIcon.setImageResource(R.drawable.ic_apps_24)
+                    tvItemAppName.text = item.appName
+                    tvItemAppCategory.text = item.categoryLabel
+
+                    if (item.isOnline) {
+                        tvItemAppStatusBadge.text = "ONLINE"
+                        tvItemAppStatusBadge.setBackgroundColor(Color.parseColor("#15803D"))
+                        tvItemAppStatusBadge.setTextColor(Color.parseColor("#86EFAC"))
+                    } else {
+                        tvItemAppStatusBadge.text = "ĐÃ ĐÓNG"
+                        tvItemAppStatusBadge.setBackgroundColor(Color.parseColor("#334155"))
+                        tvItemAppStatusBadge.setTextColor(Color.parseColor("#94A3B8"))
+                    }
+
+                    tvItemAppDuration.text = formatCompactDuration(item.durationMinutes.toLong())
+
+                    tvItemAppLastUsed.text = if (item.lastTimeUsed > 0) {
+                        "${timeFormat.format(Date(item.lastTimeUsed))} hôm nay"
+                    } else {
+                        "Chưa mở hôm nay"
+                    }
+
+                    layoutDialogAppListContainer.addView(itemView)
+                }
+            }
+
+            fun updateTabs(selectedTab: String) {
+                if (!isAdded) return
+                currentTab = selectedTab
+                val activeBg = R.drawable.bg_tab_active
+                val inactiveBg = R.drawable.bg_tab_inactive
+
+                tabDialogSocial.setBackgroundResource(if (selectedTab == "SOCIAL") activeBg else inactiveBg)
+                tabDialogSocial.setTextColor(if (selectedTab == "SOCIAL") Color.WHITE else Color.parseColor("#94A3B8"))
+
+                tabDialogStudy.setBackgroundResource(if (selectedTab == "STUDY") activeBg else inactiveBg)
+                tabDialogStudy.setTextColor(if (selectedTab == "STUDY") Color.WHITE else Color.parseColor("#94A3B8"))
+
+                tabDialogGame.setBackgroundResource(if (selectedTab == "GAME") activeBg else inactiveBg)
+                tabDialogGame.setTextColor(if (selectedTab == "GAME") Color.WHITE else Color.parseColor("#94A3B8"))
+
+                tabDialogAll.setBackgroundResource(if (selectedTab == "ALL") activeBg else inactiveBg)
+                tabDialogAll.setTextColor(if (selectedTab == "ALL") Color.WHITE else Color.parseColor("#94A3B8"))
+
+                renderAppList()
+            }
+
+            tabDialogSocial.setOnClickListener { updateTabs("SOCIAL") }
+            tabDialogStudy.setOnClickListener { updateTabs("STUDY") }
+            tabDialogGame.setOnClickListener { updateTabs("GAME") }
+            tabDialogAll.setOnClickListener { updateTabs("ALL") }
+            btnDialogViewAllApps.setOnClickListener { updateTabs("ALL") }
+
+            btnDialogClose.setOnClickListener { dismiss() }
+
+            btnDialogSendMessage.setOnClickListener {
+                (activity as? MainActivity)?.showSendParentReminderDialog(currentCode, targetChildDeviceId)
+            }
+
+            val isCompanionDataLoading = java.util.concurrent.atomic.AtomicBoolean(false)
+
+            suspend fun loadCompanionData() {
+                if (!isCompanionDataLoading.compareAndSet(false, true)) return
+                withContext(Dispatchers.Main) {
+                    if (!isAdded) return@withContext
+                    if (allAppsList.isEmpty()) {
+                        layoutDialogLoading?.visibility = View.VISIBLE
+                        layoutDialogError?.visibility = View.GONE
+                        layoutDialogContent?.visibility = View.GONE
+                    }
+                }
+                try {
+                    val client = (activity as? MainActivity)?.firebaseClient ?: OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS).readTimeout(15, TimeUnit.SECONDS).build()
+                    val req = Request.Builder()
+                        .url("$FIREBASE_RTDB_URL/families/$currentCode/devices.json")
+                        .build()
+                    var targetDeviceObj: JSONObject? = null
+                    client.newCall(req).execute().use { resp ->
+                        if (resp.isSuccessful) {
+                            val bodyStr = resp.body?.string()
+                            if (!bodyStr.isNullOrEmpty() && bodyStr != "null") {
+                                val json = JSONObject(bodyStr)
+                                val keys = json.keys()
+                                if (!preferredDeviceId.isNullOrEmpty() && json.has(preferredDeviceId)) {
+                                    targetChildDeviceId = preferredDeviceId
+                                    targetDeviceObj = json.optJSONObject(preferredDeviceId)
+                                } else {
+                                    while (keys.hasNext()) {
+                                        val devKey = keys.next()
+                                        val devObj = json.optJSONObject(devKey) ?: continue
+                                        targetChildDeviceId = devKey
+                                        targetDeviceObj = devObj
+                                        break
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (targetDeviceObj == null) {
+                        val fallbackId = if (!preferredDeviceId.isNullOrEmpty()) preferredDeviceId else currentCode
+                        val legacyReq = Request.Builder()
+                            .url("$FIREBASE_RTDB_URL/devices/$fallbackId.json")
+                            .build()
+                        client.newCall(legacyReq).execute().use { resp ->
+                            if (resp.isSuccessful) {
+                                val bodyStr = resp.body?.string()
+                                if (!bodyStr.isNullOrEmpty() && bodyStr != "null") {
+                                    targetDeviceObj = JSONObject(bodyStr)
+                                    targetChildDeviceId = fallbackId
+                                }
+                            }
+                        }
+                    }
+
+                    if (targetDeviceObj != null) {
+                        val devModel = targetDeviceObj.optString("deviceModel", "Thiết bị con")
+                        val isOnline = computeDeviceOnlineStatus(targetDeviceObj)
+
+                        val usageObj = targetDeviceObj.optJSONObject("usage")
+                        val balanceScore = usageObj?.optInt("balanceScore", 85) ?: 85
+
+                        val activeAppObj = targetDeviceObj.optJSONObject("active_app")
+                        val activePkg = activeAppObj?.optString("packageName", "SCREEN_OFF") ?: "SCREEN_OFF"
+                        val activeName = activeAppObj?.optString("appName", "Màn hình khóa / Màn hình tắt") ?: "Màn hình khóa / Màn hình tắt"
+                        val activeCat = activeAppObj?.optString("category", "OFFLINE") ?: "OFFLINE"
+                        val activeIsFg = activeAppObj?.optBoolean("isForeground", false) ?: false
+
+                        val webActObj = targetDeviceObj.optJSONObject("web_activity")
+                        val webDomain = webActObj?.optString("domain", "") ?: ""
+                        val webUrl = webActObj?.optString("url", "") ?: ""
+                        val webTitle = webActObj?.optString("title", "") ?: ""
+                        val webBrowser = webActObj?.optString("browserName", "Trình duyệt Web") ?: "Trình duyệt Web"
+                        val webTimestamp = webActObj?.optLong("timestamp", 0L) ?: 0L
+                        val webIsBlocked = webActObj?.optBoolean("isBlocked", false) ?: false
+
+                        val historyArr = targetDeviceObj.optJSONArray("app_history") ?: usageObj?.optJSONArray("appHistory")
+                        val loadedApps = mutableListOf<CompanionAppItem>()
+                        if (historyArr != null) {
+                            for (i in 0 until historyArr.length()) {
+                                val appItem = historyArr.optJSONObject(i) ?: continue
+                                val pName = appItem.optString("packageName", "")
+                                val aName = appItem.optString("appName", pName)
+                                val cat = appItem.optString("category", "UTILITY")
+                                val catLbl = appItem.optString("categoryLabel", "Ứng dụng")
+                                val durMin = appItem.optInt("durationMinutes", 1)
+                                val lastUsed = appItem.optLong("lastTimeUsed", 0L)
+                                val isThisAppOnline = activeIsFg && (pName == activePkg)
+
+                                loadedApps.add(
+                                    CompanionAppItem(
+                                        packageName = pName,
+                                        appName = aName,
+                                        category = cat,
+                                        categoryLabel = catLbl,
+                                        durationMinutes = durMin,
+                                        lastTimeUsed = lastUsed,
+                                        isOnline = isThisAppOnline
+                                    )
+                                )
+                            }
+                        }
+
+                        withContext(Dispatchers.Main) {
+                            if (!isAdded) return@withContext
+                            layoutDialogLoading?.visibility = View.GONE
+                            layoutDialogError?.visibility = View.GONE
+                            layoutDialogContent?.visibility = View.VISIBLE
+
+                            val savedChildName = targetDeviceObj.optString("childName", "").trim()
+                            val titleName = if (savedChildName.isNotEmpty()) "$savedChildName • $devModel" else devModel
+                            tvDialogChildTitle.text = titleName
+                            ivDialogChildAvatar.setImageResource(R.drawable.ic_person_24)
+                            tvDialogBalanceScore.text = "$balanceScore/100"
+
+                            if (isOnline) {
+                                tvDialogChildSubtitle.text = "Trực tuyến • Đồng bộ thời gian thực"
+                                tvDialogChildSubtitle.setTextColor(Color.parseColor("#34D399"))
+
+                                if (activeIsFg && activePkg != "SCREEN_OFF" && activePkg != "HOME") {
+                                    tvActiveAppTitle.text = "ỨNG DỤNG ĐANG MỞ TRÊN MÀN HÌNH:"
+                                    tvActiveAppTitle.setTextColor(Color.parseColor("#FDE047"))
+                                    ivActiveAppIcon.setImageResource(R.drawable.ic_apps_24)
+                                    tvActiveAppName.text = activeName
+                                    tvActiveAppLiveBadge.text = "TRỰC TUYẾN"
+                                    tvActiveAppLiveBadge.setBackgroundColor(Color.parseColor("#15803D"))
+                                    tvActiveAppLiveBadge.setTextColor(Color.parseColor("#86EFAC"))
+                                    layoutDialogActiveAppBanner.setBackgroundResource(R.drawable.bg_gold_card)
+                                } else {
+                                    tvActiveAppTitle.text = "TRẠNG THÁI MÀN HÌNH:"
+                                    tvActiveAppTitle.setTextColor(Color.parseColor("#94A3B8"))
+                                    ivActiveAppIcon.setImageResource(R.drawable.ic_lock)
+                                    tvActiveAppName.text = "Màn hình khóa / Màn hình tắt"
+                                    tvActiveAppLiveBadge.text = "ĐÃ KHÓA"
+                                    tvActiveAppLiveBadge.setBackgroundColor(Color.parseColor("#334155"))
+                                    tvActiveAppLiveBadge.setTextColor(Color.parseColor("#94A3B8"))
+                                    layoutDialogActiveAppBanner.setBackgroundResource(R.drawable.bg_device_card)
+                                }
+                            } else {
+                                // THIẾT BỊ NGOẠI TUYẾN
+                                tvDialogChildSubtitle.text = "Ngoại tuyến (Đã ngắt mạng / tắt máy)"
+                                tvDialogChildSubtitle.setTextColor(Color.parseColor("#EF4444"))
+                                tvActiveAppTitle.text = "LẦN CUỐI GHI NHẬN TRƯỚC KHI NGOẠI TUYẾN:"
+                                tvActiveAppTitle.setTextColor(Color.parseColor("#F87171"))
+                                ivActiveAppIcon.setImageResource(if (activePkg != "SCREEN_OFF" && activePkg != "HOME") R.drawable.ic_apps_24 else R.drawable.ic_lock)
+                                tvActiveAppName.text = if (activePkg != "SCREEN_OFF" && activePkg != "HOME") activeName else "Màn hình tắt / Không kết nối"
+                                tvActiveAppLiveBadge.text = "NGOẠI TUYẾN"
+                                tvActiveAppLiveBadge.setBackgroundColor(Color.parseColor("#7F1D1D"))
+                                tvActiveAppLiveBadge.setTextColor(Color.parseColor("#FCA5A5"))
+                                layoutDialogActiveAppBanner.setBackgroundResource(R.drawable.bg_device_card)
+                            }
+
+                            // Cập nhật Live Web Banner tuân thủ Zero-Phantom-Online
+                            val now = System.currentTimeMillis()
+                            val bannerState = evaluateWebBannerDisplay(
+                                isOnline = isOnline,
+                                webDomain = webDomain,
+                                webTitle = webTitle,
+                                webBrowser = webBrowser,
+                                webTimestamp = webTimestamp,
+                                webIsBlocked = webIsBlocked,
+                                activePkg = activePkg,
+                                activeCat = activeCat,
+                                now = now,
+                                webUrl = webUrl
+                            )
+                            if (bannerState.isVisible) {
+                                layoutDialogActiveWebBanner.visibility = View.VISIBLE
+                                tvActiveWebHeader.text = bannerState.headerText
+                                tvActiveWebDomain.text = bannerState.domainText
+                                tvActiveWebUrl.text = bannerState.subtitleText
+                                tvActiveWebStatusBadge.text = bannerState.badgeText
+                                ivActiveWebIcon.setImageResource(R.drawable.ic_language_24)
+
+                                if (bannerState.isBlocked) {
+                                    tvActiveWebHeader.setTextColor(Color.parseColor("#EF4444"))
+                                    tvActiveWebStatusBadge.setBackgroundColor(Color.parseColor("#7F1D1D"))
+                                    tvActiveWebStatusBadge.setTextColor(Color.parseColor("#FCA5A5"))
+                                } else if (isOnline) {
+                                    tvActiveWebHeader.setTextColor(Color.parseColor("#38BDF8"))
+                                    if (bannerState.isLiveBrowsing) {
+                                        tvActiveWebStatusBadge.setBackgroundColor(Color.parseColor("#15803D"))
+                                        tvActiveWebStatusBadge.setTextColor(Color.parseColor("#86EFAC"))
+                                    } else {
+                                        tvActiveWebStatusBadge.setBackgroundColor(Color.parseColor("#334155"))
+                                        tvActiveWebStatusBadge.setTextColor(Color.parseColor("#94A3B8"))
+                                    }
+                                } else {
+                                    tvActiveWebHeader.setTextColor(Color.parseColor("#F87171"))
+                                    tvActiveWebStatusBadge.setBackgroundColor(Color.parseColor("#7F1D1D"))
+                                    tvActiveWebStatusBadge.setTextColor(Color.parseColor("#FCA5A5"))
+                                }
+                            } else {
+                                layoutDialogActiveWebBanner.visibility = View.GONE
+                            }
+
+                            allAppsList.clear()
+                            allAppsList.addAll(loadedApps)
+                            renderAppList()
+                        }
+                    } else if (allAppsList.isEmpty()) {
+                        withContext(Dispatchers.Main) {
+                            if (!isAdded) return@withContext
+                            layoutDialogLoading?.visibility = View.GONE
+                            layoutDialogError?.visibility = View.GONE
+                            layoutDialogContent?.visibility = View.VISIBLE
+                            layoutDialogAppListContainer.visibility = View.GONE
+                            layoutDialogEmptyState.visibility = View.VISIBLE
+                            tvDialogEmptyTitle.text = "Chưa có thiết bị con"
+                            tvDialogEmptyDesc.text = "Không tìm thấy thiết bị con trong gia đình. Vui lòng kết nối thiết bị của con."
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("CompanionDialog", "Lỗi load data dialog companion", e)
+                    if (allAppsList.isEmpty()) {
+                        withContext(Dispatchers.Main) {
+                            if (!isAdded) return@withContext
+                            layoutDialogLoading?.visibility = View.GONE
+                            layoutDialogContent?.visibility = View.GONE
+                            layoutDialogEmptyState.visibility = View.GONE
+                            layoutDialogError?.visibility = View.VISIBLE
+                            tvDialogErrorMessage?.text = "Không thể kết nối máy chủ: ${e.message}"
+                        }
+                    }
+                } finally {
+                    isCompanionDataLoading.set(false)
+                }
+            }
+
+            btnRetryCompanion?.setOnClickListener {
+                viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+                    loadCompanionData()
+                }
+            }
+
+            viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+                // Tải dữ liệu ngay lập tức khi mở dialog (Zero initial delay)
+                loadCompanionData()
+                while (isActive) {
+                    delay(60_000L)
+                    if (!isActive) break
+                    loadCompanionData()
+                }
+            }
+
+            updateTabs("SOCIAL")
+        }
+    }
+
     private fun showChildCompanionDialog(preferredDeviceId: String? = null) {
         val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
         val currentCode = prefs.getString("family_code", "") ?: ""
@@ -2220,405 +2680,24 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        val dialogView = layoutInflater.inflate(R.layout.dialog_child_companion, null)
-        val tvDialogChildAvatar = dialogView.findViewById<TextView>(R.id.tvDialogChildAvatar)
-        val tvDialogChildTitle = dialogView.findViewById<TextView>(R.id.tvDialogChildTitle)
-        val tvDialogChildSubtitle = dialogView.findViewById<TextView>(R.id.tvDialogChildSubtitle)
-        val tvDialogBalanceScore = dialogView.findViewById<TextView>(R.id.tvDialogBalanceScore)
-
-        val tabDialogSocial = dialogView.findViewById<TextView>(R.id.tabDialogSocial)
-        val tabDialogStudy = dialogView.findViewById<TextView>(R.id.tabDialogStudy)
-        val tabDialogGame = dialogView.findViewById<TextView>(R.id.tabDialogGame)
-        val tabDialogAll = dialogView.findViewById<TextView>(R.id.tabDialogAll)
-
-        val layoutDialogActiveAppBanner = dialogView.findViewById<LinearLayout>(R.id.layoutDialogActiveAppBanner)
-        val tvActiveAppTitle = dialogView.findViewById<TextView>(R.id.tvActiveAppTitle)
-        val tvActiveAppIcon = dialogView.findViewById<TextView>(R.id.tvActiveAppIcon)
-        val tvActiveAppName = dialogView.findViewById<TextView>(R.id.tvActiveAppName)
-        val tvActiveAppLiveBadge = dialogView.findViewById<TextView>(R.id.tvActiveAppLiveBadge)
-
-        val layoutDialogActiveWebBanner = dialogView.findViewById<LinearLayout>(R.id.layoutDialogActiveWebBanner)
-        val tvActiveWebIcon = dialogView.findViewById<TextView>(R.id.tvActiveWebIcon)
-        val tvActiveWebHeader = dialogView.findViewById<TextView>(R.id.tvActiveWebHeader)
-        val tvActiveWebDomain = dialogView.findViewById<TextView>(R.id.tvActiveWebDomain)
-        val tvActiveWebUrl = dialogView.findViewById<TextView>(R.id.tvActiveWebUrl)
-        val tvActiveWebStatusBadge = dialogView.findViewById<TextView>(R.id.tvActiveWebStatusBadge)
-
-        val layoutDialogAppListContainer = dialogView.findViewById<LinearLayout>(R.id.layoutDialogAppListContainer)
-
-        val layoutDialogEmptyState = dialogView.findViewById<LinearLayout>(R.id.layoutDialogEmptyState)
-        val tvDialogEmptyTitle = dialogView.findViewById<TextView>(R.id.tvDialogEmptyTitle)
-        val tvDialogEmptyDesc = dialogView.findViewById<TextView>(R.id.tvDialogEmptyDesc)
-        val btnDialogViewAllApps = dialogView.findViewById<TextView>(R.id.btnDialogViewAllApps)
-
-        val btnDialogSendMessage = dialogView.findViewById<Button>(R.id.btnDialogSendMessage)
-        val btnDialogClose = dialogView.findViewById<Button>(R.id.btnDialogClose)
-
-        val dialog = AlertDialog.Builder(this)
-            .setView(dialogView)
-            .create()
-
-        var currentTab = "SOCIAL"
-        var targetChildDeviceId = preferredDeviceId ?: ""
-        val allAppsList = mutableListOf<CompanionAppItem>()
-
-        fun getAppIcon(category: String, packageName: String, appName: String): String {
-            val lower = (packageName + appName).lowercase()
-            return when {
-                lower.contains("youtube") -> "🔴"
-                lower.contains("tiktok") || lower.contains("trill") || lower.contains("musically") -> "🎵"
-                lower.contains("facebook") -> "🔵"
-                lower.contains("zalo") -> "📘"
-                lower.contains("messenger") -> "💬"
-                lower.contains("instagram") -> "📸"
-                lower.contains("azota") || lower.contains("k12") || category == "STUDY" -> "📚"
-                lower.contains("game") || category == "GAME" -> "🎮"
-                else -> "📱"
-            }
+        if (supportFragmentManager.findFragmentByTag(ChildCompanionBottomSheetDialogFragment.TAG) != null) {
+            return
         }
-
-        fun renderAppList() {
-            layoutDialogAppListContainer.removeAllViews()
-
-            val filteredList = when (currentTab) {
-                "SOCIAL" -> allAppsList.filter { it.category == "SOCIAL" }
-                "STUDY" -> allAppsList.filter { it.category == "STUDY" }
-                "GAME" -> allAppsList.filter { it.category == "GAME" }
-                else -> allAppsList
-            }
-
-            if (filteredList.isEmpty()) {
-                layoutDialogEmptyState.visibility = View.VISIBLE
-                layoutDialogAppListContainer.visibility = View.GONE
-                when (currentTab) {
-                    "SOCIAL" -> {
-                        tvDialogEmptyTitle.text = "Chưa có hoạt động Mạng XH"
-                        tvDialogEmptyDesc.text = "Thiết bị con chưa mở ứng dụng mạng xã hội nào hôm nay."
-                    }
-                    "STUDY" -> {
-                        tvDialogEmptyTitle.text = "Chưa có hoạt động Học tập"
-                        tvDialogEmptyDesc.text = "Thiết bị con chưa mở ứng dụng học tập nào hôm nay."
-                    }
-                    "GAME" -> {
-                        tvDialogEmptyTitle.text = "Chưa có hoạt động Trò chơi"
-                        tvDialogEmptyDesc.text = "Thiết bị con chưa mở game nào hôm nay."
-                    }
-                    else -> {
-                        tvDialogEmptyTitle.text = "Chưa có dữ liệu ứng dụng"
-                        tvDialogEmptyDesc.text = "Dữ liệu hoạt động sẽ xuất hiện khi thiết bị đồng bộ."
-                    }
-                }
-                return
-            }
-
-            layoutDialogEmptyState.visibility = View.GONE
-            layoutDialogAppListContainer.visibility = View.VISIBLE
-
-            val sortedList = filteredList.sortedWith(
-                compareByDescending<CompanionAppItem> { it.isOnline }
-                    .thenByDescending { it.durationMinutes }
-                    .thenByDescending { it.lastTimeUsed }
-            )
-
-            val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-
-            for (item in sortedList) {
-                val itemView = layoutInflater.inflate(R.layout.item_companion_app, layoutDialogAppListContainer, false)
-                val tvItemAppIcon = itemView.findViewById<TextView>(R.id.tvItemAppIcon)
-                val tvItemAppName = itemView.findViewById<TextView>(R.id.tvItemAppName)
-                val tvItemAppStatusBadge = itemView.findViewById<TextView>(R.id.tvItemAppStatusBadge)
-                val tvItemAppDuration = itemView.findViewById<TextView>(R.id.tvItemAppDuration)
-                val tvItemAppLastUsed = itemView.findViewById<TextView>(R.id.tvItemAppLastUsed)
-                val tvItemAppCategory = itemView.findViewById<TextView>(R.id.tvItemAppCategory)
-
-                tvItemAppIcon.text = getAppIcon(item.category, item.packageName, item.appName)
-                tvItemAppName.text = item.appName
-                tvItemAppCategory.text = item.categoryLabel
-
-                if (item.isOnline) {
-                    tvItemAppStatusBadge.text = "🟢 ONLINE (Đang mở)"
-                    tvItemAppStatusBadge.setBackgroundColor(Color.parseColor("#15803D"))
-                    tvItemAppStatusBadge.setTextColor(Color.parseColor("#86EFAC"))
-                } else {
-                    tvItemAppStatusBadge.text = "⚪ ĐÃ ĐÓNG"
-                    tvItemAppStatusBadge.setBackgroundColor(Color.parseColor("#334155"))
-                    tvItemAppStatusBadge.setTextColor(Color.parseColor("#94A3B8"))
-                }
-
-                tvItemAppDuration.text = formatCompactDuration(item.durationMinutes.toLong())
-
-                tvItemAppLastUsed.text = if (item.lastTimeUsed > 0) {
-                    "${timeFormat.format(Date(item.lastTimeUsed))} hôm nay"
-                } else {
-                    "Chưa mở hôm nay"
-                }
-
-                layoutDialogAppListContainer.addView(itemView)
-            }
-        }
-
-        fun updateTabs(selectedTab: String) {
-            currentTab = selectedTab
-            val activeBg = R.drawable.bg_tab_active
-            val inactiveBg = R.drawable.bg_tab_inactive
-
-            tabDialogSocial.setBackgroundResource(if (selectedTab == "SOCIAL") activeBg else inactiveBg)
-            tabDialogSocial.setTextColor(if (selectedTab == "SOCIAL") Color.WHITE else Color.parseColor("#94A3B8"))
-
-            tabDialogStudy.setBackgroundResource(if (selectedTab == "STUDY") activeBg else inactiveBg)
-            tabDialogStudy.setTextColor(if (selectedTab == "STUDY") Color.WHITE else Color.parseColor("#94A3B8"))
-
-            tabDialogGame.setBackgroundResource(if (selectedTab == "GAME") activeBg else inactiveBg)
-            tabDialogGame.setTextColor(if (selectedTab == "GAME") Color.WHITE else Color.parseColor("#94A3B8"))
-
-            tabDialogAll.setBackgroundResource(if (selectedTab == "ALL") activeBg else inactiveBg)
-            tabDialogAll.setTextColor(if (selectedTab == "ALL") Color.WHITE else Color.parseColor("#94A3B8"))
-
-            renderAppList()
-        }
-
-        tabDialogSocial.setOnClickListener { updateTabs("SOCIAL") }
-        tabDialogStudy.setOnClickListener { updateTabs("STUDY") }
-        tabDialogGame.setOnClickListener { updateTabs("GAME") }
-        tabDialogAll.setOnClickListener { updateTabs("ALL") }
-        btnDialogViewAllApps.setOnClickListener { updateTabs("ALL") }
-
-        btnDialogClose.setOnClickListener { dialog.dismiss() }
-
-        btnDialogSendMessage.setOnClickListener {
-            showSendParentReminderDialog(currentCode, targetChildDeviceId)
-        }
-
-        val isCompanionDataLoading = java.util.concurrent.atomic.AtomicBoolean(false)
-
-        // Tải dữ liệu Firebase của thiết bị con và tự động cập nhật thời gian thực (Live Polling Loop)
-        suspend fun loadCompanionData() {
-            if (!isCompanionDataLoading.compareAndSet(false, true)) return
-            try {
-                val req = Request.Builder()
-                    .url("$FIREBASE_RTDB_URL/families/$currentCode/devices.json")
-                    .build()
-                var targetDeviceObj: JSONObject? = null
-                firebaseClient.newCall(req).execute().use { resp ->
-                    if (resp.isSuccessful) {
-                        val bodyStr = resp.body?.string()
-                        if (!bodyStr.isNullOrEmpty() && bodyStr != "null") {
-                            val json = JSONObject(bodyStr)
-                            val keys = json.keys()
-                            if (!preferredDeviceId.isNullOrEmpty() && json.has(preferredDeviceId)) {
-                                targetChildDeviceId = preferredDeviceId
-                                targetDeviceObj = json.optJSONObject(preferredDeviceId)
-                            } else {
-                                while (keys.hasNext()) {
-                                    val devKey = keys.next()
-                                    val devObj = json.optJSONObject(devKey) ?: continue
-                                    targetChildDeviceId = devKey
-                                    targetDeviceObj = devObj
-                                    break
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if (targetDeviceObj == null) {
-                    val fallbackId = if (!preferredDeviceId.isNullOrEmpty()) preferredDeviceId else currentCode
-                    val legacyReq = Request.Builder()
-                        .url("$FIREBASE_RTDB_URL/devices/$fallbackId.json")
-                        .build()
-                    firebaseClient.newCall(legacyReq).execute().use { resp ->
-                        if (resp.isSuccessful) {
-                            val bodyStr = resp.body?.string()
-                            if (!bodyStr.isNullOrEmpty() && bodyStr != "null") {
-                                targetDeviceObj = JSONObject(bodyStr)
-                                targetChildDeviceId = fallbackId
-                            }
-                        }
-                    }
-                }
-
-                if (targetDeviceObj != null) {
-                    val devModel = targetDeviceObj.optString("deviceModel", "Thiết bị con")
-                    val isOnline = computeDeviceOnlineStatus(targetDeviceObj)
-
-                    val usageObj = targetDeviceObj.optJSONObject("usage")
-                    val balanceScore = usageObj?.optInt("balanceScore", 85) ?: 85
-
-                    val activeAppObj = targetDeviceObj.optJSONObject("active_app")
-                    val activePkg = activeAppObj?.optString("packageName", "SCREEN_OFF") ?: "SCREEN_OFF"
-                    val activeName = activeAppObj?.optString("appName", "Màn hình khóa / Màn hình tắt") ?: "Màn hình khóa / Màn hình tắt"
-                    val activeCat = activeAppObj?.optString("category", "OFFLINE") ?: "OFFLINE"
-                    val activeIsFg = activeAppObj?.optBoolean("isForeground", false) ?: false
-
-                    val webActObj = targetDeviceObj.optJSONObject("web_activity")
-                    val webDomain = webActObj?.optString("domain", "") ?: ""
-                    val webUrl = webActObj?.optString("url", "") ?: ""
-                    val webTitle = webActObj?.optString("title", "") ?: ""
-                    val webBrowser = webActObj?.optString("browserName", "Trình duyệt Web") ?: "Trình duyệt Web"
-                    val webTimestamp = webActObj?.optLong("timestamp", 0L) ?: 0L
-                    val webIsBlocked = webActObj?.optBoolean("isBlocked", false) ?: false
-
-                    val historyArr = targetDeviceObj.optJSONArray("app_history") ?: usageObj?.optJSONArray("appHistory")
-                    val loadedApps = mutableListOf<CompanionAppItem>()
-                    if (historyArr != null) {
-                        for (i in 0 until historyArr.length()) {
-                            val appItem = historyArr.optJSONObject(i) ?: continue
-                            val pName = appItem.optString("packageName", "")
-                            val aName = appItem.optString("appName", pName)
-                            val cat = appItem.optString("category", "UTILITY")
-                            val catLbl = appItem.optString("categoryLabel", "Ứng dụng")
-                            val durMin = appItem.optInt("durationMinutes", 1)
-                            val lastUsed = appItem.optLong("lastTimeUsed", 0L)
-                            val isThisAppOnline = activeIsFg && (pName == activePkg)
-
-                            loadedApps.add(
-                                CompanionAppItem(
-                                    packageName = pName,
-                                    appName = aName,
-                                    category = cat,
-                                    categoryLabel = catLbl,
-                                    durationMinutes = durMin,
-                                    lastTimeUsed = lastUsed,
-                                    isOnline = isThisAppOnline
-                                )
-                            )
-                        }
-                    }
-
-                    withContext(Dispatchers.Main) {
-                        val savedChildName = targetDeviceObj.optString("childName", "").trim()
-                        val titleName = if (savedChildName.isNotEmpty()) "$savedChildName • $devModel" else devModel
-                        tvDialogChildTitle.text = titleName
-                        val lowerName = savedChildName.lowercase()
-                        tvDialogChildAvatar.text = if (lowerName.contains("loan") || lowerName.contains("mẹ") || lowerName.contains("chị") || lowerName.contains("hoa") || lowerName.contains("linh") || lowerName.contains("nga") || lowerName.contains("mrs")) "👧" else "👦"
-                        tvDialogBalanceScore.text = "⚖️ $balanceScore/100"
-
-                        if (isOnline) {
-                            tvDialogChildSubtitle.text = "🟢 Trực tuyến • Đồng bộ thời gian thực"
-                            tvDialogChildSubtitle.setTextColor(Color.parseColor("#34D399"))
-
-                            if (activeIsFg && activePkg != "SCREEN_OFF" && activePkg != "HOME") {
-                                tvActiveAppTitle.text = "ỨNG DỤNG ĐANG MỞ TRÊN MÀN HÌNH:"
-                                tvActiveAppTitle.setTextColor(Color.parseColor("#FDE047"))
-                                tvActiveAppIcon.text = getAppIcon(activeCat, activePkg, activeName)
-                                tvActiveAppName.text = activeName
-                                tvActiveAppLiveBadge.text = "🟢 ONLINE"
-                                tvActiveAppLiveBadge.setBackgroundColor(Color.parseColor("#15803D"))
-                                tvActiveAppLiveBadge.setTextColor(Color.parseColor("#86EFAC"))
-                                layoutDialogActiveAppBanner.setBackgroundResource(R.drawable.bg_gold_card)
-                            } else {
-                                tvActiveAppTitle.text = "TRẠNG THÁI MÀN HÌNH:"
-                                tvActiveAppTitle.setTextColor(Color.parseColor("#94A3B8"))
-                                tvActiveAppIcon.text = "🔒"
-                                tvActiveAppName.text = "Màn hình khóa / Màn hình tắt (Zero-Phantom-Time)"
-                                tvActiveAppLiveBadge.text = "⚪ ĐÃ KHÓA"
-                                tvActiveAppLiveBadge.setBackgroundColor(Color.parseColor("#334155"))
-                                tvActiveAppLiveBadge.setTextColor(Color.parseColor("#94A3B8"))
-                                layoutDialogActiveAppBanner.setBackgroundResource(R.drawable.bg_device_card)
-                            }
-                        } else {
-                            // THIẾT BỊ NGOẠI TUYẾN
-                            tvDialogChildSubtitle.text = "🔴 Ngoại tuyến (Đã ngắt mạng / tắt máy)"
-                            tvDialogChildSubtitle.setTextColor(Color.parseColor("#EF4444"))
-                            tvActiveAppTitle.text = "LẦN CUỐI GHI NHẬN TRƯỚC KHI NGOẠI TUYẾN:"
-                            tvActiveAppTitle.setTextColor(Color.parseColor("#F87171"))
-                            tvActiveAppIcon.text = if (activePkg != "SCREEN_OFF" && activePkg != "HOME") getAppIcon(activeCat, activePkg, activeName) else "⚪"
-                            tvActiveAppName.text = if (activePkg != "SCREEN_OFF" && activePkg != "HOME") activeName else "Màn hình tắt / Không kết nối"
-                            tvActiveAppLiveBadge.text = "[🔴 OFFLINE]"
-                            tvActiveAppLiveBadge.setBackgroundColor(Color.parseColor("#7F1D1D"))
-                            tvActiveAppLiveBadge.setTextColor(Color.parseColor("#FCA5A5"))
-                            layoutDialogActiveAppBanner.setBackgroundResource(R.drawable.bg_device_card)
-                        }
-
-                        // Cập nhật Live Web Banner tuân thủ Zero-Phantom-Online
-                        val now = System.currentTimeMillis()
-                        val bannerState = evaluateWebBannerDisplay(
-                            isOnline = isOnline,
-                            webDomain = webDomain,
-                            webTitle = webTitle,
-                            webBrowser = webBrowser,
-                            webTimestamp = webTimestamp,
-                            webIsBlocked = webIsBlocked,
-                            activePkg = activePkg,
-                            activeCat = activeCat,
-                            now = now,
-                            webUrl = webUrl
-                        )
-                        if (bannerState.isVisible) {
-                            layoutDialogActiveWebBanner.visibility = View.VISIBLE
-                            tvActiveWebHeader.text = bannerState.headerText
-                            tvActiveWebDomain.text = bannerState.domainText
-                            tvActiveWebUrl.text = bannerState.subtitleText
-                            tvActiveWebStatusBadge.text = bannerState.badgeText
-
-                            if (bannerState.isBlocked) {
-                                tvActiveWebHeader.setTextColor(Color.parseColor("#EF4444"))
-                                tvActiveWebIcon.text = "🚫"
-                                tvActiveWebStatusBadge.setBackgroundColor(Color.parseColor("#7F1D1D"))
-                                tvActiveWebStatusBadge.setTextColor(Color.parseColor("#FCA5A5"))
-                            } else if (isOnline) {
-                                tvActiveWebHeader.setTextColor(Color.parseColor("#38BDF8"))
-                                tvActiveWebIcon.text = "🌐"
-                                if (bannerState.isLiveBrowsing) {
-                                    tvActiveWebStatusBadge.setBackgroundColor(Color.parseColor("#15803D"))
-                                    tvActiveWebStatusBadge.setTextColor(Color.parseColor("#86EFAC"))
-                                } else {
-                                    tvActiveWebStatusBadge.setBackgroundColor(Color.parseColor("#334155"))
-                                    tvActiveWebStatusBadge.setTextColor(Color.parseColor("#94A3B8"))
-                                }
-                            } else {
-                                tvActiveWebHeader.setTextColor(Color.parseColor("#F87171"))
-                                tvActiveWebIcon.text = "🌐"
-                                tvActiveWebStatusBadge.setBackgroundColor(Color.parseColor("#7F1D1D"))
-                                tvActiveWebStatusBadge.setTextColor(Color.parseColor("#FCA5A5"))
-                            }
-                        } else {
-                            layoutDialogActiveWebBanner.visibility = View.GONE
-                        }
-
-                        allAppsList.clear()
-                        allAppsList.addAll(loadedApps)
-                        renderAppList()
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Lỗi load data dialog companion", e)
-            } finally {
-                isCompanionDataLoading.set(false)
-            }
-        }
-
-        val pollingJob = lifecycleScope.launch(Dispatchers.IO) {
-            // Tải dữ liệu ngay lập tức khi mở dialog (Zero initial delay)
-            loadCompanionData()
-            while (isActive) {
-                delay(60_000L)
-                if (!isActive) break
-                loadCompanionData()
-            }
-        }
-
-        dialog.setOnDismissListener {
-            pollingJob.cancel()
-        }
-
-        updateTabs("SOCIAL")
-        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-        dialog.window?.setDimAmount(0.65f)
-        dialog.show()
+        val dialogFragment = ChildCompanionBottomSheetDialogFragment.newInstance(preferredDeviceId)
+        dialogFragment.show(supportFragmentManager, ChildCompanionBottomSheetDialogFragment.TAG)
     }
 
-    private fun showSendParentReminderDialog(familyCode: String, childDeviceId: String) {
+    internal fun showSendParentReminderDialog(familyCode: String, childDeviceId: String) {
         val options = arrayOf(
-            "📚 Đã đến giờ tập trung học bài rồi con nhé!",
-            "⏰ Con sắp hết giờ giải trí hôm nay rồi đó!",
-            "🍲 Chuẩn bị ăn cơm thôi con ơi!",
-            "👀 Giữ khoảng cách mắt và nghỉ ngơi 5 phút con nhé!",
-            "✍️ Tự nhập lời nhắn riêng..."
+            "Đã đến giờ tập trung học bài rồi con nhé!",
+            "Con sắp hết giờ giải trí hôm nay rồi đó!",
+            "Chuẩn bị ăn cơm thôi con ơi!",
+            "Giữ khoảng cách mắt và nghỉ ngơi 5 phút con nhé!",
+            "Tự nhập lời nhắn riêng..."
         )
 
         AlertDialog.Builder(this)
-            .setTitle("💌 Gửi Tin Nhắn Nhắc Nhở")
+            .setTitle("Gửi Tin Nhắn Nhắc Nhở")
             .setItems(options) { _, which ->
                 if (which == options.size - 1) {
                     val input = EditText(this).apply {
@@ -2626,7 +2705,7 @@ class MainActivity : AppCompatActivity() {
                         setPadding(40, 30, 40, 30)
                     }
                     AlertDialog.Builder(this)
-                        .setTitle("✍️ Nhập Lời Nhắc")
+                        .setTitle("Nhập Lời Nhắc")
                         .setView(input)
                         .setPositiveButton("GỬI") { _, _ ->
                             val text = input.text.toString().trim()
@@ -2672,7 +2751,7 @@ class MainActivity : AppCompatActivity() {
                 firebaseClient.newCall(reqFam).execute().close()
 
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@MainActivity, "💌 Đã gửi nhắc nhở: \"$messageText\"", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "Đã gửi nhắc nhở: \"$messageText\"", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Lỗi gửi nhắc nhở", e)

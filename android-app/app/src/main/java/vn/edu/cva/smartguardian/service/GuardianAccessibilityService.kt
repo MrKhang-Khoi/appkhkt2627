@@ -70,43 +70,40 @@ class GuardianAccessibilityService : AccessibilityService() {
                 lower.contains("momo")
         }
 
+        @JvmStatic
         fun evaluateForegroundEvidence(
             activeRootPkg: String?,
-            foregroundProcessPkg: String?,
-            processImportance: Int?,
             usageStatsLastResumedPkg: String?,
-            targetPkg: String
+            targetPkg: String,
+            now: Long = System.currentTimeMillis(),
+            lastEventTime: Long = 0L,
+            maxEventAgeMs: Long = 15_000L
         ): Boolean {
             if (targetPkg.isEmpty()) return false
 
+            fun isPackageMatch(pkg: String?): Boolean {
+                if (pkg.isNullOrEmpty()) return false
+                return pkg == targetPkg ||
+                    pkg.startsWith("$targetPkg:") ||
+                    (pkg.contains(":") && pkg.substringBefore(":") == targetPkg)
+            }
+
             // Xung đột cửa sổ: Nếu activeRootPkg thuộc về ứng dụng KHÁC, tuyệt đối không được nhận diện là targetPkg
-            if (!activeRootPkg.isNullOrEmpty() && activeRootPkg != targetPkg) {
+            if (!activeRootPkg.isNullOrEmpty() && !isPackageMatch(activeRootPkg)) {
                 return false
             }
 
-            // 1. Accessibility Window Hierarchy (Cửa sổ tiền cảnh đang hiển thị khớp chính xác)
-            if (!activeRootPkg.isNullOrEmpty() && activeRootPkg == targetPkg) {
+            // 1. Accessibility Window Hierarchy (Cửa sổ tiền cảnh đang hiển thị khớp chính xác hoặc là tiến trình con)
+            if (!activeRootPkg.isNullOrEmpty() && (activeRootPkg == targetPkg || isPackageMatch(activeRootPkg))) {
                 return true
             }
 
-            // 2. ActivityManager (BẮT BUỘC: foregroundProcessPkg khớp targetPkg hoặc là process con dạng targetPkg:subProcess VÀ importance là 100)
-            val matchesTargetProcess = !foregroundProcessPkg.isNullOrEmpty() &&
-                (foregroundProcessPkg == targetPkg ||
-                 foregroundProcessPkg.startsWith("$targetPkg:") ||
-                 (foregroundProcessPkg.contains(":") && foregroundProcessPkg.substringBefore(":") == targetPkg))
-            if (matchesTargetProcess &&
-                processImportance != null &&
-                processImportance == android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
-            ) {
-                return true
-            }
-
-            // 3. UsageStatsManager: Chỉ chấp nhận khi activeRootPkg là null (không có xung đột cửa sổ)
-            if (activeRootPkg.isNullOrEmpty() &&
-                !usageStatsLastResumedPkg.isNullOrEmpty() &&
-                usageStatsLastResumedPkg == targetPkg
-            ) {
-                return true
+            // 2. UsageStatsManager: Chỉ chấp nhận khi activeRootPkg tạm thời là null (quá trình chuyển cảnh cửa sổ)
+            // VÀ event ACTIVITY_RESUMED khớp targetPkg trong khoảng thời gian hợp lệ (chống Stale Evidence)
+            if (activeRootPkg.isNullOrEmpty() && (usageStatsLastResumedPkg == targetPkg || isPackageMatch(usageStatsLastResumedPkg))) {
+                if (lastEventTime <= 0L || (now >= lastEventTime && now - lastEventTime <= maxEventAgeMs)) {
+                    return true
+                }
             }
 
             return false
@@ -214,7 +211,9 @@ class GuardianAccessibilityService : AccessibilityService() {
         if (closedPkg.isNotEmpty() && closedStart > 0L && now - closedStart >= 1000L && sessionToken.isNotEmpty()) {
             val sessionDuration = now - closedStart
             serviceScope.launch(Dispatchers.IO) {
-                UsageTrackerService.recordAppSession(applicationContext, closedPkg, sessionDuration, sessionToken)
+                if (telemetryEpoch.get() == currentEpoch) {
+                    UsageTrackerService.recordAppSession(applicationContext, closedPkg, sessionDuration, sessionToken, currentEpoch)
+                }
             }
         }
 
@@ -293,6 +292,7 @@ class GuardianAccessibilityService : AccessibilityService() {
         heartbeatJob = serviceScope.launch {
             val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
             while (isActive) {
+                delay(60_000L) // Nhịp tim nền 60s theo chuẩn tiết kiệm pin (event-driven đồng bộ tức thì khi đổi app)
                 try {
                     val isInteractive = pm?.isInteractive ?: false
                     if (isInteractive && isScreenOnState) {
@@ -301,7 +301,6 @@ class GuardianAccessibilityService : AccessibilityService() {
                 } catch (e: Exception) {
                     Log.w("GuardianAccess", "Periodic heartbeat error: ${e.message}")
                 }
-                delay(15_000L) // Bắn nhịp tim định kỳ mỗi 15 giây khi màn hình đang bật
             }
         }
     }
@@ -327,8 +326,11 @@ class GuardianAccessibilityService : AccessibilityService() {
             if (closedPkg.isNotEmpty() && closedStart > 0L && now - closedStart >= 1000L) {
                 val sessionDuration = now - closedStart
                 val sessionToken = "${closedPkg}_${closedStart}"
+                val currentEpoch = telemetryEpoch.get()
                 serviceScope.launch(Dispatchers.IO) {
-                    UsageTrackerService.recordAppSession(applicationContext, closedPkg, sessionDuration, sessionToken)
+                    if (telemetryEpoch.get() == currentEpoch) {
+                        UsageTrackerService.recordAppSession(applicationContext, closedPkg, sessionDuration, sessionToken, currentEpoch)
+                    }
                 }
             }
             UsageTrackerService.closePolledSession(applicationContext, "BANK_APP_OPENED")
@@ -414,41 +416,31 @@ class GuardianAccessibilityService : AccessibilityService() {
             null
         }
 
-        // Bỏ qua Launcher và SystemUI trong quá trình chuyển tiếp màn hình (không coi là xung đột app thứ ba)
-        val activePkg = if (rawActivePkg != null && (isDefaultLauncher(rawActivePkg) || rawActivePkg == "com.android.systemui" || rawActivePkg == "android")) {
-            null
-        } else {
-            rawActivePkg
+        val activePkg = rawActivePkg
+
+        // Nếu root window hoặc cửa sổ tương tác đã xác nhận chính xác packageName -> 100% Foreground
+        if (activePkg == packageName) {
+            return true
         }
 
-        // 2. ActivityManager RunningAppProcessInfo check: Tiến trình tiền cảnh thực tế (hỗ trợ named processes như package:name)
-        var fgProcPkg: String? = null
-        var fgProcImportance: Int? = null
-        try {
-            val am = getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-            val processes = am?.runningAppProcesses
-            if (!processes.isNullOrEmpty()) {
-                val matching = processes.filter { it.processName == packageName || it.processName.startsWith("$packageName:") }
-                val targetProc = matching.find { it.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND }
-                    ?: matching.firstOrNull()
-                if (targetProc != null) {
-                    fgProcPkg = targetProc.processName
-                    fgProcImportance = targetProc.importance
-                }
-            }
-        } catch (e: Exception) {
-            Log.w("GuardianAccess", "ActivityManager process check failed: ${e.message}")
+        // Bất biến xung đột cửa sổ: Nếu active root window thuộc về ứng dụng khác (kể cả Launcher/SystemUI),
+        // tuyệt đối từ chối targetPkg để chống stale UsageStats khi bấm Home hoặc đổi app.
+        if (!activePkg.isNullOrEmpty() && activePkg != packageName) {
+            return false
         }
 
-        // 3. UsageStatsManager check (Dual-Engine per Rule 6)
+        // 2. UsageStatsManager Event-Driven check (Google Android 10+ Standard: ACTIVITY_RESUMED)
+        // Triệt tiêu hoàn toàn Dead API ActivityManager.getRunningAppProcesses()
         var lastResumedPkg: String? = null
+        var lastResumedTime: Long = 0L
+        val now = System.currentTimeMillis()
         try {
             val usm = getSystemService(Context.USAGE_STATS_SERVICE) as? android.app.usage.UsageStatsManager
-            val now = System.currentTimeMillis()
-            val events = usm?.queryEvents(now - 60_000L, now)
+            val events = usm?.queryEvents(now - 15_000L, now)
             if (events != null) {
                 var lastEventPkg = ""
                 var lastEventType = -1
+                var lastEventTime = 0L
                 val eventOut = android.app.usage.UsageEvents.Event()
                 while (events.hasNextEvent()) {
                     events.getNextEvent(eventOut)
@@ -457,30 +449,26 @@ class GuardianAccessibilityService : AccessibilityService() {
                     ) {
                         lastEventPkg = eventOut.packageName
                         lastEventType = eventOut.eventType
+                        lastEventTime = eventOut.timeStamp
                     }
                 }
-                if (lastEventType == android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED) {
+                if (lastEventType == android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED && now >= lastEventTime && now - lastEventTime < 15_000L) {
                     lastResumedPkg = lastEventPkg
-                }
-            }
-            if (lastResumedPkg == null && usm != null) {
-                val stats = usm.queryUsageStats(android.app.usage.UsageStatsManager.INTERVAL_DAILY, now - 60_000L, now)
-                val mostRecent = stats?.filter { it.packageName == packageName }?.maxByOrNull { it.lastTimeUsed }
-                if (mostRecent != null && now - mostRecent.lastTimeUsed < 60_000L) {
-                    lastResumedPkg = mostRecent.packageName
+                    lastResumedTime = lastEventTime
                 }
             }
         } catch (e: Exception) {
             Log.w("GuardianAccess", "UsageStatsManager check failed: ${e.message}")
         }
 
-        // 4. Bất biến phần cứng & an toàn số: Ủy quyền cho evaluateForegroundEvidence xác minh
+        // 3. Bất biến phần cứng & an toàn số: Ủy quyền cho evaluateForegroundEvidence xác minh
         return evaluateForegroundEvidence(
             activeRootPkg = activePkg,
-            foregroundProcessPkg = fgProcPkg,
-            processImportance = fgProcImportance,
             usageStatsLastResumedPkg = lastResumedPkg,
-            targetPkg = packageName
+            targetPkg = packageName,
+            now = now,
+            lastEventTime = lastResumedTime,
+            maxEventAgeMs = 15_000L
         )
     }
 
@@ -694,68 +682,114 @@ class GuardianAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun findUrlFromNodeHierarchy(node: AccessibilityNodeInfo?): String? {
-        if (node == null) return null
+    private fun findUrlFromNodeHierarchy(rootNode: AccessibilityNodeInfo?): String? {
+        if (rootNode == null) return null
+        try {
+            val queue = java.util.ArrayDeque<Pair<AccessibilityNodeInfo, Int>>()
+            queue.add(Pair(rootNode, 0))
+            var inspectedNodes = 0
+            val maxNodes = 120
+            val maxDepth = 10
 
-        val viewId = node.viewIdResourceName?.lowercase() ?: ""
-        val text = node.text?.toString()?.trim()
+            while (!queue.isEmpty() && inspectedNodes < maxNodes) {
+                val (node, depth) = queue.poll() ?: break
+                inspectedNodes++
 
-        // Bỏ qua các chuỗi gợi ý / placeholder mặc định của trình duyệt
-        val isPlaceholder = text.isNullOrBlank() ||
-                text.equals("search or type url", ignoreCase = true) ||
-                text.equals("search or type web address", ignoreCase = true) ||
-                text.equals("tìm kiếm hoặc nhập địa chỉ web", ignoreCase = true) ||
-                text.equals("tìm kiếm hoặc nhập url", ignoreCase = true) ||
-                text.equals("tìm kiếm hoặc nhập tên web", ignoreCase = true) ||
-                text.equals("search", ignoreCase = true) ||
-                text.equals("tìm kiếm", ignoreCase = true)
+                val viewId = node.viewIdResourceName?.lowercase() ?: ""
+                val text = node.text?.toString()?.trim()
 
-        if (!isPlaceholder) {
-            // Kiểm tra viewId thanh địa chỉ phổ biến của Chrome, Cốc Cốc, Samsung, Firefox, Edge, Opera, Mi Browser
-            val isAddressBarId = viewId.contains("url_bar") ||
-                    viewId.contains("search_box") ||
-                    viewId.contains("location_bar") ||
-                    viewId.contains("address_bar") ||
-                    viewId.contains("url_box") ||
-                    viewId.contains("omnibar") ||
-                    viewId.contains("url_field") ||
-                    viewId.contains("toolbar_url")
+                // Bỏ qua các chuỗi gợi ý / placeholder mặc định của trình duyệt
+                val isPlaceholder = text.isNullOrBlank() ||
+                        text.equals("search or type url", ignoreCase = true) ||
+                        text.equals("search or type web address", ignoreCase = true) ||
+                        text.equals("tìm kiếm hoặc nhập địa chỉ web", ignoreCase = true) ||
+                        text.equals("tìm kiếm hoặc nhập url", ignoreCase = true) ||
+                        text.equals("tìm kiếm hoặc nhập tên web", ignoreCase = true) ||
+                        text.equals("search", ignoreCase = true) ||
+                        text.equals("tìm kiếm", ignoreCase = true)
 
-            if (isAddressBarId && (text.contains(".") || text.contains("/"))) {
-                return text
+                if (!isPlaceholder) {
+                    // Kiểm tra viewId thanh địa chỉ phổ biến của Chrome, Cốc Cốc, Samsung, Firefox, Edge, Opera, Mi Browser
+                    val isAddressBarId = viewId.contains("url_bar") ||
+                            viewId.contains("search_box") ||
+                            viewId.contains("location_bar") ||
+                            viewId.contains("address_bar") ||
+                            viewId.contains("url_box") ||
+                            viewId.contains("omnibar") ||
+                            viewId.contains("url_field") ||
+                            viewId.contains("toolbar_url")
+
+                    if (isAddressBarId && (text.contains(".") || text.contains("/"))) {
+                        return text
+                    }
+
+                    // Heuristic dự phòng: Nếu là EditText/TextView và chuỗi bắt đầu bằng http://, https:// hoặc domain hợp lệ
+                    val isUrlPattern = text.startsWith("http://", ignoreCase = true) ||
+                            text.startsWith("https://", ignoreCase = true) ||
+                            text.matches(Regex("^[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}(/.*)?$"))
+
+                    if (isUrlPattern && !text.contains(" ") && text.length >= 4) {
+                        return text
+                    }
+                }
+
+                if (depth < maxDepth) {
+                    val childCount = try { node.childCount } catch (t: Throwable) { 0 }
+                    for (i in 0 until childCount) {
+                        if (inspectedNodes + queue.size >= maxNodes) break
+                        try {
+                            val child = node.getChild(i)
+                            if (child != null) {
+                                queue.add(Pair(child, depth + 1))
+                            }
+                        } catch (t: Throwable) {
+                            // Guard against recycled / invalid nodes
+                        }
+                    }
+                }
             }
-
-            // Heuristic dự phòng: Nếu là EditText/TextView và chuỗi bắt đầu bằng http://, https:// hoặc domain hợp lệ
-            val isUrlPattern = text.startsWith("http://", ignoreCase = true) ||
-                    text.startsWith("https://", ignoreCase = true) ||
-                    text.matches(Regex("^[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}(/.*)?$"))
-
-            if (isUrlPattern && !text.contains(" ") && text.length >= 4) {
-                return text
-            }
+        } catch (t: Throwable) {
+            Log.w("GuardianAccess", "Safe URL hierarchy traversal error: ${t.message}")
         }
-
-        // Kiểm tra đệ quy các node con
-        for (i in 0 until node.childCount) {
-            val child = node.getChild(i)
-            val found = findUrlFromNodeHierarchy(child)
-            if (found != null) return found
-        }
-
         return null
     }
 
-    private fun findPageTitleFromNodeHierarchy(node: AccessibilityNodeInfo?): String? {
-        if (node == null) return null
-        val viewId = node.viewIdResourceName?.lowercase() ?: ""
-        if (viewId.contains("title") || viewId.contains("tab_title") || viewId.contains("page_title")) {
-            val t = node.text?.toString()?.trim()
-            if (!t.isNullOrBlank()) return t
-        }
-        for (i in 0 until node.childCount) {
-            val child = node.getChild(i)
-            val found = findPageTitleFromNodeHierarchy(child)
-            if (found != null) return found
+    private fun findPageTitleFromNodeHierarchy(rootNode: AccessibilityNodeInfo?): String? {
+        if (rootNode == null) return null
+        try {
+            val queue = java.util.ArrayDeque<Pair<AccessibilityNodeInfo, Int>>()
+            queue.add(Pair(rootNode, 0))
+            var inspectedNodes = 0
+            val maxNodes = 100
+            val maxDepth = 8
+
+            while (!queue.isEmpty() && inspectedNodes < maxNodes) {
+                val (node, depth) = queue.poll() ?: break
+                inspectedNodes++
+
+                val viewId = node.viewIdResourceName?.lowercase() ?: ""
+                if (viewId.contains("title") || viewId.contains("tab_title") || viewId.contains("page_title")) {
+                    val t = node.text?.toString()?.trim()
+                    if (!t.isNullOrBlank()) return t
+                }
+
+                if (depth < maxDepth) {
+                    val childCount = try { node.childCount } catch (t: Throwable) { 0 }
+                    for (i in 0 until childCount) {
+                        if (inspectedNodes + queue.size >= maxNodes) break
+                        try {
+                            val child = node.getChild(i)
+                            if (child != null) {
+                                queue.add(Pair(child, depth + 1))
+                            }
+                        } catch (t: Throwable) {
+                            // Guard against recycled nodes
+                        }
+                    }
+                }
+            }
+        } catch (t: Throwable) {
+            Log.w("GuardianAccess", "Safe title hierarchy traversal error: ${t.message}")
         }
         return null
     }
@@ -785,8 +819,9 @@ class GuardianAccessibilityService : AccessibilityService() {
         try {
             isScreenOnState = false
             heartbeatJob?.cancel()
+            val finalEpoch = telemetryEpoch.incrementAndGet()
             UsageTrackerService.cancelActiveOnlineCalls()
-            UsageTrackerService.sendUrgentOfflineStatus(applicationContext, telemetryEpoch.incrementAndGet())
+            UsageTrackerService.sendUrgentOfflineStatus(applicationContext, finalEpoch)
             serviceJob.cancel()
         } catch (e: Exception) {
             android.util.Log.w("GuardianAccess", "Failed to cancel service jobs during onDestroy: ${e.message}")

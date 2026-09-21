@@ -15,13 +15,13 @@
         android:background="@drawable/bg_device_card"
         android:layout_marginEnd="12dp">
 
-        <TextView
-            android:id="@+id/tvItemAppIcon"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+        <ImageView
+            android:id="@+id/ivItemAppIcon"
+            android:layout_width="22dp"
+            android:layout_height="22dp"
             android:layout_gravity="center"
-            android:text="📱"
-            android:textSize="22sp" />
+            android:src="@drawable/ic_apps_24"
+            android:contentDescription="App Icon" />
     </FrameLayout>
 
     <!-- KHU VỰC THÔNG TIN CHÍNH: 2 HÀNG CÂN ĐỐI (TRIỆT TIÊU LỖI RỚT DÒNG DỌC) -->

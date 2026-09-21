@@ -1,21 +1,22 @@
 {
-  "versionCode": 29,
-  "versionName": "1.2.9",
-  "latestVersionCode": 29,
-  "latestVersionName": "1.2.9",
+  "versionCode": 30,
+  "versionName": "1.3.0",
+  "latestVersionCode": 30,
+  "latestVersionName": "1.3.0",
   "minSupportedVersion": 1,
   "isForceUpdate": false,
-  "fileSize": "5.83 MB",
-  "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.2.9.apk",
-  "apkFallbackUrl": "https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/CVA-SmartGuardian-v1.2.9.apk",
-  "sha256": "D256E767ABDF06E8C4CE4887FB023AC01463A4013CE9EB952F03A4E9A58FC29C",
+  "fileSize": "5.86 MB",
+  "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.3.0.apk",
+  "apkFallbackUrl": "https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/CVA-SmartGuardian-v1.3.0.apk",
+  "sha256": "3DD791E3559F9B7244382048B9C6F220F5819C7EBE30C3976404BE5C8033C85C",
   "changelog": [
-    "Chuẩn hóa phân phối quyền OEM 3 tầng độc lập (Xiaomi, Samsung, Oppo, Vivo, Pixel) và tối giản giao diện MD3.",
-    "Triệt tiêu hoàn toàn mã PIN mặc định trên màn hình chặn, tích hợp bảo mật mã hóa SHA-256 + Salt và khóa 30 giây.",
-    "Bảo vệ Coroutine Fused Location, khắc phục triệt để lỗi crash IllegalStateException.",
-    "Nâng cấp bộ lọc web thông minh với Regex Unicode và giải mã URL, chấm dứt chặn nhầm trang web giáo dục.",
-    "Đồng bộ phiên bản động 100% từ hệ thống (Zero Hardcoded Version) với kiểu Long 64-bit."
+    "Khắc phục triệt để nhận diện app online: Bổ sung cờ flagRetrieveInteractiveWindows và loại bỏ hoàn toàn Dead API getRunningAppProcesses.",
+    "Chuẩn hóa giao diện M3 Responsive 4 trạng thái: Loading, Content, Empty, Error kèm nút Thử Lại.",
+    "Thay thế 100% icon emoji bằng Android Vector Drawables chuẩn Material Symbols.",
+    "Bảo vệ kế toán phiên sử dụng với Epoch Fencing và nhịp tim nền 60s tiết kiệm pin."
   ],
-  "releaseNotes": "Bản phát hành v1.2.9: Nâng cấp chuẩn Android Google toàn diện, loại bỏ PIN mặc định, chuẩn hóa phân phối quyền OEM 3 tầng, bảo vệ coroutine định vị và bộ lọc web thông minh chống chặn nhầm.",
-  "updatedAt": 1789945890000
+  "releaseNotes": "Bản phát hành v1.3.0: Chuẩn hóa Android Google toàn diện, khắc phục triệt để nhận diện app online, bổ sung 4 trạng thái UI responsive, loại bỏ Dead API và bảo vệ kế toán phiên thời gian thực.",
+  "updatedAt": 1789983300000,
+  "size": 6140933,
+  "releaseDate": "2026-09-21"
 }

@@ -23,8 +23,8 @@
   - Khi màn hình tắt (`ACTION_SCREEN_OFF`), khóa máy Keyguard (`isKeyguardLocked`), hoặc dịch vụ bị hủy (`onDestroy`), NGAY LẬP TỨC ngắt trạng thái Online và chốt phiên đếm giờ của app hiện tại. Tuyệt đối cấm đếm giờ ảo khi máy tắt màn hình hoặc khóa máy.
   - **Non-blocking & Dispatchers.IO Invariant**: Hàm `closePolledSession()` và các luồng xử lý phần cứng (`ACTION_SCREEN_OFF`, `handleScreenOff`) chỉ chụp snapshot trạng thái trong RAM và reset biến bộ đếm dưới lock trong thời gian ngắn nhất (< 1ms). Mọi thao tác đĩa (`recordAppSession`) và cập nhật mạng (`reportActiveApp`) BẮT BUỘC phải được dispatch sang background coroutine `Dispatchers.IO`, kèm session token chống ghi nhận trùng lặp (`polled_${pkg}_${startTime}`) và stale epoch fencing. Tuyệt đối không thực hiện I/O đĩa hoặc mạng chặn luồng BroadcastReceiver.
   - **Đồng bộ hóa & Chống Race Condition trong Polling**: State machine của polling (`lastPolledForegroundPkg`, `lastPolledForegroundStartTime`) được bảo vệ nguyên tử bằng `synchronized(statsLock)`. Trước khi ghi nhận state mới, bắt buộc phải double-check `isScreenOnState` và `telemetryEpoch` để ngăn ngừa race condition khi màn hình tắt giữa chu kỳ polling.
-  - **Fallback tiền cảnh nghiêm ngặt**: Khi không có sự kiện `ACTIVITY_RESUMED` trong 30 giây, fallback qua `UsageStats` bắt buộc phải phối hợp đối chiếu với `ActivityManager.runningAppProcesses` có `importance == IMPORTANCE_FOREGROUND` (100) và vượt qua kiểm định `GuardianAccessibilityService.evaluateForegroundEvidence()`. Nghiêm cấm nhận bừa stale package chỉ dựa vào `lastTimeUsed`.
-  - Phân biệt triệt để ứng dụng chạy Foreground (chiếm màn hình) vs Background. Nhận diện cả process con mang tên `package:processName` có tầm quan trọng `IMPORTANCE_FOREGROUND` (100).
+  - **Xác thực tiền cảnh nghiêm ngặt (Dual-Engine Foreground Verification)**: Hệ thống sử dụng phối hợp Accessibility Window Hierarchy và UsageStats Event-Driven (`ACTIVITY_RESUMED`). Khi chuyển cảnh cửa sổ (`activeRootPkg` tạm thời `null`), fallback sang UsageStats bắt buộc đối chiếu timestamp thời gian thực (`now - timeStamp <= 15s`) và vượt qua kiểm định `GuardianAccessibilityService.evaluateForegroundEvidence()`. Nghiêm cấm nhận bừa stale package chỉ dựa vào `lastTimeUsed`.
+  - Phân biệt triệt để ứng dụng chạy Foreground (chiếm màn hình) vs Background. Nhận diện cả process con mang tên `package:processName` hoặc `package:renderer` trong cả Active Window lẫn UsageStats. Cấm sử dụng các Dead API đã bị Android vô hiệu hóa.
   - `LruSessionSet` kế thừa `LinkedHashSet<String>`, bị chặn tối đa 500 entries để chống rò rỉ bộ nhớ (OOM), đồng bộ toàn diện trên toàn bộ giao diện Collection (`size`, `isEmpty`, `contains`, `add`, `remove`, `clear`, `iterator`, `containsAll`, `addAll`, `removeAll`, `retainAll`, `equals`, `hashCode`, `removeIf`, `forEach`, `spliterator`, `toArray`, `clone`). Phương thức `addAll` được trang bị self-reference guard (`if (elements === this) return false`) để tránh biến đổi thứ tự ngoài ý muốn khi truyền chính nó.
   - Chuẩn ngữ nghĩa LRU trên cả thao tác đọc và ghi:
     - Khi `contains(token)` được gọi và token đã tồn tại, phần tử được di chuyển về cuối tập hợp (Most Recently Used - MRU) để không bị loại bỏ sớm.
@@ -110,3 +110,49 @@
 - [ ] Tính toàn vẹn OTA được xác thực đồng thời trên cả tệp local và Firebase RTDB `/app_release.json`.
 - [ ] Kiểm thử tải thực tế file APK qua mạng (Live Remote APK Download & Checksum Gatekeeper) đạt 100% thành công với HTTP 200, triệt tiêu hoàn toàn mã lỗi HTTP 404 trước khi push Git.
 - [ ] Được Codex Auditor phê duyệt `[APPROVED]`. Nếu `[REJECTED]`, bắt buộc phải viết lại (Self-Healing Loop).
+
+---
+
+## 4. QUY CHUẨN KHOA HỌC KỸ THUẬT (KHKT) & GOOGLE PLAY STORE 2026 (THE 6 IRON LAWS)
+
+> **Bổ sung bắt buộc cho dự án Cuộc thi Khoa học Kỹ thuật (KHKT) và Phát hành Google Play Store.**
+> Mọi Agent khi sửa đổi bất kỳ mã nguồn nào BẮT BUỘC phải tuân thủ 6 Điều luật Sắt sau:
+
+### 4.1. Chốt Chặn Biên Dịch Vật Lý (Artifact Freshness Gatekeeper):
+- CẤM TUYỆT ĐỐI báo cáo PASS hoặc commit khi chưa biên dịch file APK thật.
+- Nếu có bất kỳ thay đổi nào trong `android-app/app/src/`:
+  - Bắt buộc phải thực thi lệnh đóng gói: `.\gradlew assembleRelease`.
+  - Mốc thời gian ghi đĩa của file `apk/CVA-SmartGuardian-v1.x.x.apk` BẮT BUỘC PHẢI MỚI HƠN tất cả các file mã nguồn `.kt`, `.xml`, `.gradle.kts` vừa sửa.
+  - Bắt buộc tăng `versionCode` và băm lại mã SHA-256 mới cập nhật vào `version.json`.
+  - Mọi hành vi sửa code nhưng giữ file APK cũ để báo cáo hoàn thành đều bị coi là **Gian Dối Khoa Học (Fraudulent Bypass)** và bị chặn đứng bằng Exit Code 1.
+
+### 4.2. Cấm API Chết & Bịa Đặt Mã Nguồn (Anti-Dead-API Law):
+- CẤM TUYỆT ĐỐI sử dụng `ActivityManager.getRunningAppProcesses()` để xác định ứng dụng tiền cảnh của bên thứ ba (Google đã khóa bảo mật API này từ Android 10+).
+- Nhận diện ứng dụng tiền cảnh BẮT BUỘC sử dụng kiến trúc chuẩn Google: Phối hợp giữa `AccessibilityEvent` (bắt buộc cấu hình XML có `android:accessibilityFlags="flagRetrieveInteractiveWindows|flagReportViewIds"`) và dòng sự kiện `UsageStatsManager.queryEvents()` (`ACTIVITY_RESUMED`).
+- Xử lý phân nhánh tiến trình con (Sub-processes dạng `package:process`). Khi cửa sổ Accessibility chuyển cảnh tạm thời (`rootInActiveWindow == null`), cấm fail-closed mù quáng mà phải đối soát mốc thời gian sự kiện.
+
+### 4.3. Tuân Thủ Chính Sách Google Play Store Về Quyền Trợ Năng (Accessibility Policy):
+- CẤM TUYỆT ĐỐI gắn cờ `android:isAccessibilityTool="true"` trong Manifest hoặc XML (chỉ dành cho ứng dụng người khuyết tật, app quản lý trẻ em gắn cờ này sẽ bị Google Play từ chối 100%).
+- Bắt buộc có Hộp thoại Minh bạch Độc lập (Prominent In-App Disclosure) trước khi xin quyền Accessibility.
+- Cấm dùng Accessibility để tự ý nhấn nút hoặc ngăn cản người dùng gỡ cài đặt trái phép.
+
+### 4.4. Tiêu Chuẩn Giao Diện Responsive & Thích Ứng Đa Màn Hình (Adaptive M3 Standards):
+- CẤM TUYỆT ĐỐI gán cứng chiều cao cố định cho vùng nội dung (như `layout_height="280dp"`).
+- Đối với danh sách chi tiết hoặc menu thao tác trên điện thoại, BẮT BUỘC sử dụng Modal Bottom Sheet (`BottomSheetDialogFragment`) thay vì Center Dialog chật chội.
+- Trên màn hình lớn (Tablet/Foldable), Bottom Sheet hoặc Dialog bắt buộc phải giới hạn `maxWidth = 560dp` hoặc `640dp` và căn giữa.
+- Mọi khối văn bản phải tự co giãn (`wrap_content`), hỗ trợ hoàn hảo chế độ phóng to chữ hệ thống (Font Scale 1.5x - 2.0x) mà không bị che lấp hoặc cắt chữ.
+
+### 4.5. Thiết Kế Hộp Thoại & Thông Báo Chuẩn Khoa Học Nhận Thức (Cognitive Ergonomics):
+- Mọi hộp thoại hoặc màn hình có tải mạng BẮT BUỘC phải có đầy đủ 4 trạng thái:
+  1. `layoutLoading`: Shimmer Skeleton hoặc CircularProgressIndicator.
+  2. `layoutContent`: Dữ liệu chính dạng Thẻ Squircle bo tròn 16dp.
+  3. `layoutEmpty`: Vector minh họa + Lời giải thích lịch sự + Nút hành động.
+  4. `layoutError`: Icon cảnh báo lỗi mạng + Nút [Thử lại] (`btnRetry`).
+- Tiêu đề ngắn gọn dưới 7 từ. CẤM đưa các thuật ngữ kỹ sư (như Zero-Phantom-Time, Telemetry, Socket).
+- Cặp nút bấm sử dụng ĐỘNG TỪ HÀNH ĐỘNG RÕ RÀNG (ví dụ: `[Thử Lại]`, `[Bật GPS]`, `[Đóng]`). CẤM nút `[OK]` mập mờ.
+- CẤM TUYỆT ĐỐI dùng Emoji làm icon hệ thống. Bắt buộc dùng 100% Android Vector Drawables (Material Symbols).
+- Thông báo gửi đến học sinh phải mang tính giáo dục, tích cực, sư phạm, tôn trọng tâm lý lứa tuổi học sinh, không dùng từ ngữ kiểm soát cực đoan.
+
+### 4.6. Kiểm Định Đối Đầu Bác Bỏ Karl Popper (Codex Adversarial Review):
+- CẤM đưa bất kỳ đoạn văn tự khen, tự giải trình kiến trúc nào của Agent vào Prompt gửi sang Codex.
+- Codex bắt buộc đóng vai Kẻ phá hoại (Adversarial Auditor), chủ động tìm kịch bản gãy vụn thực tế (concurrency, race condition, stale state, dead API, UI overflow). Tìm thấy dù chỉ 1 lỗi $\rightarrow$ Bắt buộc trả về `[REJECTED]` và Agent phải sửa lại tận gốc.

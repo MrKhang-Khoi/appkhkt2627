@@ -21,16 +21,24 @@
             android:background="@drawable/bg_avatar_squircle"
             android:layout_marginEnd="12dp">
 
+            <ImageView
+                android:id="@+id/ivDialogChildAvatar"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_person_24"
+                android:contentDescription="Avatar" />
+
             <TextView
                 android:id="@+id/tvDialogChildAvatar"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
-                android:text="👦"
-                android:textSize="22sp" />
+                android:textSize="20sp"
+                android:visibility="gone" />
         </FrameLayout>
 
-        <!-- THÔNG TIN TÊN & TRẠNG THÁI -->
+        <!-- THÔNG TIN TÊN & TRẠNG THÁI (KHỞI TẠO TRUNG TÍNH, CHỐNG PHANTOM ONLINE) -->
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -52,8 +60,8 @@
                 android:id="@+id/tvDialogChildSubtitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="🟢 Đang kết nối • Thời gian thực"
-                android:textColor="#34D399"
+                android:text="Đang kết nối..."
+                android:textColor="#94A3B8"
                 android:textSize="12sp"
                 android:layout_marginTop="2dp" />
         </LinearLayout>
@@ -75,316 +83,452 @@
                 android:id="@+id/tvDialogBalanceScore"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="⚖️ 85/100"
+                android:text="85/100"
                 android:textColor="#FBBF24"
                 android:textSize="12sp"
                 android:textStyle="bold" />
         </LinearLayout>
     </LinearLayout>
 
-    <!-- 2. BANNER TRẠNG THÁI HIỆN TẠI (ACTIVE FOREGROUND APP LIVE) -->
-    <LinearLayout
-        android:id="@+id/layoutDialogActiveAppBanner"
+    <!-- 2. VÙNG CUỘN RESPONSIVE TOÀN DIỆN (CHỐNG OVERFLOW TRÊN MÀN HÌNH NHỎ VÀ FONT SCALE 2.0X) -->
+    <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@drawable/bg_device_card"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:padding="12dp"
-        android:layout_marginBottom="14dp">
-
-        <FrameLayout
-            android:layout_width="38dp"
-            android:layout_height="38dp"
-            android:background="@drawable/bg_glass_card"
-            android:layout_marginEnd="10dp">
-
-            <TextView
-                android:id="@+id/tvActiveAppIcon"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:text="⚡"
-                android:textSize="18sp" />
-        </FrameLayout>
-
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
-
-            <TextView
-                android:id="@+id/tvActiveAppTitle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="TRẠNG THÁI THIẾT BỊ CON:"
-                android:textColor="#94A3B8"
-                android:textSize="10sp"
-                android:textStyle="bold"
-                android:letterSpacing="0.04" />
-
-            <TextView
-                android:id="@+id/tvActiveAppName"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Đang đồng bộ telemetry từ thiết bị con..."
-                android:textColor="#CBD5E1"
-                android:textSize="13sp"
-                android:textStyle="bold"
-                android:layout_marginTop="2dp"
-                android:singleLine="true"
-                android:ellipsize="end" />
-        </LinearLayout>
-
-        <TextView
-            android:id="@+id/tvActiveAppLiveBadge"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:background="#334155"
-            android:textColor="#94A3B8"
-            android:textSize="10sp"
-            android:textStyle="bold"
-            android:paddingLeft="8dp"
-            android:paddingRight="8dp"
-            android:paddingTop="3dp"
-            android:paddingBottom="3dp"
-            android:text="⚪ CHỜ ĐỒNG BỘ" />
-    </LinearLayout>
-
-    <!-- 2b. BANNER TRANG WEB ĐANG TRUY CẬP (LIVE WEB ACTIVITY BANNER) -->
-    <LinearLayout
-        android:id="@+id/layoutDialogActiveWebBanner"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="@drawable/bg_device_card"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:padding="12dp"
-        android:layout_marginBottom="14dp"
-        android:visibility="gone">
-
-        <FrameLayout
-            android:layout_width="38dp"
-            android:layout_height="38dp"
-            android:background="@drawable/bg_glass_card"
-            android:layout_marginEnd="10dp">
-
-            <TextView
-                android:id="@+id/tvActiveWebIcon"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:text="🌐"
-                android:textSize="18sp" />
-        </FrameLayout>
-
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
-
-            <TextView
-                android:id="@+id/tvActiveWebHeader"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="TRANG WEB ĐANG TRUY CẬP (REALTIME):"
-                android:textColor="#38BDF8"
-                android:textSize="10sp"
-                android:textStyle="bold"
-                android:letterSpacing="0.04" />
-
-            <TextView
-                android:id="@+id/tvActiveWebDomain"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Đang kết nối web..."
-                android:textColor="#F8FAFC"
-                android:textSize="13sp"
-                android:textStyle="bold"
-                android:layout_marginTop="2dp"
-                android:singleLine="true"
-                android:ellipsize="end" />
-
-            <TextView
-                android:id="@+id/tvActiveWebUrl"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Trình duyệt Web"
-                android:textColor="#94A3B8"
-                android:textSize="11sp"
-                android:layout_marginTop="1dp"
-                android:singleLine="true"
-                android:ellipsize="end" />
-        </LinearLayout>
-
-        <TextView
-            android:id="@+id/tvActiveWebStatusBadge"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:background="#15803D"
-            android:textColor="#86EFAC"
-            android:textSize="10sp"
-            android:textStyle="bold"
-            android:paddingLeft="8dp"
-            android:paddingRight="8dp"
-            android:paddingTop="3dp"
-            android:paddingBottom="3dp"
-            android:text="🟢 ĐANG DUYỆT" />
-    </LinearLayout>
-
-    <!-- 3. THANH CHỌN TAB CHUYÊN NGHIỆP DẠNG PILL (CHỐNG RỚT DÒNG) -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="40dp"
-        android:background="@drawable/bg_tab_container"
-        android:orientation="horizontal"
-        android:padding="3dp"
-        android:layout_marginBottom="12dp">
-
-        <TextView
-            android:id="@+id/tabDialogSocial"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:background="@drawable/bg_tab_active"
-            android:gravity="center"
-            android:singleLine="true"
-            android:ellipsize="end"
-            android:text="🌐 Mạng XH"
-            android:textColor="#FFFFFF"
-            android:textSize="11sp"
-            android:textStyle="bold"
-            android:clickable="true"
-            android:focusable="true" />
-
-        <TextView
-            android:id="@+id/tabDialogStudy"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:background="@drawable/bg_tab_inactive"
-            android:gravity="center"
-            android:singleLine="true"
-            android:ellipsize="end"
-            android:text="📚 Học tập"
-            android:textColor="#94A3B8"
-            android:textSize="11sp"
-            android:clickable="true"
-            android:focusable="true" />
-
-        <TextView
-            android:id="@+id/tabDialogGame"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:background="@drawable/bg_tab_inactive"
-            android:gravity="center"
-            android:singleLine="true"
-            android:ellipsize="end"
-            android:text="🎮 Game"
-            android:textColor="#94A3B8"
-            android:textSize="11sp"
-            android:clickable="true"
-            android:focusable="true" />
-
-        <TextView
-            android:id="@+id/tabDialogAll"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:background="@drawable/bg_tab_inactive"
-            android:gravity="center"
-            android:singleLine="true"
-            android:ellipsize="end"
-            android:text="📱 Tất cả"
-            android:textColor="#94A3B8"
-            android:textSize="11sp"
-            android:clickable="true"
-            android:focusable="true" />
-    </LinearLayout>
-
-    <!-- 4. DANH SÁCH ỨNG DỤNG CUỘN (TRIỆT TIÊU KHOẢNG TRỐNG CHẾT) -->
-    <ScrollView
-        android:layout_width="match_parent"
-        android:layout_height="280dp"
         android:fillViewport="true"
         android:scrollbars="none"
-        android:layout_marginBottom="16dp">
+        android:layout_marginBottom="12dp">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
+            <!-- TRẠNG THÁI 1: LOADING PROGRESS -->
             <LinearLayout
-                android:id="@+id/layoutDialogAppListContainer"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical" />
+                android:id="@+id/layoutDialogLoading"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:paddingTop="32dp"
+        android:paddingBottom="32dp"
+        android:visibility="gone">
 
-            <!-- EMPTY STATE TINH TẾ & ẤM ÁP -->
-            <LinearLayout
-                android:id="@+id/layoutDialogEmptyState"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:gravity="center"
-                android:background="@drawable/bg_device_card"
-                android:paddingTop="24dp"
-                android:paddingBottom="24dp"
-                android:paddingLeft="16dp"
-                android:paddingRight="16dp"
-                android:visibility="gone">
+        <ProgressBar
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:indeterminate="true"
+            android:layout_marginBottom="12dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Đang đồng bộ dữ liệu từ thiết bị con..."
+            android:textColor="#94A3B8"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <!-- TRẠNG THÁI 2: ERROR STATE + NÚT THỬ LẠI -->
+    <LinearLayout
+        android:id="@+id/layoutDialogError"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:paddingTop="24dp"
+        android:paddingBottom="24dp"
+        android:visibility="gone">
+
+        <ImageView
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@drawable/ic_error_outline_24"
+            android:layout_marginBottom="8dp"
+            android:contentDescription="Lỗi" />
+
+        <TextView
+            android:id="@+id/tvDialogErrorMessage"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Không thể tải thông tin từ thiết bị con"
+            android:textColor="#F87171"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:layout_marginBottom="12dp" />
+
+        <Button
+            android:id="@+id/btnRetryCompanion"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:background="@drawable/bg_btn_primary_modern"
+            android:text="Thử Lại"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:paddingLeft="20dp"
+            android:paddingRight="20dp"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp" />
+    </LinearLayout>
+
+    <!-- TRẠNG THÁI 3: NỘI DUNG CHÍNH (CONTENT STATE) -->
+    <LinearLayout
+        android:id="@+id/layoutDialogContent"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <!-- BANNER TRẠNG THÁI HIỆN TẠI (ACTIVE FOREGROUND APP LIVE) -->
+        <LinearLayout
+            android:id="@+id/layoutDialogActiveAppBanner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_device_card"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="12dp"
+            android:layout_marginBottom="14dp">
+
+            <FrameLayout
+                android:layout_width="38dp"
+                android:layout_height="38dp"
+                android:background="@drawable/bg_glass_card"
+                android:layout_marginEnd="10dp">
+
+                <ImageView
+                    android:id="@+id/ivActiveAppIcon"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_apps_24"
+                    android:contentDescription="App Icon" />
 
                 <TextView
-                    android:id="@+id/tvDialogEmptyIcon"
+                    android:id="@+id/tvActiveAppIcon"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="☕"
-                    android:textSize="32sp"
-                    android:layout_marginBottom="8dp" />
+                    android:layout_gravity="center"
+                    android:textSize="16sp"
+                    android:visibility="gone" />
+            </FrameLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
 
                 <TextView
-                    android:id="@+id/tvDialogEmptyTitle"
+                    android:id="@+id/tvActiveAppTitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Chưa có hoạt động trong nhóm này"
+                    android:text="TRẠNG THÁI THIẾT BỊ CON:"
+                    android:textColor="#94A3B8"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.04" />
+
+                <TextView
+                    android:id="@+id/tvActiveAppName"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Đang kiểm tra ứng dụng..."
+                    android:textColor="#CBD5E1"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:layout_marginTop="2dp"
+                    android:singleLine="true"
+                    android:ellipsize="end" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvActiveAppLiveBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="#334155"
+                android:textColor="#94A3B8"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:paddingLeft="8dp"
+                android:paddingRight="8dp"
+                android:paddingTop="3dp"
+                android:paddingBottom="3dp"
+                android:text="CHỜ ĐỒNG BỘ" />
+        </LinearLayout>
+
+        <!-- BANNER TRANG WEB ĐANG TRUY CẬP (LIVE WEB ACTIVITY BANNER) -->
+        <LinearLayout
+            android:id="@+id/layoutDialogActiveWebBanner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_device_card"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="12dp"
+            android:layout_marginBottom="14dp"
+            android:visibility="gone">
+
+            <FrameLayout
+                android:layout_width="38dp"
+                android:layout_height="38dp"
+                android:background="@drawable/bg_glass_card"
+                android:layout_marginEnd="10dp">
+
+                <ImageView
+                    android:id="@+id/ivActiveWebIcon"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_language_24"
+                    android:contentDescription="Web Icon" />
+
+                <TextView
+                    android:id="@+id/tvActiveWebIcon"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:textSize="16sp"
+                    android:visibility="gone" />
+            </FrameLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/tvActiveWebHeader"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="TRANG WEB ĐANG TRUY CẬP (THỜI GIAN THỰC):"
+                    android:textColor="#38BDF8"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.04" />
+
+                <TextView
+                    android:id="@+id/tvActiveWebDomain"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Đang kết nối web..."
                     android:textColor="#F8FAFC"
                     android:textSize="13sp"
                     android:textStyle="bold"
-                    android:gravity="center"
-                    android:layout_marginBottom="4dp" />
+                    android:layout_marginTop="2dp"
+                    android:singleLine="true"
+                    android:ellipsize="end" />
 
                 <TextView
-                    android:id="@+id/tvDialogEmptyDesc"
+                    android:id="@+id/tvActiveWebUrl"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Thiết bị con chưa mở ứng dụng thuộc danh mục này hôm nay."
+                    android:text="Trình duyệt Web"
                     android:textColor="#94A3B8"
                     android:textSize="11sp"
-                    android:gravity="center"
-                    android:layout_marginBottom="12dp" />
+                    android:layout_marginTop="1dp"
+                    android:singleLine="true"
+                    android:ellipsize="end" />
+            </LinearLayout>
 
-                <TextView
-                    android:id="@+id/btnDialogViewAllApps"
-                    android:layout_width="wrap_content"
+            <TextView
+                android:id="@+id/tvActiveWebStatusBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="#15803D"
+                android:textColor="#86EFAC"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:paddingLeft="8dp"
+                android:paddingRight="8dp"
+                android:paddingTop="3dp"
+                android:paddingBottom="3dp"
+                android:text="ĐANG DUYỆT" />
+        </LinearLayout>
+
+        <!-- THANH CHỌN TAB CHUYÊN NGHIỆP DẠNG PILL (CHỐNG RỚT DÒNG) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:background="@drawable/bg_tab_container"
+            android:orientation="horizontal"
+            android:padding="3dp"
+            android:layout_marginBottom="12dp">
+
+            <TextView
+                android:id="@+id/tabDialogSocial"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:minHeight="40dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_tab_active"
+                android:gravity="center"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"
+                android:paddingLeft="4dp"
+                android:paddingRight="4dp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:text="Mạng XH"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:clickable="true"
+                android:focusable="true" />
+
+            <TextView
+                android:id="@+id/tabDialogStudy"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:minHeight="40dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_tab_inactive"
+                android:gravity="center"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"
+                android:paddingLeft="4dp"
+                android:paddingRight="4dp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:text="Học Tập"
+                android:textColor="#94A3B8"
+                android:textSize="11sp"
+                android:clickable="true"
+                android:focusable="true" />
+
+            <TextView
+                android:id="@+id/tabDialogGame"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:minHeight="40dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_tab_inactive"
+                android:gravity="center"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"
+                android:paddingLeft="4dp"
+                android:paddingRight="4dp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:text="Trò Chơi"
+                android:textColor="#94A3B8"
+                android:textSize="11sp"
+                android:clickable="true"
+                android:focusable="true" />
+
+            <TextView
+                android:id="@+id/tabDialogAll"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:minHeight="40dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_tab_inactive"
+                android:gravity="center"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"
+                android:paddingLeft="4dp"
+                android:paddingRight="4dp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:text="Tất Cả"
+                android:textColor="#94A3B8"
+                android:textSize="11sp"
+                android:clickable="true"
+                android:focusable="true" />
+        </LinearLayout>
+
+        <!-- DANH SÁCH ỨNG DỤNG RESPONSIVE -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginBottom="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:id="@+id/layoutDialogAppListContainer"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:background="@drawable/bg_tab_container"
-                    android:paddingLeft="14dp"
-                    android:paddingRight="14dp"
-                    android:paddingTop="6dp"
-                    android:paddingBottom="6dp"
-                    android:text="📱 Khám phá tất cả ứng dụng"
-                    android:textColor="#38BDF8"
-                    android:textSize="11sp"
-                    android:textStyle="bold"
-                    android:clickable="true"
-                    android:focusable="true" />
+                    android:orientation="vertical" />
+
+                <!-- EMPTY STATE CHUẨN GOOGLE (VECTOR DRAWABLE, KHÔNG EMOJI) -->
+                <LinearLayout
+                    android:id="@+id/layoutDialogEmptyState"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:background="@drawable/bg_device_card"
+                    android:paddingTop="24dp"
+                    android:paddingBottom="24dp"
+                    android:paddingLeft="16dp"
+                    android:paddingRight="16dp"
+                    android:visibility="gone">
+
+                    <ImageView
+                        android:id="@+id/ivDialogEmptyIcon"
+                        android:layout_width="36dp"
+                        android:layout_height="36dp"
+                        android:src="@drawable/ic_inbox_24"
+                        android:layout_marginBottom="8dp"
+                        android:contentDescription="Trống" />
+
+                    <TextView
+                        android:id="@+id/tvDialogEmptyIcon"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textSize="28sp"
+                        android:visibility="gone" />
+
+                    <TextView
+                        android:id="@+id/tvDialogEmptyTitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Chưa có hoạt động trong nhóm này"
+                        android:textColor="#F8FAFC"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:gravity="center"
+                        android:layout_marginBottom="4dp" />
+
+                    <TextView
+                        android:id="@+id/tvDialogEmptyDesc"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Thiết bị con chưa mở ứng dụng thuộc danh mục này hôm nay."
+                        android:textColor="#94A3B8"
+                        android:textSize="11sp"
+                        android:gravity="center"
+                        android:layout_marginBottom="12dp" />
+
+                    <TextView
+                        android:id="@+id/btnDialogViewAllApps"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_tab_container"
+                        android:paddingLeft="14dp"
+                        android:paddingRight="14dp"
+                        android:paddingTop="6dp"
+                        android:paddingBottom="6dp"
+                        android:text="Xem tất cả ứng dụng"
+                        android:textColor="#38BDF8"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:clickable="true"
+                        android:focusable="true" />
+                </LinearLayout>
             </LinearLayout>
         </LinearLayout>
-    </ScrollView>
+    </LinearLayout>
+    </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
 
     <!-- 5. HÀNH ĐỘNG ĐÁY: GỬI LỜI NHẮC & ĐÓNG -->
     <LinearLayout
@@ -396,22 +540,33 @@
         <Button
             android:id="@+id/btnDialogSendMessage"
             android:layout_width="0dp"
-            android:layout_height="46dp"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
             android:layout_weight="1"
             android:background="@drawable/bg_btn_primary_modern"
-            android:text="💌 Gửi Lời Nhắc Nhở"
+            android:text="Gửi Lời Nhắc Nhở"
             android:textColor="#FFFFFF"
             android:textSize="13sp"
             android:textStyle="bold"
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp"
+            android:paddingLeft="14dp"
+            android:paddingRight="14dp"
             android:layout_marginEnd="10dp" />
 
         <Button
             android:id="@+id/btnDialogClose"
-            android:layout_width="95dp"
-            android:layout_height="46dp"
+            android:layout_width="wrap_content"
+            android:minWidth="95dp"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
             android:background="@drawable/bg_btn_secondary_modern"
             android:text="Đóng"
             android:textColor="#CBD5E1"
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp"
+            android:paddingLeft="16dp"
+            android:paddingRight="16dp"
             android:textSize="13sp" />
     </LinearLayout>
 </LinearLayout>

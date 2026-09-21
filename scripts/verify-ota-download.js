@@ -37,6 +37,7 @@ const candidateUrls = [];
 if (vJson.apkUrl) candidateUrls.push(vJson.apkUrl);
 if (vJson.apkFallbackUrl) candidateUrls.push(vJson.apkFallbackUrl);
 candidateUrls.push(`https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/CVA-SmartGuardian-v${vJson.versionName}.apk`);
+candidateUrls.push('https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/app-release.apk');
 
 function downloadUrl(targetUrl, maxRedirects = 5) {
   return new Promise((resolve, reject) => {

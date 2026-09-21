@@ -521,7 +521,8 @@ class UsageTrackerService : Service() {
             val category: String,
             val categoryLabel: String,
             val isForeground: Boolean,
-            val timestamp: Long
+            val timestamp: Long,
+            val telemetryEpoch: Long = -1L
         ) {
             fun toJson(): JSONObject {
                 val offActiveJson = JSONObject().apply {
@@ -531,16 +532,18 @@ class UsageTrackerService : Service() {
                     put("categoryLabel", categoryLabel)
                     put("timestamp", timestamp)
                     put("isForeground", isForeground)
+                    if (telemetryEpoch != -1L) put("telemetryEpoch", telemetryEpoch)
                 }
                 return JSONObject().apply {
                     put("lastSync", lastSync)
                     put("online", online)
                     put("active_app", offActiveJson)
+                    if (telemetryEpoch != -1L) put("telemetryEpoch", telemetryEpoch)
                 }
             }
         }
 
-        fun createOfflineData(timestamp: Long = System.currentTimeMillis()): OfflinePayloadData {
+        fun createOfflineData(timestamp: Long = System.currentTimeMillis(), telemetryEpoch: Long = -1L): OfflinePayloadData {
             return OfflinePayloadData(
                 lastSync = timestamp,
                 online = false,
@@ -549,7 +552,8 @@ class UsageTrackerService : Service() {
                 category = "OFFLINE",
                 categoryLabel = "Đã tắt màn hình",
                 isForeground = false,
-                timestamp = timestamp
+                timestamp = timestamp,
+                telemetryEpoch = telemetryEpoch
             )
         }
 
@@ -562,8 +566,8 @@ class UsageTrackerService : Service() {
             return isScreenOn && isInteractive && !isKeyguardLocked
         }
 
-        fun buildOfflinePayload(timestamp: Long = System.currentTimeMillis()): JSONObject {
-            return createOfflineData(timestamp).toJson()
+        fun buildOfflinePayload(timestamp: Long = System.currentTimeMillis(), telemetryEpoch: Long = -1L): JSONObject {
+            return createOfflineData(timestamp, telemetryEpoch).toJson()
         }
 
         internal fun shouldAllowTelemetryUpdate(
@@ -868,7 +872,7 @@ class UsageTrackerService : Service() {
                     try {
                         val now = System.currentTimeMillis()
                         val mediaType = "application/json; charset=utf-8".toMediaType()
-                        val offJson = buildOfflinePayload(now)
+                        val offJson = buildOfflinePayload(now, expectedEpoch)
                         val offActiveJson = offJson.getJSONObject("active_app")
                         val offBody = offJson.toString().toRequestBody(mediaType)
                         val offActiveBody = offActiveJson.toString().toRequestBody(mediaType)
@@ -1535,6 +1539,7 @@ class UsageTrackerService : Service() {
                     .putLong("last_active_timestamp", System.currentTimeMillis())
                     .apply()
 
+                val targetEpoch = if (expectedEpoch != -1L) expectedEpoch else currentEpoch
                 val mediaType = "application/json; charset=utf-8".toMediaType()
                 val activeJson = JSONObject().apply {
                     put("packageName", targetPkg)
@@ -1543,9 +1548,9 @@ class UsageTrackerService : Service() {
                     put("categoryLabel", targetLabel)
                     put("timestamp", System.currentTimeMillis())
                     put("isForeground", effectiveOnline && isForeground)
+                    if (targetEpoch != -1L) put("telemetryEpoch", targetEpoch)
                 }
                 val body = activeJson.toString().toRequestBody(mediaType)
-                val targetEpoch = if (expectedEpoch != -1L) expectedEpoch else currentEpoch
 
                 if (!effectiveOnline) {
                     // Chuyển trực tiếp sang fast-path offline, không tạo cuộc gọi lặp
@@ -1567,6 +1572,7 @@ class UsageTrackerService : Service() {
                         put("lastHeartbeat", activeJson.getLong("timestamp"))
                         put("lastSync", activeJson.getLong("timestamp"))
                         put("online", true)
+                        if (targetEpoch != -1L) put("telemetryEpoch", targetEpoch)
                     }
                     val hbBody = hbJson.toString().toRequestBody(mediaType)
 
@@ -1754,9 +1760,11 @@ class UsageTrackerService : Service() {
             context: Context,
             packageName: String,
             durationMs: Long,
-            sessionToken: String = ""
+            sessionToken: String = "",
+            targetEpoch: Long = -1L
         ) {
             if (durationMs < 1000L) return
+            if (targetEpoch != -1L && GuardianAccessibilityService.telemetryEpoch.get() != targetEpoch) return
             val isSystemOrSelf = packageName == context.packageName ||
                     packageName == "com.android.systemui" ||
                     packageName.contains("inputmethod") ||
@@ -1767,6 +1775,7 @@ class UsageTrackerService : Service() {
             if (isSystemOrSelf) return
 
             synchronized(statsLock) {
+                if (targetEpoch != -1L && GuardianAccessibilityService.telemetryEpoch.get() != targetEpoch) return
                 if (sessionToken.isNotEmpty()) {
                     val duplicateBackupTokens = ArrayList<String>(recordedSessionTokens)
                     if (recordedSessionTokens.contains(sessionToken)) {
@@ -1977,10 +1986,11 @@ class UsageTrackerService : Service() {
                     if (matchedStat != null) {
                         val isEvidenceValid = GuardianAccessibilityService.evaluateForegroundEvidence(
                             activeRootPkg = null,
-                            foregroundProcessPkg = targetProcess.processName,
-                            processImportance = targetProcess.importance,
                             usageStatsLastResumedPkg = matchedStat.packageName,
-                            targetPkg = matchedStat.packageName
+                            targetPkg = matchedStat.packageName,
+                            now = now,
+                            lastEventTime = matchedStat.lastTimeUsed,
+                            maxEventAgeMs = 60_000L
                         )
                         if (isEvidenceValid) {
                             currentPkg = matchedStat.packageName

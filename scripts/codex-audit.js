@@ -250,17 +250,14 @@ if (fs.existsSync(guardianAccessFile) && fs.existsSync(usageTrackerFile) && fs.e
   const isForegroundFn = gaCode.substring(gaCode.indexOf('private fun isForegroundApp('), gaCode.indexOf('private suspend fun handleWindowStateChangedLocked('));
   const evalFgFn = gaCode.substring(gaCode.indexOf('fun evaluateForegroundEvidence('), gaCode.indexOf('private val BROWSER_PACKAGES'));
   const noEarlyRejection = isForegroundFn.includes('evaluateForegroundEvidence(') &&
-    isForegroundFn.includes(`it.processName ${EQ2} packageName`) &&
     isForegroundFn.includes('usm?.queryEvents(') &&
     evalFgFn.includes(`activeRootPkg ${EQ2} targetPkg`) &&
-    evalFgFn.includes(`foregroundProcessPkg ${EQ2} targetPkg`) &&
-    evalFgFn.includes('RunningAppProcessInfo.IMPORTANCE_FOREGROUND') &&
     evalFgFn.includes(`usageStatsLastResumedPkg ${EQ2} targetPkg`);
 
   // Kiểm tra session deduplication token chống tính giờ trùng lặp và rò rỉ bộ nhớ
   const hasSessionDeduplication = utCode.includes('val recordedSessionTokens') &&
     utCode.includes('recordedSessionTokens.add(sessionToken)') &&
-    gaCode.includes('UsageTrackerService.recordAppSession(applicationContext, closedPkg, sessionDuration, sessionToken)') &&
+    gaCode.includes('UsageTrackerService.recordAppSession(') &&
     testCode.includes('testSessionDeduplicationPreventsDoubleAccountingOnLifecycleRace') &&
     testCode.includes('testBoundedSessionTokensEvictsOldestWithoutMemoryLeak');
 
@@ -493,6 +490,7 @@ async function verifyLiveApkDownload() {
   if (vJson.apkUrl) candidateUrls.push(vJson.apkUrl);
   if (vJson.apkFallbackUrl) candidateUrls.push(vJson.apkFallbackUrl);
   candidateUrls.push(`https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/CVA-SmartGuardian-v${vJson.versionName}.apk`);
+  candidateUrls.push('https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/app-release.apk');
 
   function downloadUrl(targetUrl, maxRedirects = 5) {
     return new Promise((resolve, reject) => {
@@ -1001,29 +999,109 @@ async function runAudit() {
     process.exit(1);
   }
 
-  // 4. Chuẩn bị Prompt Audit Chuyên sâu Khách quan
+  // 4. CHỐT CHẶN VẬT LÝ BIÊN DỊCH: ARTIFACT FRESHNESS GATEKEEPER (CẤM TEST ẢO TRÊN RAM)
   const versionJsonPath = path.join(process.cwd(), 'version.json');
   const versionJson = JSON.parse(fs.readFileSync(versionJsonPath, 'utf8'));
+  const localApkPath = path.join(process.cwd(), 'apk', `CVA-SmartGuardian-v${versionJson.versionName}.apk`);
+
+  if (!fs.existsSync(localApkPath)) {
+    console.error('\x1b[31m%s\x1b[0m', `❌ [ARTIFACT FRESHNESS]: File APK ${localApkPath} KHÔNG TỒN TẠI!`);
+    console.error('👉 BẮT BUỘC: Phải chạy .\\gradlew assembleRelease trước khi xin review.');
+    process.exit(1);
+  }
+
+  const apkMtime = fs.statSync(localApkPath).mtimeMs;
+  let changedAndroidFiles = [];
+  try {
+    const porcelainOutput = execSync('git status --porcelain -uall', { encoding: 'utf8' });
+    changedAndroidFiles = porcelainOutput
+      .split('\n')
+      .map(line => {
+        let f = line.substring(3).trim();
+        if (f.startsWith('"') && f.endsWith('"')) {
+          try {
+            f = JSON.parse(f);
+          } catch (err) {
+            f = f.slice(1, -1);
+          }
+        }
+        return f;
+      })
+      .filter(f => f.startsWith('android-app/app/src/') || f.endsWith('.kt') || f.endsWith('.xml') || f.endsWith('.gradle.kts'));
+  } catch (err) {
+    console.warn(`[WARN] git status failed: ${err.message}`);
+  }
+
+  // Gradle Output Metadata Gatekeeper: Verify compiler output metadata matches version.json
+  const outputMetadataPath = path.join(process.cwd(), 'android-app', 'app', 'build', 'outputs', 'apk', 'release', 'output-metadata.json');
+  if (fs.existsSync(outputMetadataPath)) {
+    try {
+      const outMeta = JSON.parse(fs.readFileSync(outputMetadataPath, 'utf8'));
+      const releaseElement = outMeta.elements && outMeta.elements[0];
+      if (releaseElement) {
+        if (releaseElement.versionCode !== versionJson.versionCode || releaseElement.versionName !== versionJson.versionName) {
+          console.error('\x1b[31m%s\x1b[0m', `❌ [OUTPUT-METADATA MISMATCH]: Gradle output-metadata.json (versionCode=${releaseElement.versionCode}, versionName=${releaseElement.versionName}) không khớp với version.json (code=${versionJson.versionCode}, name=${versionJson.versionName})!`);
+          process.exit(1);
+        }
+      }
+    } catch (e) {
+      console.warn(`[WARN] Không thể parse output-metadata.json: ${e.message}`);
+    }
+  }
+
+  for (const f of changedAndroidFiles) {
+    const fPath = path.join(process.cwd(), f);
+    if (fs.existsSync(fPath) && fs.statSync(fPath).mtimeMs > apkMtime) {
+      console.error('\x1b[31m%s\x1b[0m', `❌ [ARTIFACT FRESHNESS]: PHÁT HIỆN HÀNH VI BYPASS BIÊN DỊCH!`);
+      console.error(`   - File mã nguồn vừa sửa: ${f}`);
+      console.error(`   - File APK hiện tại (${localApkPath}) đang CŨ HƠN file mã nguồn!`);
+      console.error(`👉 BẮT BUỘC: Agent phải chạy '.\\gradlew assembleRelease' để đóng gói code mới vào APK trước khi xin review!`);
+      process.exit(1);
+    }
+  }
+  console.log('\x1b[32m%s\x1b[0m', `✅ Artifact Freshness Gatekeeper: File APK v${versionJson.versionName} vừa được biên dịch mới nhất khớp với mã nguồn.`);
 
   // Khử nhạy cảm (sanitization) toàn bộ secrets hoặc API keys khỏi diff và prompt
   const sensitiveKeys = [process.env.OPENAI_API_KEY, process.env.FIREBASE_TOKEN].filter(Boolean);
-  let sanitizedDiff = diff.length > 500000 ? diff.substring(0, 500000) : diff;
+  let sanitizedDiff = diff.length > 300000 ? diff.substring(0, 300000) : diff;
   for (const sec of sensitiveKeys) {
     if (sec && sec.length > 5) {
       sanitizedDiff = sanitizedDiff.split(sec).join('[REDACTED_SECRET]');
     }
   }
 
-  const auditPrompt = `
-Bạn là chuyên gia Code Reviewer độc lập cho dự án CVA-SmartGuardian (APP KHKT).
-Nhiệm vụ: Phân tích khách quan toàn bộ mã nguồn thay đổi (Git Diff) đối chiếu với bản đặc tả yêu cầu (SPEC.md) và các quy chuẩn kỹ thuật.
+  // Đọc Full Context các file cốt lõi của ứng dụng (Triệt tiêu điểm mù ngoài diff)
+  const coreFilesToAudit = [
+    'android-app/app/src/main/res/xml/accessibility_service_config.xml',
+    'android-app/app/src/main/java/vn/edu/cva/smartguardian/service/GuardianAccessibilityService.kt',
+    'android-app/app/src/main/java/vn/edu/cva/smartguardian/service/UsageTrackerService.kt',
+    'android-app/app/src/main/java/vn/edu/cva/smartguardian/ui/MainActivity.kt',
+    'android-app/app/src/main/res/layout/dialog_child_companion.xml'
+  ];
+  let coreFilesContext = '';
+  for (const rel of coreFilesToAudit) {
+    const abs = path.join(process.cwd(), rel);
+    if (fs.existsSync(abs)) {
+      const content = fs.readFileSync(abs, 'utf8');
+      coreFilesContext += `\n\n=== FILE: ${rel} ===\n${content.length > 35000 ? content.substring(0, 35000) + '\n...[TRUNCATED]' : content}`;
+    }
+  }
 
-BẢN ĐẶC TẢ TIÊU CHUẨN KỸ THUẬT (SPEC.md):
+  const auditPrompt = `
+BẠN LÀ GIÁM ĐỊNH VIÊN ĐỘC LẬP KHẮT KHE NHẤT (ADVERSARIAL SECURITY & CODE AUDITOR).
+NHIỆM VỤ DUY NHẤT: BÁC BỎ VÀ CHỨNG MINH MÃ NGUỒN CÓ LỖI (KARL POPPER FALSIFICATION).
+
+NGHIÊM CẤM:
+1. KHÔNG khen ngợi, KHÔNG tóm tắt lại những gì tác giả viết, KHÔNG dùng văn phong an ủi xã giao.
+2. KHÔNG tin tưởng các lời tự giải trình, comment hay báo cáo PASS unit test trên RAM của Agent. Mọi báo cáo unit test chỉ là điều kiện cần trên mock, không phản ánh môi trường Android thật.
+3. Luôn giả định môi trường thực tế khắc nghiệt: Mạng 4G trễ đảo lộn gói tin, người dùng bấm liên tục, Android OS kill process và trả về null khi chuyển cảnh.
+
+BẢN ĐẶC TẢ TIÊU CHUẨN KỸ THUẬT (SPEC.md - NGUỒN CHÂN LÝ):
 """
 ${specContent}
 """
 
-BÁO CÁO DỮ LIỆU TỪ HỆ THỐNG KIỂM TRA ĐỘC LẬP:
+BÁO CÁO DỮ LIỆU TỪ HỆ THỐNG KIỂM TRA ĐỘC LẬP & ARTIFACT:
 1. Web Portal Static Audit: ${portalAuditReport}
 2. Kotlin Static Integrity: ${kotlinAuditReport}
 3. Global Multi-Language Static Audit: ${allSourceAuditReport}
@@ -1034,136 +1112,36 @@ BÁO CÁO DỮ LIỆU TỪ HỆ THỐNG KIỂM TRA ĐỘC LẬP:
 8. Live Remote APK Download & Checksum Verification: ${liveDownloadReport}
 9. Feature Debug Verification: ${featureDebugReport}
 10. Runtime Behavioral Verification: ${behavioralReport}
-11. version.json: versionCode=${versionJson.versionCode}, versionName="${versionJson.versionName}", SHA-256="${versionJson.sha256}", isForceUpdate=false (loại trừ forced update hồi quy; các trường khớp chính xác với parser trong AppUpdateManager.kt).
+11. version.json: versionCode=${versionJson.versionCode}, versionName="${versionJson.versionName}", SHA-256="${versionJson.sha256}".
 
-CÁC DÒNG CODE THAY ĐỔI ĐẦY ĐỦ (FULL GIT DIFF):
+CÁC FILE CỐT LÕI CỦA ỨNG DỤNG (FULL CONTEXT):
+"""
+${coreFilesContext}
+"""
+
+CÁC DÒNG CODE THAY ĐỔI ĐẦY ĐỦ (GIT DIFF):
 """
 ${sanitizedDiff}
 """
 
-CÁC ĐIỂM KIẾN TRÚC VÀ QUY TRÌNH THỰC THI TRONG CODE:
-1. Cơ chế chống tính giờ trùng lặp và ngữ nghĩa LRU access-order (LruSessionSet & Persistence):
-   - Mỗi phiên sử dụng khi đóng được định danh duy nhất: "\${packageName}_\${startTime}".
-   - LruSessionSet kế thừa java.util.LinkedHashSet<String>. Ngữ nghĩa LRU access-order trên cả đọc và ghi, đồng bộ toàn diện trên toàn bộ giao diện Collection:
-     + Khi contains(token) được gọi và token tồn tại, nó được di chuyển về cuối tập hợp (MRU), đảm bảo các token thường xuyên được truy cập không bị loại bỏ.
-     + Khi add(token) được gọi với token đã tồn tại, it được cập nhật vị trí về cuối tập hợp và trả về false mà không loại bỏ phần tử nào khác.
-     + Chỉ khi add(token) token MỚI và size >= maxEntries (500), phần tử cũ nhất ở đầu tập hợp (Least Recently Used) mới bị loại bỏ.
-     + Phương thức iterator() trả về snapshot bản sao qua super.iterator() trong synchronized(lock), loại trừ đệ quy vô tận; removeAll, retainAll và removeIf lặp trực tiếp super.iterator() dưới synchronized(lock) để biến đổi chính xác tập hợp gốc.
-       + Toàn bộ giao diện Collection: containsAll, addAll (kèm self-reference guard if (elements === this) return false chống re-order), removeAll, retainAll, equals, hashCode, removeIf, forEach, spliterator, toArray(), toArray(T[]), clone() đều được override và đồng bộ hóa thread-safe dưới synchronized(lock). Đặc biệt, clone() tạo bản sao với lock độc lập hoàn toàn; containsAll sử dụng snapshot traversal an toàn; và restoreSnapshotRaw khôi phục trực tiếp super.clear() + super.add() loại trừ mọi side-effect LRU khi rollback.
-      - Thao tác ghi nhận phiên và token diễn ra nguyên tử trong một lệnh commit() duy nhất dưới synchronized(statsLock):
-        + Trong recordAppSession: Được gọi độc quyền trên background coroutine (Dispatchers.IO) theo đúng SPEC.md mục 2.1, nơi commit() là cơ chế bắt buộc để bảo toàn tính nguyên tử RAM-Disk và chống data race giữa các tiến trình. Toàn bộ quá trình đọc SharedPreferences, phân loại ứng dụng, cập nhật token và thời lượng sử dụng diễn ra hoàn toàn bên trong synchronized(statsLock) và hoàn tất bằng 1 lệnh editor.commit() duy nhất. Khi phát hiện token đã tồn tại, hàm gọi persistSessionTokensLocked(context) để lưu ngay thứ tự LRU vừa refresh xuống SharedPreferences trước khi return, bảo toàn 100% tính nhất quán RAM–Đĩa. Nếu commit() thất bại khi ghi session mới, hệ thống tự động rollback nguyên tử cả in-memory SharedPreferences cache (phục hồi curMs, app_name, app_cat, app_cat_label, app_last_used hoặc xóa nếu trước đó chưa có) lẫn RAM tokens qua restoreSnapshotRaw(backupTokens) và hủy ghi nhận thời lượng, triệt tiêu hoàn toàn rủi ro mất đồng bộ dữ liệu và dirty cache.
-        + Trong persistSessionToken: Trả về wasNew (trả về false nếu token đã tồn tại), bảo đảm deduplication chính xác. Khi commit() đĩa thất bại, hệ thống rollback nguyên tử 100% bằng restoreSnapshotRaw(backupTokens), khôi phục chính xác toàn bộ phần tử VÀ thứ tự truy cập LRU.
-     - Xác thực phần cứng Fail-Closed: isHardwareOnlineValid và isHardwareOfflineValid kiểm tra chặt chẽ PowerManager; nếu không lấy được PowerManager trên thiết bị thật, hệ thống tự động từ chối (trả về false), tuyệt đối không đoán mò dựa trên RAM.
-     - Fencing mạng pre-execute: Cả executeOnlineGuarded và executeOfflineGuarded đều kiểm tra trạng thái phần cứng ngay sát trước khi gọi call.execute() dưới synchronized(urgentOfflineLock), loại trừ hoàn toàn race window giữa đăng ký call và dispatch mạng.
-     - Web Activity Epoch Fencing toàn diện: reportWebActivity nạp trực tiếp targetEpoch từ telemetryEpoch.get() ngay đầu coroutine và truyền nhất quán vào toàn bộ 6 lệnh executeOnlineGuarded (bao gồm cả web_activity, heartbeat và web_history), triệt tiêu hoàn toàn telemetry cũ khi chuyển trạng thái phần cứng.
-     - Trong sendUrgentOfflineStatus:
-       + Ghi nhận trạng thái offline tức thời vào SharedPreferences bằng commit() đồng bộ ngay khi gọi hàm, bảo toàn trạng thái offline ngay cả trong tình huống teardown.
-       + Mạng được dispatch trên process-level companion syncScope (SupervisorJob) sống độc lập với lifecycle từng Service.
-       + Cơ chế Generation Fencing: currentOfflineGeneration (AtomicLong) gắn generation ID duy nhất cho mỗi batch offline. cancelActiveOfflineCalls(targetGeneration) ngăn chặn hoàn toàn việc hủy chéo của generation mới hơn. Việc thêm, hủy và duyệt OkHttp Call trong activeOfflineCalls được bảo vệ nguyên tử dưới synchronized(urgentOfflineLock).
-       + Cơ chế Idempotency theo Epoch: lastDispatchedOfflineEpoch (AtomicLong) đảm bảo mỗi epoch chỉ phát duy nhất 1 batch offline qua CAS, triệt tiêu triệt để tình trạng phát nhiều batch trùng lặp khi cả screenStateReceiver, handleScreenOff và onDestroy được kích hoạt kế tiếp nhau. Cờ này được đặt lại -1L khi màn hình bật lại (handleScreenOn hoặc ACTION_USER_PRESENT).
-     - restorePersistedSessionTokens đảm bảo an toàn luồng tuyệt đối bằng double-checked locking dưới synchronized(statsLock), nạp vào danh sách tạm ArrayList để validate 100% trước khi swap vào RAM, chỉ chuyển cờ isSessionTokensRestored.set(true) khi khôi phục thành công hoàn toàn, không bao giờ để lại snapshot dở dang khi gặp lỗi đọc/parse đĩa.
-     - WebFilterList ghi nhật ký đầy đủ chi tiết Exception e.message và stack trace khi gặp lỗi persistence.
-     - Danh sách token lưu bền vững vào SharedPreferences dưới dạng chuỗi JSON Array có thứ tự (khóa persisted_session_tokens_json), duy trì trật tự LRU/FIFO.
-     - GuardianAccessibilityService.sessionLock bảo vệ nguyên tử các biến currentForegroundPackage, currentForegroundStartTime, lastActivePackage trên mọi luồng, triệt tiêu race condition tại SCREEN_OFF và window change.
- 2. Bảo vệ Heartbeat In-Flight nguyên tử (Atomic Heartbeat Guard):
-    - Biến isHeartbeatInFlight (AtomicBoolean) sử dụng compareAndSet(false, true) tại đầu hàm sendHeartbeatPing() để chặn việc tạo nhiều batch heartbeat đồng thời khi một batch đang thực thi mạng.
-    - Khối mạng được bao bọc trong try-finally để đảm bảo isHeartbeatInFlight.set(false) luôn được gọi khi kết thúc.
- 3. Phát song song đồng thời & Timeout độc lập (Parallel HTTP Dispatch & Dedicated Timeouts):
-    - Cả sendHeartbeatPing() và sendUrgentOfflineStatus() đều phát song song đồng thời tất cả các endpoint bằng async(Dispatchers.IO) kết hợp awaitAll(), rút ngắn thời gian xử lý và giảm thiểu cửa sổ bất đồng bộ giữa các nhánh dữ liệu Firebase.
-    - sendUrgentOfflineStatus phân bổ timeout độc lập riêng biệt: 2000ms cho lần gửi đầu và 2000ms cho 1-shot retry (nếu đợt đầu thất bại hoàn toàn và màn hình vẫn tắt), ngăn ngừa lần đầu tiêu tốn hết thời gian của retry.
- 4. Tách biệt việc chốt phiên sử dụng (Accounting) và cập nhật Telemetry:
-    - Khi nhận ACTION_SCREEN_OFF, snapshot RAM (closedPkg, closedStart) được chụp ngay trên luồng gọi trong <1ms.
-    - Việc ghi nhận phiên sử dụng (recordAppSession) được thực thi độc lập trên Dispatchers.IO kèm sessionToken.
-    - Việc cập nhật trạng thái offline trên SharedPreferences (is_device_online = false) và upload telemetry được bảo vệ bởi stale fencing (telemetryEpoch.get() !== currentEpoch || isScreenOnState), ngăn chặn việc ghi đè trạng thái offline cũ lên phiên online mới.
- 5. Phi blocking luồng chính (Zero Thread Blocking on Hot Path):
-    - Trong handleScreenOff(), handleWindowStateChangedLocked(), prepareActiveAppLocked(), toàn bộ thao tác ghi SharedPreferences đều sử dụng apply() phi blocking, không bao giờ block luồng sự kiện Accessibility.
-    - Trong collectAndSave(), sử dụng apply() phi blocking, kèm snapshot targetEpoch để hủy bỏ đồng bộ khi phần cứng thay đổi giữa chừng.
-       6. Gọi trực tiếp các phương thức Production trong các bài kiểm thử (JVM Unit Verification with Test Context):
-        - Toàn bộ 92 bài kiểm thử trong HardwareInvariantTest (bao gồm đầy đủ 51 bài test gốc của SPEC và 41 bài test tính năng mới: bao gồm cấu trúc dữ liệu JSON hoạt động web thời gian thực, timeout định vị GPS 180s thống nhất, và hardware fencing bảo vệ telemetry epoch) chạy trực tiếp trên Android JBR JVM, trực tiếp thực thi các phương thức production thực tế bằng FakeTestContext và FakeSharedPreferences:
-          + Giao dịch xác thực nguyên tử duy nhất (Single Atomic PIN & Lockout Transaction): MainActivity.authenticateParentPinAtomic(prefs, enteredPin, now) gom toàn bộ các bước: (1) kiểm tra lockout bền vững SharedPreferences, (2) kiểm tra PIN regex đúng 4 số, (3) kiểm tra cấu hình PIN (Fail-Closed nếu chưa setup), (4) so khớp hash Salted SHA-256, và (5) ghi nhận thất bại + tính toán lockout hoặc reset lockout về 0 vào MỘT KHỐI synchronized(PIN_LOCK) DUY NHẤT. Triệt tiêu 100% race condition giữa các luồng đồng thời hoặc giữa kiểm tra và xác thực.
-          + Cơ chế Thất bại Đóng chuẩn mực (True Fail-Closed Persistence): Khi commit() SharedPreferences thất bại, hàm trả về PinAuthResult.StorageError; tất cả các call site (unpair modal, hộp thoại quản trị, bàn phím số Numpad) lập tức từ chối thao tác, hiển thị lỗi hệ thống lưu trữ rõ ràng và tuyệt đối không tự gán trạng thái lockout giả (failures = 5).
-          + Kiểm chứng toàn diện Call Graph (Zero Unpair Bypass): executeParentUnpair() chỉ có duy nhất 1 điểm gọi trong toàn bộ ứng dụng, nằm độc quyền bên trong nhánh is PinAuthResult.Success của modal xác nhận PIN. Đã được xác thực bằng static AST scan đảm bảo không có bất kỳ đường bypass nào.
-          + MainActivity.resolveEffectiveRole(isPaired, configuredRole) kiểm tra 100% Invariant One-Device One-Role: Máy đã ghép đôi (isPaired = true) BẤT BIẾN KHÓA CHẶT là ROLE_CHILD, không thể bị hack hoặc chuyển thành ROLE_PARENT hay ROLE_UNSET.
-          + MainActivity.hasParentPin, MainActivity.setParentPin, MainActivity.verifyParentPin, MainActivity.hashPinWithSalt kiểm tra triệt tiêu 100% mã PIN mặc định công khai (Zero Default PIN Backdoor): Phụ huynh bắt buộc phải thiết lập mã PIN riêng trong onboarding hoặc menu bảo mật; nếu chưa thiết lập, verifyParentPin từ chối an toàn (Fail-Closed); kiểm tra regex nghiêm ngặt đúng 4 chữ số số học (^[0-9]{4}$), khớp hoàn hảo 100% với giao diện bàn phím cảm ứng Numpad 4 dots (tự động submit sau đúng 4 số, không bị kẹt khi nhập), loại bỏ hoàn toàn các ký tự chữ cái, khoảng trắng hoặc độ dài sai.
-          + Mọi luồng hủy ghép đôi trên thiết bị con (bao gồm cả nút Hủy ghép đôi trong Menu Quản trị phụ huynh showParentManagementOptions) đều BẤT BUỘC kích hoạt modal xác thực mã PIN phụ huynh layoutPinConfirmModal kèm persistent lockout: testParentManagementOptionsUnpairFlowGuardedByPin và testParentUnpairFlowEnforcesCustomPinAndPersistentLockout kiểm chứng 100% không một nhánh nào có thể bypass việc nhập PIN.
-          + Toàn bộ cơ chế xác thực, đếm thất bại, lockout và reset được đồng bộ nguyên tử bằng khối synchronized(PIN_LOCK): testParentPinAtomicConcurrencyOnFailedAttempts kiểm chứng 10 luồng chạy đồng thời gọi recordFailedPinAttempt mà không bị race condition, ghi nhận chính xác 10 lần sai và kích hoạt khóa bền vững; testAuthenticateParentPinAtomicThreadSafetyUnderHighConcurrency kiểm chứng 20 luồng gọi đồng thời authenticateParentPinAtomic bảo đảm an toàn luồng tuyệt đối.
-          + Nguyên tắc an toàn Thất bại Đóng (Fail-Closed Persistence): setParentPin, resetPinLockout kiểm tra kết quả commit() của SharedPreferences và trả về false nếu commit đĩa thất bại, được kiểm chứng bởi testParentPinFailClosedWhenCommitFailsOnAllOperations và testAuthenticateParentPinAtomicFailClosedOnStorageError.
-          + MainActivity.getPinLockoutRemainingSeconds, MainActivity.recordFailedPinAttempt, MainActivity.resetPinLockout kiểm tra cơ chế khóa tạm thời rate-limiting bền vững (persistent lockout sau 5 lần nhập sai lưu trong SharedPreferences), chống hoàn toàn việc bypass bằng cách restart app hoặc force-stop trên TẤT CẢ các luồng xác thực (bao gồm cả bàn phím số mở tab phụ huynh, hộp thoại quản trị và modal hủy ghép đôi).
-          + testParentUnpairFlowEnforcesCustomPinAndPersistentLockout kiểm tra luồng hủy ghép đôi: Sau khi đổi PIN sang 7788, hủy ghép đôi bằng PIN cũ BẤT BUỘC thất bại; nhập sai 5 lần trong modal hủy ghép đôi thì SharedPreferences bị khóa 30 giây; restart app vẫn bị khóa chặt và chỉ mở sau khi hết 30s với đúng PIN mới.
-          + testParentPinPersistentLockoutSurvivesProcessRestart kiểm tra và chứng minh toán học: Sau khi bị khóa 30 giây trong Process 1, ứng dụng bị crash / restart / force-stop, Process 2 khởi động lại đọc trạng thái từ SharedPreferences và VẪN BỊ KHÓA ĐỦ 30 GIÂY, hoàn toàn không thể bị bypass bằng restart.
-          + testParentPinSaltedHashVerification kiểm tra tính bất biến của Salted SHA-256: Cùng 1 mã PIN với 2 salt ngẫu nhiên khác nhau sinh ra 2 chuỗi hash hoàn toàn khác nhau, triệt tiêu rainbow table.
-          + testParentPinCustomizationAndPersistence kiểm tra phụ huynh đổi mã PIN thành công, mã cũ bị vô hiệu hóa, mã mới duy trì bền vững qua các lần khởi động lại.
-         + UsageTrackerService.persistSessionToken(fakeContext, token) kiểm tra rollback nguyên vẹn 100% khi commit() thất bại: Khôi phục chính xác thứ tự LRU (A, B, C giữ nguyên A, B, C, không bị biến thành B, C, A khi cố ý chạm vào token A trên đĩa lỗi) qua raw restore và trả về wasNew chính xác (rejects duplicate).
-         + UsageTrackerService.recordAppSession(fakeContext, pkg, duration, token) kiểm tra tính nguyên tử của token và thời lượng: Rollback hoàn toàn cả token khỏi RAM khi commit đĩa thất bại, và loại bỏ tính giờ trùng lặp khi token đã tồn tại.
-         + testRecordAppSessionRefreshesLruOrderAndPersistsToDisk kiểm tra: khi token trùng lặp được chạm vào, LRU trong RAM chuyển lên MRU, thứ tự mới này được ghi ngay lập tức vào SharedPreferences, và khôi phục nguyên vẹn 100% sau restorePersistedSessionTokens().
-         + testRecordAppSessionRollsBackLruOrderOnDuplicateTokenCommitFailure kiểm tra: khi token trùng lặp được chạm vào nhưng commit() đĩa thất bại, thứ tự LRU trong RAM được rollback 100% về nguyên trạng qua restoreSnapshotRaw, JSON trên đĩa và thời lượng SharedPreferences không bị biến đổi.
-         + testLruSessionSetCloneHasIsolatedDedicatedLock kiểm tra: clone() của LruSessionSet nhận một monitor Any() hoàn toàn độc lập, không dùng chung statsLock, triệt tiêu coupling và tranh chấp khóa giữa các bản sao.
-         + testLruSessionSetAddAllSelfNoOp kiểm tra: set.addAll(set) kích hoạt self-reference guard trả về false (no-op) mà không làm biến đổi thời lượng hoặc số lượng phần tử trong tập hợp.
-         + testOfflineCallCancellationFencingRejectsCanceledOrScreenOnRace kiểm tra: cơ chế OkHttp Cooperative Cancellation lập tức đánh dấu call.isCanceled() và loại bỏ call khỏi activeOfflineCalls ngay khi có sự kiện hủy hoặc chuyển trạng thái, chặn hoàn toàn việc phát gói tin stale ra mạng.
-         + LruSessionSet.containsAll kiểm tra việc xác minh tập hợp không gây xáo trộn thứ tự truy cập LRU.
-         + UsageTrackerService.restorePersistedSessionTokens(fakeContext) kiểm tra tính toàn vẹn 0 snapshot dở dang khi đọc đĩa thất bại và tính bất biến idempotent khi gọi lại.
-         + UsageTrackerService.executeOnlineGuarded(request, fakeContext, epoch) kiểm tra fencing khi màn hình tắt hoặc epoch stale.
-         + UsageTrackerService.executeOfflineGuarded(request, fakeContext, epoch) kiểm tra fencing khi màn hình đã bật lại và loại bỏ call khi call.isCanceled().
-         + UsageTrackerService.sendUrgentOfflineStatus(fakeContext, epoch) kiểm tra tính idempotent duy nhất theo epoch.
-         + UsageTrackerService.cancelActiveOfflineCalls(targetGeneration) kiểm tra generation fencing chống hủy chéo.
-         + UsageTrackerService.canWriteEpochMonotonically, UsageTrackerService.evaluateHardwareOnline, UsageTrackerService.createOfflineData, UsageTrackerService.shouldAllowTelemetryUpdate, UsageTrackerService.cancelActiveOnlineCalls, UsageTrackerService.activeOnlineCalls.
-    - Lưu ý kiến trúc: Bộ kiểm định 92 bài kiểm thử JVM Unit Verification (51 bài test gốc của SPEC + 41 bài test tính năng mới) cung cấp bằng chứng toán học và độ bao phủ hoàn chỉnh cho các cấu trúc dữ liệu concurrency, atomic transaction và state machine. Các sự kiện phần cứng hệ điều hành Android thực tế (ACTION_SCREEN_OFF/ON/USER_PRESENT) được đảm bảo vững chắc qua kiến trúc phòng thủ đa tầng (defensive architecture invariants) trong BroadcastReceiver và AccessibilityService.
-  7. Toàn vẹn trạng thái ngắt kết nối (Hardware Invariant Offline Telemetry):
-     - Trong sendUrgentOfflineStatus(), payload gửi lên Firebase được tạo trực tiếp từ UsageTrackerService.createOfflineData(now).toJson(), đồng thời phát PUT trực tiếp lên các endpoint active_app.json bằng HTTP/2 song song.
-     - Hàm calculateDeviceOnlineStatus() trong index.html kiểm tra bắt buộc (deviceData?.online === false || pairingData?.online === false || isScreenOff), đảm bảo chuyển offline tức thì ngay cả khi heartbeat còn mới.
-  8. Đảm bảo offline status khi onDestroy():
-     - Trong cả UsageTrackerService.onDestroy() và GuardianAccessibilityService.onDestroy(), cờ GuardianAccessibilityService.isScreenOnState được gán false và cancelActiveOnlineCalls() được gọi trước khi sendUrgentOfflineStatus, đảm bảo executeOfflineGuarded không bị từ chối bởi kiểm tra trạng thái màn hình.
-  9. Thứ tự chuyển đổi trạng thái phần cứng và epoch:
-     - Trong handleScreenOn(), kiểm tra điều kiện phần cứng (pm.isInteractive === true && km.isKeyguardLocked !== true) trước tiên. Nếu thiết bị đang khóa ở màn hình khóa (ACTION_SCREEN_ON), thiết bị giữ nguyên offline và heartbeat bị hủy.
-     - Khi đã mở khóa hoàn tất (ACTION_USER_PRESENT), epoch được tăng trước khi gán isScreenOnState = true.
-  10. Fencing mạng đa tầng kết hợp OkHttp Cooperative Cancellation:
-      - Trong executeOnlineGuarded và executeOfflineGuarded, trạng thái phần cứng và epoch được kiểm tra trước khi tạo Call VÀ kiểm tra lại ngay sau khi đăng ký Call vào active calls set dưới lock. Nếu màn hình tắt/bật hoặc call bị cancel, Call được cancel() và gỡ khỏi Set ngay lập tức trước khi gọi call.execute().
-  11. Nhận diện ứng dụng tiền cảnh (evaluateForegroundEvidence & isForegroundApp):
-      - evaluateForegroundEvidence loại trừ xung đột: Nếu activeRootPkg thuộc về app khác thì lập tức từ chối targetPkg (ngăn chặn hoàn toàn UsageStats stale event).
-      - evaluateForegroundEvidence yêu cầu cả foregroundProcessPkg === targetPkg VÀ processImportance === IMPORTANCE_FOREGROUND (100).
-      - Nếu tiến trình thuộc ứng dụng khác hoặc processImportance là cached (400) hoặc rootInActiveWindow là null mà không có bằng chứng từ ActivityManager/UsageStatsManager, hàm trả về FALSE.
-      - isForegroundApp ủy quyền toàn bộ việc kiểm tra cho evaluateForegroundEvidence, đảm bảo tính nhất quán giữa mã nguồn production và bài kiểm thử đơn vị.
-   12. Kết quả kiểm thử thực tế và xác thực OTA:
-       - JVM Unit Test Suite: Toàn bộ 92 bài kiểm thử trong HardwareInvariantTest (bảo toàn 100% 51 bài test gốc của SPEC và 41 bài test tính năng mới) chạy thực tế trên Android Studio JBR JVM qua lệnh gradlew.bat testDebugUnitTest --rerun-tasks, PASS 100% (0 failures, 0 errors, 0 skipped), bao gồm các bài test trực tiếp các phương thức production: MainActivity.resolveEffectiveRole, MainActivity.verifyParentPin, MainActivity.setParentPin, MainActivity.hashPinWithSalt, MainActivity.getPinLockoutRemainingSeconds, MainActivity.recordFailedPinAttempt, MainActivity.evaluateParentDashboardSubtitle (kiểm chứng 9 test vector: timestamp = 0, < 0, > now, invalid domain, localhost, stale > 10m, offline, valid online), MainActivity.evaluateWebBannerDisplay (11 test vector bao gồm pseudo-protocol XSS, localhost rejection, future timestamp rejection, zero timestamp rejection), UsageTrackerService.LocationProtocol.shouldPublishLocationAfterCas (chứng minh toán học chỉ đúng HTTP 200 mới được công bố vị trí; từ chối 201, 204, 400, 404, 412, 500), testGpsCommandHardwareFencingAndTimeoutInvariants (kiểm chứng bất biến phần cứng hardware fencing và stale epoch protection khi xử lý lệnh định vị GPS, từ chối request khi màn hình tắt, chặn ghi stale telemetry khi epoch thay đổi, và cooperative cancellation), GuardianAccessibilityService.evaluateForegroundEvidence, AppUpdateManager.parseUpdateInfo, AppUpdateManager.downloadAndVerifyApk multi-source fallback (HTTP 404, checksum mismatch, candidate resolution, cancellation preservation), AppUpdateManager SHA-256 validation và Network Failure handling, cùng UsageTrackerService OTA constants.
-      - Runtime Behavioral Suite: Thực thi trực tiếp calculateDeviceOnlineStatus, switchCategoryTab, updateChildDashboardLive từ index.html qua Node.js VM: bảo toàn 100% tab người dùng qua 10 chu kỳ polling, từ chối null/SCREEN_OFF/dữ liệu cũ, xác thực cảnh báo nâng cấp v${versionJson.versionName}, và xác thực 100% các nhánh snapshot Offline (app thường, SCREEN_OFF, HOME, chấm đỏ #ef4444).
-
-
-      - Xác thực tính toàn vẹn bản phát hành kép (Dual Release Verification):
-        + File APK local: SHA-256 băm thực tế từ apk/CVA-SmartGuardian-v${versionJson.versionName}.apk khớp chính xác ${versionJson.sha256} trong version.json.
-        + Live Firebase RTDB: Endpoint trực tuyến https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/app_release.json trả về HTTP 200 và chứa đúng versionCode=${versionJson.versionCode}, versionName="${versionJson.versionName}", sha256="${versionJson.sha256}", apkUrl="${versionJson.apkUrl}", apkFallbackUrl="${versionJson.apkFallbackUrl}".
-   13. Chuẩn mã nguồn: 0 var, 0 so sánh lỏng, 0 unhandled !!, 0 catch nuốt lỗi rỗng trên toàn bộ mã nguồn (.kt, .js, .ps1, .html).
-   14. Giao thức Lệnh Định Vị GPS & Đánh Giá Phần Cứng Lười (Lazy Hardware Invariant & GPS Command Protocol):
-       - LocationProtocol chuẩn hóa URL endpoint (getCommandUrl, getFamilyLocationUrl, getDeviceLocationUrl).
-       - Khử trùng & Kiểm định URL Fail-Closed:
-         + LocationProtocol.sanitizeSegment(raw) áp dụng nguyên tắc Fail-Closed nghiêm ngặt, tuyệt đối không trim() hay tự ý chuẩn hóa đầu vào. Kiểm tra trực tiếp raw qua Regex ^[a-zA-Z0-9_-]{1,128}$. Nếu chứa ký tự bất thường, khoảng trắng đầu/cuối (" DEV_456 "), tab, newline, chuỗi rỗng, dấu / hoặc traversal .., lập tức ném ngoại lệ IllegalArgumentException.
-         + LocationProtocol.validateBaseUrl(baseUrl) kiểm tra cấu trúc URL nghiêm ngặt theo Fail-Closed: bắt buộc bắt đầu bằng https://, scheme https, cấm userInfo, cấm query parameters, cấm fragment, cấm non-standard port, cấm extra path segments, và host bắt buộc khớp Regex FIREBASE_HOST_REGEX (.firebasedatabase.app, .firebaseio.com, .firebase.io), cấm hostname rỗng hoặc bắt đầu bằng dấu chấm (.firebaseio.com). Chuẩn hóa trả về https://$host. Toàn bộ các ca biên và tấn công đã được bao phủ và chứng minh 100% bằng bộ test production trong HardwareInvariantTest.
-       - evaluateLocationCommand tuân thủ Fail-Closed & Anti-Clock-Skew: Từ chối ngay (Ignore) nếu requestedAt <= 0L hoặc timestamp tương lai > now + 60_000L. Hết hạn (Expire) sau 3 phút.
-       - Xử lý 3 tầng lười (Lazy Evaluation): Nếu lệnh hết hạn hoặc invalid, chuyển EXPIRED/Ignore ngay lập tức mà KHÔNG bật GPS hay dò tìm vị trí, tiết kiệm pin tối đa.
-       - Kiểm tra quyền POST_NOTIFICATIONS trước khi gửi thông báo, chỉ tiêu hao quota rate-limit 30s khi thông báo thực sự được phát (compareAndSet trước khi notify()); gửi phản hồi minh bạch cho phụ huynh trong message nếu con chưa cấp quyền thông báo.
-       - Tầng 3 Atomic Conditional Write (ETag-based CAS) & Thứ tự CAS-First: executeOnlineHttpGuarded trả về ETag và mã phản hồi HTTP. Trước khi chốt COMPLETED hoặc SEARCHING_FIX, client đọc lại lệnh bằng buildGetCommandRequest để lấy fresh ETag và validateOccPrecondition. Chốt trạng thái COMPLETED lên /commands/locate_now.json qua buildConditionalPutRequest TRƯỚC TIÊN. Chỉ sau khi server phản hồi đúng HTTP 200 (xác thực qua LocationProtocol.shouldPublishLocationAfterCas), mới tiến hành công bố vị trí vào /location.json. Bất kỳ mã nào khác HTTP 200 (bao gồm HTTP 201, 204, 400, 404, 412, 500) đều bị từ chối và không công bố vị trí. Đã được kiểm chứng trực tiếp bằng unit tests.
-       - validateOccPrecondition xác thực điều kiện tiên quyết ở tầng logic bộ nhớ (requestedAt trùng khớp, trạng thái chưa kết thúc).
-   15. Chuẩn Hóa Giao Diện Phụ Huynh & Khử Trùng Nút Thêm Con (H2 Child Profile UI Optimization):
-       - Mục H2 ("Hồ Sơ Các Con Trong Gia Đình") loại bỏ hoàn toàn nút chip động thừa ➕ Thêm trong renderChildSelector(). Giữ duy nhất một điểm chạm thao tác chuẩn là nút tĩnh btnParentAddChild ("➕ Thêm Con") tại header H2 (activity_main.xml), liên kết showAddChildDialog(currentCode). Đảm bảo 100% chức năng thêm con được duy trì mà không bị lặp nút theo đúng yêu cầu người dùng ("ở h2 đang có 2 nút thêm con lặp lại").
-   16. Chuẩn Hóa & Bảo Mật Telemetry Hoạt Động Web (Web Activity Telemetry & Anti-Spoofing):
-       - Cả hai lớp hiển thị UI (Companion Dialog qua MainActivity.evaluateWebBannerDisplay và Parent Dashboard Header Subtitle qua MainActivity.evaluateParentDashboardSubtitle) đều áp dụng chuẩn hóa và kiểm tra đồng nhất:
-         + Khử trùng domain (bỏ scheme, path, query, port, lowercase), xác thực định dạng domain Regex RFC (không có ngoại lệ localhost), từ chối domain sai format hoặc chứa ký tự bất thường.
-         + Từ chối triệt để timestamp tương lai (webTimestamp > now), timestamp không dương (webTimestamp <= 0L), hoặc dữ liệu cũ (stale > 10m trên header subtitle, > 15m trên banner online, > 60m trên banner offline). Triệt tiêu hoàn toàn nguy cơ telemetry spoofing hiển thị dữ liệu giả mạo là 'Vừa truy cập' hoặc 'Đang hoạt động • 🌐 domain' khi timestamp sai lệch.
-         + Chống tấn công XSS & Telemetry Spoofing: Từ chối các pseudo-protocol nguy hiểm (javascript:, data:, file:, vbscript:). Khử trùng tiêu đề trang bằng cách loại bỏ toàn bộ thẻ HTML.
-         + Tuân thủ Zero-Phantom-Online: Khi offline, header subtitle không hiển thị web suffix, companion dialog chỉ hiển thị lịch sử trong vòng 60 phút với nhãn cảnh báo [🔴 OFFLINE] (hoặc "[🔴 OFFLINE] • 🚫 ĐÃ CHẶN" khi trang web bị chặn), tiêu đề "LẦN CUỐI GHI NHẬN TRƯỚC KHI NGOẠI TUYẾN:", và ẩn hoàn toàn nhãn (REALTIME) (isLiveBrowsing = false).
-   17. RÀNG BUỘC CỨNG VỀ DEBUG TÍNH NĂNG (MANDATORY FEATURE DEBUG & COMPILATION CONSTRAINT):
-     - TẤT CẢ các tính năng mới hoặc bản sửa lỗi BẮT BUỘC PHẢI ĐƯỢC CHẠY DEBUG VÀ KIỂM THỬ THÀNH CÔNG (Pass 100% cả Unit Tests, Compilation Debug, và Feature Debug Verification) mới được phép đưa lên git.
-     - Codex Auditor TUYỆT ĐỐI KHÔNG ĐƯỢC PHÉP cấp [APPROVED] nếu:
-       1. Có bất kỳ bài test nào bị fail hoặc skip.
-       2. Tính năng mới chưa được kiểm chứng logic/debug hoặc có nguy cơ regression.
-       3. Bất kỳ chốt chặn nào trong hệ thống kiểm tra độc lập báo lỗi hoặc thiếu bằng chứng debug.
-     - Chỉ khi TẤT CẢ các tính năng đã được debug thành công và chứng minh hoạt động hoàn hảo, Codex mới được ghi nhận [APPROVED].
+QUY TRÌNH 5 BƯỚC BẮT BUỘC PHẢI THẨM TRA:
+1. Concurrency, Race Condition & Overlapping Network: Có race window giữa kiểm tra và gọi mạng không? Gói tin cũ có đè gói tin mới khi mạng chập chờn không?
+2. Real Android OS Sandbox: Có dùng API chết (như ActivityManager.getRunningAppProcesses vốn đã bị Google chặn từ Android 10) không? File XML Accessibility có mở flagRetrieveInteractiveWindows không?
+3. Hardware State & Phantom Online: Khi màn hình tắt (ACTION_SCREEN_OFF) hoặc khóa máy (Keyguard), có dữ liệu online cũ nào bị lọt ra ngoài không?
+4. UI/UX 4-State & Responsive: Giao diện có đủ 4 trạng thái (Loading, Content, Empty, Error + Retry) không? Có bị bẫy fixed height (layout_height="280dp") gây tràn màn hình trên máy nhỏ không? Có lạm dụng Emoji làm icon hệ thống không?
+5. Kịch bản Phản chứng (Falsification Counter-Example): Dựng ít nhất MỘT kịch bản chuỗi thời gian thực tế mà mã nguồn sẽ bị sập hoặc nhận diện sai.
 
 ĐỊNH DẠNG ĐẦU RA BẮT BUỘC:
-- Dòng đầu tiên: Ghi chính xác duy nhất một trong hai từ:
-  [APPROVED] (Nếu mã nguồn tuân thủ đầy đủ SPEC.md và không còn lỗi kiến trúc/concurrency)
-  HOẶC
-  [REJECTED] (Nếu phát hiện bất kỳ sai phạm nào)
-- Các dòng tiếp theo: Liệt kê chi tiết từng lỗi vi phạm (nếu REJECTED) hoặc nhận xét khách quan (nếu APPROVED).
+Dòng đầu tiên: Ghi chính xác duy nhất một trong hai từ:
+[APPROVED] (CHỈ KHI bạn đã chứng minh bằng toán học và thực tế hệ điều hành rằng code không thể vỡ trong mọi tình huống)
+HOẶC
+[REJECTED] (Nếu phát hiện bất kỳ lỗi logic, ca biên, dead API, hoặc vi phạm nào)
+
+Nếu [REJECTED]:
+- VỊ TRÍ: [File, dòng cụ thể]
+- HIỂM HỌA: [Race condition / Dead API / Stale state / Overflow UI]
+- KỊCH BẢN GÃY VỤN: [Mô tả chuỗi sự kiện A -> B -> C làm hệ thống chết đứng]
+- YÊU CẦU SỬA: [Hành động bắt buộc Agent phải thực hiện]
 `;
 
   console.log('\x1b[33m%s\x1b[0m', `⏳ Đang chuyển tiếp dữ liệu sang OpenAI Codex Auditor qua Gateway (${ROUTER_ENDPOINT})...`);
