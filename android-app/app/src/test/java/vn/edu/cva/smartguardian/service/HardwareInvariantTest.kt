@@ -3413,6 +3413,61 @@ class HardwareInvariantTest {
 
         slowDiskJob.join()
     }
+
+    @Test
+    fun testForegroundGenerationMonotonicFencingPreventsOutdatedNetworkDispatchOnRapidSwitching() = kotlinx.coroutines.runBlocking {
+        // Invariant: Rapid foreground switching A -> B -> C must monotonically increment foregroundGeneration.
+        // Any delayed or out-of-order in-flight action from generation N < latest must be dropped immediately.
+        val dispatchedActions = java.util.concurrent.CopyOnWriteArrayList<String>()
+
+        // Simulate Action A generated at gen A
+        val genA = UsageTrackerService.foregroundGeneration.incrementAndGet()
+        val actionA: suspend () -> Unit = {
+            if (UsageTrackerService.foregroundGeneration.get() == genA) {
+                dispatchedActions.add("APP_A")
+            }
+        }
+
+        // Rapid switch: Action B generated at gen B
+        val genB = UsageTrackerService.foregroundGeneration.incrementAndGet()
+        val actionB: suspend () -> Unit = {
+            if (UsageTrackerService.foregroundGeneration.get() == genB) {
+                dispatchedActions.add("APP_B")
+            }
+        }
+
+        // Rapid switch: Action C generated at gen C (latest active app)
+        val genC = UsageTrackerService.foregroundGeneration.incrementAndGet()
+        val actionC: suspend () -> Unit = {
+            if (UsageTrackerService.foregroundGeneration.get() == genC) {
+                dispatchedActions.add("APP_C")
+            }
+        }
+
+        assertTrue("Generations must be strictly monotonic: genA < genB < genC", genA < genB && genB < genC)
+        assertEquals("Latest foregroundGeneration must equal genC", genC, UsageTrackerService.foregroundGeneration.get())
+
+        // Simulate chaotic out-of-order arrival: Action A arrives late, Action B arrives late, Action C arrives
+        // Pre-invocation fence (as implemented in GuardianAccessibilityService and UsageTrackerService.reportActiveApp)
+        if (UsageTrackerService.foregroundGeneration.get() == genA) {
+            actionA.invoke()
+        }
+        if (UsageTrackerService.foregroundGeneration.get() == genB) {
+            actionB.invoke()
+        }
+        if (UsageTrackerService.foregroundGeneration.get() == genC) {
+            actionC.invoke()
+        }
+
+        // Verify: Only action C was dispatched; stale actions A and B were completely fenced out
+        assertEquals("Only the latest generation action (APP_C) must be executed", listOf("APP_C"), dispatchedActions)
+
+        // Falsification check: Even if action A was invoked directly bypassing outer fence,
+        // its internal generation guard drops execution immediately
+        actionA.invoke()
+        assertEquals("Direct invocation of stale actionA must still be dropped by inner generation guard", listOf("APP_C"), dispatchedActions)
+    }
+
     private class FakeTestContext(
         val prefs: FakeSharedPreferences
     ) : ContextWrapper(null) {

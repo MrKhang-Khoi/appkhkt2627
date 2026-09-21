@@ -319,9 +319,14 @@ if (fs.existsSync(guardianAccessFile) && fs.existsSync(usageTrackerFile) && fs.e
   const hasStatsLock = utCode.includes('internal val statsLock = Any()') &&
     utCode.includes('synchronized(statsLock)');
 
+  const hasForegroundGeneration = utCode.includes('val foregroundGeneration = java.util.concurrent.atomic.AtomicLong(0L)') &&
+    gaCode.includes('UsageTrackerService.foregroundGeneration.get()');
+
   const testsLifecycleRace = testCode.includes('testDelayedScreenOffCoroutineCancelledBySubsequentScreenOnLifecycleRace') &&
     testCode.includes('testHardwareOnlineStrictlyRequiresBothInteractiveAndKeyguardUnlocked') &&
-    testCode.includes('testStatsLockConcurrentSessionRecordingAndDailyAggregation');
+    testCode.includes('testStatsLockConcurrentSessionRecordingAndDailyAggregation') &&
+    testCode.includes('testHomeAndKeyguardTransitionDoesNotBlockTelemetryMutexUnderSlowDiskIo') &&
+    testCode.includes('testForegroundGenerationMonotonicFencingPreventsOutdatedNetworkDispatchOnRapidSwitching');
 
   if (!hasVolatileScreen || !hasTelemetryEpoch || !hasSyncScreenOff || !hasConcurrentCallSet ||
       !hasUrgentOffline || !hasSingleEpochScreenOff || !hasSingleEpochScreenOn || !noEarlyRejection ||
@@ -329,7 +334,7 @@ if (fs.existsSync(guardianAccessFile) && fs.existsSync(usageTrackerFile) && fs.e
       !testsDirectProduction || !hasPreMutationGuard || !hasHardwareBootCheck || !hasLastWrittenEpochGuard ||
       !hasHomeBeforeForegroundCheck || !hasNoRunBlockingInDestroy || !hasDoubleCheckInExecuteOnline ||
       !noUnsynchronizedPrefsWrite || !hasStaleScreenOffFencing || !hasKeyguardStrictLockCheck ||
-      !hasStatsLock || !hasSessionLock || !testsLifecycleRace) {
+      !hasStatsLock || !hasSessionLock || !hasForegroundGeneration || !testsLifecycleRace) {
     console.error('\x1b[31m%s\x1b[0m', '❌ LỖI BẤT BIẾN PHẦN CỨNG: Vi phạm một trong các tiêu chuẩn an toàn:');
     console.error({
       hasVolatileScreen, hasTelemetryEpoch, hasSyncScreenOff, hasConcurrentCallSet,
@@ -338,7 +343,7 @@ if (fs.existsSync(guardianAccessFile) && fs.existsSync(usageTrackerFile) && fs.e
       hasPreMutationGuard, hasHardwareBootCheck, hasLastWrittenEpochGuard,
       hasHomeBeforeForegroundCheck, hasNoRunBlockingInDestroy, hasDoubleCheckInExecuteOnline,
       noUnsynchronizedPrefsWrite, hasStaleScreenOffFencing, hasKeyguardStrictLockCheck,
-      hasStatsLock, testsLifecycleRace
+      hasStatsLock, hasForegroundGeneration, testsLifecycleRace
     });
     process.exit(1);
   }

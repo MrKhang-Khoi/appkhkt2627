@@ -216,6 +216,7 @@ class UsageTrackerService : Service() {
         internal val activeOnlineCalls = java.util.concurrent.ConcurrentHashMap.newKeySet<okhttp3.Call>()
         internal val activeOfflineCalls = java.util.concurrent.ConcurrentHashMap.newKeySet<okhttp3.Call>()
         val isHeartbeatInFlight = java.util.concurrent.atomic.AtomicBoolean(false)
+        val foregroundGeneration = java.util.concurrent.atomic.AtomicLong(0L)
         private const val MAX_RECORDED_SESSIONS = 500
 
         internal class LruSessionSet(
@@ -685,11 +686,16 @@ class UsageTrackerService : Service() {
         fun executeOnlineGuarded(
             request: okhttp3.Request,
             context: Context,
-            expectedEpoch: Long = -1L
+            expectedEpoch: Long = -1L,
+            expectedGen: Long = -1L
         ): Boolean {
             // Fencing trước khi gửi request
             if (!isHardwareOnlineValid(context, expectedEpoch)) {
                 Log.w("UsageTrackerService", "Hủy bỏ request online trước khi gửi do phần cứng không online")
+                return false
+            }
+            if (expectedGen != -1L && foregroundGeneration.get() != expectedGen) {
+                Log.w("UsageTrackerService", "Hủy bỏ request online trước khi gửi do stale foreground generation ($expectedGen != ${foregroundGeneration.get()})")
                 return false
             }
 
@@ -703,6 +709,12 @@ class UsageTrackerService : Service() {
                 Log.w("UsageTrackerService", "Hủy bỏ request online ngay sau khi đăng ký do phần cứng đã ngắt")
                 return false
             }
+            if (expectedGen != -1L && foregroundGeneration.get() != expectedGen) {
+                activeOnlineCalls.remove(call)
+                call.cancel()
+                Log.w("UsageTrackerService", "Hủy bỏ request online ngay sau khi đăng ký do stale foreground generation ($expectedGen != ${foregroundGeneration.get()})")
+                return false
+            }
 
             try {
                 val response = call.execute()
@@ -710,6 +722,10 @@ class UsageTrackerService : Service() {
                     // Fencing ngay sau khi nhận phản hồi từ server
                     if (!isHardwareOnlineValid(context, expectedEpoch)) {
                         Log.w("UsageTrackerService", "Phần cứng đã ngắt trong khi request đang gửi! Hủy bỏ kết quả online.")
+                        return false
+                    }
+                    if (expectedGen != -1L && foregroundGeneration.get() != expectedGen) {
+                        Log.w("UsageTrackerService", "App đã thay đổi thế hệ trong khi request đang gửi! Hủy bỏ kết quả online.")
                         return false
                     }
                     return it.isSuccessful
@@ -725,9 +741,11 @@ class UsageTrackerService : Service() {
         fun executeOnlineHttpGuarded(
             request: okhttp3.Request,
             context: Context,
-            expectedEpoch: Long = -1L
+            expectedEpoch: Long = -1L,
+            expectedGen: Long = -1L
         ): HttpResult? {
             if (!isHardwareOnlineValid(context, expectedEpoch)) return null
+            if (expectedGen != -1L && foregroundGeneration.get() != expectedGen) return null
 
             val call = sharedHttpClient.newCall(request)
             activeOnlineCalls.add(call)
@@ -739,11 +757,17 @@ class UsageTrackerService : Service() {
                 Log.w("UsageTrackerService", "Hủy bỏ request online http ngay sau khi đăng ký do phần cứng đã ngắt")
                 return null
             }
+            if (expectedGen != -1L && foregroundGeneration.get() != expectedGen) {
+                activeOnlineCalls.remove(call)
+                call.cancel()
+                return null
+            }
 
             try {
                 val response = call.execute()
                 response.use { resp ->
                     if (!isHardwareOnlineValid(context, expectedEpoch)) return null
+                    if (expectedGen != -1L && foregroundGeneration.get() != expectedGen) return null
                     val bodyString = resp.body?.string()
                     val etag = resp.header("ETag")
                     return HttpResult(
@@ -1596,12 +1620,21 @@ class UsageTrackerService : Service() {
                         .patch(hbBody)
                         .build()
 
-                    return {
+                    val currentGen = foregroundGeneration.incrementAndGet()
+                    return actionLambda@ {
+                        if (foregroundGeneration.get() != currentGen || !isHardwareOnlineValid(context, targetEpoch)) {
+                            Log.w("UsageTrackerService", "Hủy bỏ uploadAction: Stale generation trước khi gửi ($currentGen != ${foregroundGeneration.get()})")
+                            return@actionLambda
+                        }
                         coroutineScope {
                             val requests = listOf(reqFam, reqDev, reqFamHb, reqDevHb, reqLegacyDevHb, reqPairingHb)
                             val deferreds = requests.map { req ->
                                 async(Dispatchers.IO) {
-                                    executeOnlineGuarded(req, context, targetEpoch)
+                                    if (foregroundGeneration.get() == currentGen) {
+                                        executeOnlineGuarded(req, context, targetEpoch, currentGen)
+                                    } else {
+                                        false
+                                    }
                                 }
                             }
                             deferreds.awaitAll()
@@ -1645,8 +1678,8 @@ class UsageTrackerService : Service() {
             expectedEpoch: Long = -1L
         ) {
             syncScope.launch(Dispatchers.IO) {
-                val action = telemetryMutex.withLock {
-                    prepareActiveAppLocked(
+                val (action, actionGen) = telemetryMutex.withLock {
+                    val act = prepareActiveAppLocked(
                         context = context,
                         packageName = packageName,
                         appName = appName,
@@ -1655,8 +1688,11 @@ class UsageTrackerService : Service() {
                         isForeground = isForeground,
                         expectedEpoch = expectedEpoch
                     )
+                    Pair(act, foregroundGeneration.get())
                 }
-                action?.invoke()
+                if (action != null && actionGen != -1L && foregroundGeneration.get() == actionGen) {
+                    action.invoke()
+                }
             }
         }
 

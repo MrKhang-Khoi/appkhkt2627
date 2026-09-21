@@ -188,10 +188,10 @@ class GuardianAccessibilityService : AccessibilityService() {
         isScreenOnState = false
         heartbeatJob?.cancel()
         val currentEpoch = if (passedEpoch != -1L) passedEpoch else telemetryEpoch.incrementAndGet()
+        UsageTrackerService.foregroundGeneration.incrementAndGet() // Triệt tiêu ngay lập tức mọi foreground telemetry in-flight
         UsageTrackerService.cancelActiveOnlineCalls()
-        UsageTrackerService.closePolledSession(applicationContext, "SCREEN_OFF")
 
-        // 2. Chụp snapshot và reset biến bộ nhớ RAM ngay lập tức dưới sessionLock (Thread-safe atomic closing)
+        // 2. Chụp snapshot và reset biến bộ nhớ RAM ngay lập tức dưới sessionLock TRƯỚC MỌI THAO TÁC I/O HOẶC SERVICE
         val now = System.currentTimeMillis()
         val (closedPkg, closedStart) = synchronized(sessionLock) {
             val pkg = currentForegroundPackage
@@ -204,7 +204,10 @@ class GuardianAccessibilityService : AccessibilityService() {
         }
         val sessionToken = if (closedPkg.isNotEmpty() && closedStart > 0L) "${closedPkg}_${closedStart}" else ""
 
-        // 3. Fast-path offline: Gửi ngay lập tức bản tin ngắt kết nối khẩn cấp lên Firebase
+        // 3. Chốt phiên polling độc lập (dispatches I/O to background coroutine)
+        UsageTrackerService.closePolledSession(applicationContext, "SCREEN_OFF")
+
+        // 4. Fast-path offline: Gửi ngay lập tức bản tin ngắt kết nối khẩn cấp lên Firebase
         UsageTrackerService.sendUrgentOfflineStatus(this, currentEpoch)
 
         // 4. Bất biến kế toán: Ghi nhận thời lượng phiên sử dụng ĐỘC LẬP (kèm session token chống duplicate)
@@ -267,9 +270,9 @@ class GuardianAccessibilityService : AccessibilityService() {
         }
 
         serviceScope.launch(Dispatchers.IO) {
-            val uploadAction = UsageTrackerService.telemetryMutex.withLock {
+            val (uploadAction, actionGen) = UsageTrackerService.telemetryMutex.withLock {
                 if (!isScreenOnState || telemetryEpoch.get() != currentEpoch) {
-                    return@withLock null
+                    return@withLock Pair(null, -1L)
                 }
                 synchronized(sessionLock) {
                     lastActivePackage = ""
@@ -277,13 +280,18 @@ class GuardianAccessibilityService : AccessibilityService() {
                     currentForegroundStartTime = 0L
                 }
 
-                if (currentPkg != null) {
+                val act = if (currentPkg != null) {
                     handleWindowStateChangedLocked(currentPkg, currentEpoch)
                 } else {
                     null
                 }
+                Pair(act, UsageTrackerService.foregroundGeneration.get())
             }
-            uploadAction?.invoke()
+            if (uploadAction != null && actionGen != -1L) {
+                if (UsageTrackerService.foregroundGeneration.get() == actionGen && isScreenOnState && telemetryEpoch.get() == currentEpoch) {
+                    uploadAction.invoke()
+                }
+            }
         }
     }
 
@@ -383,14 +391,19 @@ class GuardianAccessibilityService : AccessibilityService() {
         if (!isScreenOnState) return
         val currentEpoch = telemetryEpoch.get()
         serviceScope.launch(Dispatchers.IO) {
-            val uploadAction = UsageTrackerService.telemetryMutex.withLock {
+            val (uploadAction, actionGen) = UsageTrackerService.telemetryMutex.withLock {
                 // Kiểm tra nguyên tử: Nếu màn hình đã tắt hoặc epoch đã thay đổi, bỏ qua ngay
                 if (!isScreenOnState || telemetryEpoch.get() != currentEpoch) {
-                    return@withLock null
+                    return@withLock Pair(null, -1L)
                 }
-                handleWindowStateChangedLocked(packageName, currentEpoch)
+                val act = handleWindowStateChangedLocked(packageName, currentEpoch)
+                Pair(act, UsageTrackerService.foregroundGeneration.get())
             }
-            uploadAction?.invoke()
+            if (uploadAction != null && actionGen != -1L) {
+                if (UsageTrackerService.foregroundGeneration.get() == actionGen && isScreenOnState && telemetryEpoch.get() == currentEpoch) {
+                    uploadAction.invoke()
+                }
+            }
         }
     }
 
