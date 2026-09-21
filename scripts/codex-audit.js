@@ -864,7 +864,8 @@ try {
     'testCasColdStartWithEmptyETagCachePerformsPreGetAndPreventsStaleOverwrite',
     'testScreenOffRaceDuringWindowStateChangeStrictlyAbortsWithoutReinfectingForeground',
     'testForegroundProcessAndSubprocessResolutionInvariants',
-    'testSecondaryWindowFallbackRequiresUsageStatsAgreementAndRejectsStaleWindow'
+    'testSecondaryWindowFallbackRequiresUsageStatsAgreementAndRejectsStaleWindow',
+    'testSplitScreenConcurrentTargetAndOtherWindowStrictlyFailsClosed'
   ];
 
   for (const testName of requiredProductionFeatureTests) {

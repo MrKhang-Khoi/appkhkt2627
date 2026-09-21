@@ -86,12 +86,19 @@ class GuardianAccessibilityService : AccessibilityService() {
             now: Long = System.currentTimeMillis(),
             lastEventTime: Long = 0L,
             maxEventAgeMs: Long = 15_000L,
-            secondaryWindowPkg: String? = null
+            secondaryWindowPkg: String? = null,
+            conflictingWindowPkg: String? = null
         ): Boolean {
             if (targetPkg.isEmpty()) return false
 
             // Xung đột cửa sổ tiền cảnh chính: Nếu activeRootPkg thuộc về ứng dụng KHÁC, tuyệt đối không được nhận diện là targetPkg
             if (!activeRootPkg.isNullOrEmpty() && !isPackageProcessOf(activeRootPkg, targetPkg)) {
+                return false
+            }
+
+            // Bất biến Đa cửa sổ / Split-Screen: Nếu phát hiện bất kỳ cửa sổ nào của ứng dụng khác đang active/focused,
+            // tuyệt đối từ chối (Fail-Closed) ngay lập tức, bất kể có matching window hay UsageStats target mới đến đâu.
+            if (!conflictingWindowPkg.isNullOrEmpty() && !isPackageProcessOf(conflictingWindowPkg, targetPkg)) {
                 return false
             }
 
@@ -549,27 +556,31 @@ class GuardianAccessibilityService : AccessibilityService() {
                 val appWindows = windows?.filter { win ->
                     win.type == AccessibilityWindowInfo.TYPE_APPLICATION && (win.isActive || win.isFocused)
                 }
+
+                // Chốt chặn Split-Screen / Multi-Window:
+                // Quét TOÀN BỘ danh sách appWindows. Nếu có bất kỳ cửa sổ nào thuộc về package khác packageName,
+                // đó là xung đột đa cửa sổ / split-screen -> Bắt buộc fail-closed!
+                val conflictingOther = appWindows?.firstOrNull { win ->
+                    val winPkg = win.root?.packageName?.toString()?.trim()
+                    !winPkg.isNullOrEmpty() && !isPackageProcessOf(winPkg, packageName)
+                }
+                if (conflictingOther != null) {
+                    conflictingWindowPkg = conflictingOther.root?.packageName?.toString()?.trim()
+                }
+
                 val matchingWindow = appWindows?.firstOrNull { win ->
                     val winPkg = win.root?.packageName?.toString()?.trim()
                     isPackageProcessOf(winPkg, packageName)
                 }
                 if (matchingWindow != null) {
                     secondaryMatchingPkg = matchingWindow.root?.packageName?.toString()?.trim() ?: packageName
-                } else {
-                    val activeOther = appWindows?.firstOrNull { win ->
-                        val winPkg = win.root?.packageName?.toString()?.trim()
-                        !winPkg.isNullOrEmpty() && !isPackageProcessOf(winPkg, packageName)
-                    }
-                    if (activeOther != null) {
-                        conflictingWindowPkg = activeOther.root?.packageName?.toString()?.trim()
-                    }
                 }
             }
         } catch (e: Exception) {
             Log.w("GuardianAccess", "Window hierarchy check failed: ${e.message}")
         }
 
-        // Bất biến xung đột cửa sổ: Nếu active root window thuộc về ứng dụng khác (kể cả Launcher/SystemUI),
+        // Bất biến xung đột cửa sổ & Split-Screen: Nếu phát hiện bất kỳ cửa sổ nào thuộc về ứng dụng khác,
         // tuyệt đối từ chối targetPkg ngay lập tức (Fail-Closed).
         if (!conflictingWindowPkg.isNullOrEmpty()) {
             return false
@@ -616,7 +627,8 @@ class GuardianAccessibilityService : AccessibilityService() {
             now = now,
             lastEventTime = lastResumedTime,
             maxEventAgeMs = 15_000L,
-            secondaryWindowPkg = secondaryMatchingPkg
+            secondaryWindowPkg = secondaryMatchingPkg,
+            conflictingWindowPkg = conflictingWindowPkg
         )
     }
 

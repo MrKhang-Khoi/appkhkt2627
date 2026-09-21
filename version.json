@@ -8,15 +8,16 @@
   "fileSize": "5.87 MB",
   "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.3.3.apk",
   "apkFallbackUrl": "https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/CVA-SmartGuardian-v1.3.3.apk",
-  "sha256": "B537717A75F14FF8C584D4F70F96058AE4A227BEAF6C72B19F327EBB4D996333",
+  "sha256": "A8AEF5FEA2C487430871D5C4C94DB67330132E16768AED52F8624C2A98BECC44",
   "changelog": [
     "Khắc phục triệt để nhận diện cửa sổ phụ: Bắt buộc đồng thuận Dual-Engine với UsageStatsManager (ACTIVITY_RESUMED) trong vòng 15s.",
+    "Khắc phục xung đột Split-Screen & Multi-Window: Bắt buộc Fail-Closed khi phát hiện bất kỳ cửa sổ active/focused của ứng dụng khác.",
     "Bổ sung Monotonic Generation Fencing trong luồng chuyển cảnh cửa sổ Accessibility (handleWindowStateChangedLocked).",
     "Bổ sung kiến trúc Adaptive M3: Giới hạn maxWidth 640dp, căn giữa trên tablet/foldable và chống tràn vỡ giao diện với font scale 1.5x-2.0x.",
     "Bảo vệ kế toán phiên sử dụng với Epoch Fencing, Monotonic Foreground Generation, Atomic Session Lock Fencing và nhịp tim nền 60s tiết kiệm pin."
   ],
-  "releaseNotes": "Bản phát hành v1.3.3: Khắc phục triệt để nhận diện cửa sổ phụ với Dual-Engine Consensus (UsageStatsManager ACTIVITY_RESUMED), khóa chặn Monotonic Generation Fencing trong Accessibility Window Hierarchy, bố cục Adaptive M3 giới hạn 640dp căn giữa trên tablet/foldable, và bảo vệ kế toán phiên thời gian thực.",
-  "updatedAt": 1789993500000,
-  "size": 6152956,
+  "releaseNotes": "Bản phát hành v1.3.3: Khắc phục triệt để nhận diện cửa sổ phụ với Dual-Engine Consensus (UsageStatsManager ACTIVITY_RESUMED), khóa chặn Fail-Closed đối với xung đột Split-Screen/Multi-Window, khóa chặn Monotonic Generation Fencing trong Accessibility Window Hierarchy, bố cục Adaptive M3 giới hạn 640dp căn giữa trên tablet/foldable, và bảo vệ kế toán phiên thời gian thực.",
+  "updatedAt": 1789994000000,
+  "size": 6153047,
   "releaseDate": "2026-09-21"
 }

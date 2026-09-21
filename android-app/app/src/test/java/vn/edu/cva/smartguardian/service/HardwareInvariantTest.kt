@@ -4225,6 +4225,43 @@ class HardwareInvariantTest {
             maxEventAgeMs = 15_000L
         )
         assertFalse("Rapid switch conflict where another app resumed within 3000ms must fail closed", rapidSwitchConflict)
+
+        // Falsification Case 8 (Codex Split-Screen Invariant):
+        // Target matching window + other active/focused window in split screen + fresh UsageStats for target
+        // BẮT BUỘC trả về false (Fail-closed trên trạng thái split-screen/multi-window không xác định)
+        val splitScreenConflictWithFreshUsage = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = null,
+            usageStatsLastResumedPkg = target,
+            targetPkg = target,
+            now = now,
+            lastEventTime = now - 1000L,
+            maxEventAgeMs = 15_000L,
+            secondaryWindowPkg = target,
+            conflictingWindowPkg = "com.other.app"
+        )
+        assertFalse("Split-screen concurrent target window and conflicting other window with fresh UsageStats MUST strictly fail closed", splitScreenConflictWithFreshUsage)
+    }
+
+    @Test
+    fun testSplitScreenConcurrentTargetAndOtherWindowStrictlyFailsClosed() {
+        val target = "com.example.browser"
+        val other = "com.other.app"
+        val now = 200_000L
+
+        // Split-screen: cả hai cửa sổ cùng tồn tại trong windows hierarchy (browser isFocused, other isActive)
+        // và UsageStats của target vừa được ghi nhận 500ms trước.
+        // Bắt buộc fail-closed trả về false, không được phép kết luận target là foreground duy nhất.
+        val splitScreenResult = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = null,
+            usageStatsLastResumedPkg = target,
+            targetPkg = target,
+            now = now,
+            lastEventTime = now - 500L,
+            maxEventAgeMs = 15_000L,
+            secondaryWindowPkg = target,
+            conflictingWindowPkg = other
+        )
+        assertFalse("Split-screen concurrent windows must fail closed even with ultra fresh UsageStats", splitScreenResult)
     }
 
     private class FakeTestContext(
