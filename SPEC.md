@@ -34,8 +34,23 @@
   - Đồng bộ nguyên tử giữa RAM và đĩa: Thao tác `recordedSessionTokens.add()` và lưu SharedPreferences diễn ra nguyên tử trong cùng một khối `synchronized(statsLock)` qua hàm `recordAppSession` (được gọi độc quyền trên background coroutine `Dispatchers.IO` để đảm bảo không block luồng giao diện). Sử dụng `commit()` để đảm bảo ghi đĩa hoàn tất trước khi nhả lock; nếu `commit()` thất bại, hệ thống tự động rollback nguyên tử 100% cả in-memory SharedPreferences cache lẫn danh sách RAM tokens qua `restoreSnapshotRaw(backupTokens)` và hủy ghi nhận thời lượng, triệt tiêu hoàn toàn rủi ro dirty cache và mất đồng bộ RAM-Đĩa.
   - Khôi phục duy nhất một lần & An toàn lỗi: Biến `AtomicBoolean(false)` đảm bảo `restorePersistedSessionTokens` chỉ đánh dấu hoàn tất khi toàn bộ quá trình đọc và nạp từ SharedPreferences diễn ra thành công, ngăn chặn xáo trộn trật tự LRU và cho phép khôi phục lại nếu gặp lỗi I/O tạm thời.
   - Lưu trữ bền vững thứ tự: Danh sách token được lưu trữ vào SharedPreferences dưới dạng chuỗi JSON Array có thứ tự qua khóa `persisted_session_tokens_json`, bảo toàn chính xác trật tự LRU/FIFO.
+- **Bảo mật Xác thực & Triệt tiêu Mã PIN Mặc Định (Zero Default PIN Backdoor)**:
+  - Loại bỏ hoàn toàn mã PIN mặc định ("1234", "2025", "0000") trong toàn bộ ứng dụng (bao gồm `BlockedActivity.kt`). Bắt buộc phụ huynh tự thiết lập mã PIN riêng (đúng 4 chữ số số học `^[0-9]{4}$`), băm SHA-256 + Salt ngẫu nhiên per-device trong SharedPreferences. Khi chưa thiết lập, mọi nỗ lực xác thực bị từ chối an toàn (Fail-Closed).
+  - Khóa 30 giây sau 5 lần nhập sai lưu trực tiếp vào SharedPreferences (Persistent Rate-Limiting), chống hoàn toàn bypass bằng restart app.
+  - Trên màn hình chặn `BlockedActivity`, cấm gọi `super.onBackPressed()` trước `goHomeSafe()`, triệt tiêu rủi ro lộ trang web cấm.
+- **Đa Nền Tảng OEM-Agnostic & Giao Diện Tối Giản (Minimalist UI/UX)**:
+  - CẤM TUYỆT ĐỐI hardcode tên hãng trên giao diện chung (như nút "Mở Khóa ⋮ (Xiaomi)"). Giao diện người dùng phải đồng nhất và trung tính 100% trên mọi dòng máy (Samsung, Xiaomi, Oppo, Vivo, Pixel).
+  - Tự động điều hướng ngầm qua `OemPermissionHelper` theo cơ chế dự phòng 3 tầng độc lập: `Tầng 1: Intent Chuyên Biệt OEM` -> `Tầng 2: ACTION_APPLICATION_DETAILS_SETTINGS` -> `Tầng 3: ACTION_SETTINGS` (0% Crash).
+  - Áp dụng nguyên tắc Micro-Copy MD3: 1 Mục tiêu - 1 Mô tả ngắn dưới 10 từ - 1 Nút hành động trực tiếp. Bố cục co giãn không tràn ngang (`match_parent`/`0dp`), `singleLine="true"` với `ellipsize="end"`, điểm chạm $\ge 48\text{dp}$, bọc `WindowInsetsCompat`.
+- **An Toàn Bất Đồng Bộ Coroutine & Tiết Kiệm Năng Lượng (Async & Battery Optimization)**:
+  - Bảo vệ điểm nối Coroutine (`Safe Continuation Invariant`): Khi dùng `suspendCancellableCoroutine` trong `LocationHelper`, BẮT BUỘC bọc `if (cont.isActive) { cont.resume(...) }`, triệt tiêu hoàn toàn lỗi crash `IllegalStateException: Already resumed`.
+  - Triệt tiêu Polling đốt pin: CẤM TUYỆT ĐỐI vòng lặp spam HTTP 15s liên tục. Chuyển sang Event-Driven Sync (chỉ gửi khi đổi app/tắt màn hình) và giãn cách heartbeat 60s - 120s khi máy ở trạng thái tĩnh.
+  - Tường lửa Web An Toàn: CẤM tạo giao diện TUN ảo rỗng trong `VpnService` làm mất mạng Internet của học sinh.
+  - Lọc Web Chống False-Positive: Tự động giải mã percent-encoding URL và sử dụng biểu thức chính quy Regex với ranh giới ký tự Unicode `(?<![a-z0-9\p{L}])kw(?![a-z0-9\p{L}])` để ngăn chặn hoàn toàn việc chặn nhầm các trang web giáo dục (như Essex, JavaScript).
+- **Đồng Bộ Phiên Bản Động 100% (Zero Hardcoded Version)**:
+  - CẤM TUYỆT ĐỐI hardcode số phiên bản ("1.2.5", 25) trong mã nguồn. Mọi telemetry Heartbeat bắt buộc đọc trực tiếp từ `packageManager.getPackageInfo()` qua `UsageTrackerService.getDynamicPackageVersion()` trả về `Pair<String, Long>?` (Fail-Closed, không trả về phiên bản giả mạo khi thiếu metadata), luôn đồng bộ tức thời với `build.gradle.kts`.
 - **An toàn, Fencing & Hiệu năng Telemetry**:
-  - Ticker Heartbeat duy trì nhịp tim định kỳ (15s - 30s) khi màn hình sáng. Phát song song đồng thời qua HTTP/2 `async(Dispatchers.IO) { ... }.awaitAll()`.
+  - Ticker Heartbeat duy trì nhịp tim định kỳ khi màn hình sáng. Phát song song đồng thời qua HTTP/2 `async(Dispatchers.IO) { ... }.awaitAll()`.
   - Cấm nuốt ngoại lệ rỗng `catch (e) {}` trong toàn bộ mã nguồn.
   - Xử lý triệt để nullability trong Kotlin, cấm dùng `!!` bừa bãi.
   - Fencing mạng 2 tầng (Double-check guard): `executeOnlineGuarded` kiểm tra trạng thái phần cứng trước khi tạo Call và kiểm tra lại ngay sau khi đăng ký Call; nếu màn hình tắt giữa chừng, Call bị hủy lập tức.
@@ -53,7 +68,7 @@
 
 ### 2.3. Tính Toàn Vẹn Bản Phát Hành & Phạm Vi Kiểm Thử (Verification Scope):
 - **Phạm vi kiểm thử tự động của Repository (Automated CI/Local Verification Scope)**:
-  - Repository áp dụng bộ kiểm thử tự động `HardwareInvariantTest.kt` chạy trên JVM với Android Studio JBR.
+  - Repository áp dụng bộ kiểm thử tự động `HardwareInvariantTest.kt` chạy trên JVM với Android Studio JBR với tổng cộng **88 bài kiểm thử** (bao gồm 51 bài kiểm thử cốt lõi của SPEC và 37 bài kiểm thử tính năng mới).
   - Bộ kiểm thử này trực tiếp thực thi mã nguồn production và kiểm chứng toán học/luồng:
     1. Trạng thái tăng đơn điệu của `telemetryEpoch`.
     2. Hành vi hủy kết nối in-flight của `cancelActiveOnlineCalls()` và `cancelActiveOfflineCalls()`.
@@ -61,6 +76,9 @@
     4. An toàn đa luồng trên `sessionLock` và `statsLock`.
     5. Fencing logic kiểm tra điều kiện phần cứng (`evaluateHardwareOnline`, `shouldAllowTelemetryUpdate`).
     6. Kiểm chứng động cơ polling độc lập UsageStatsManager, tính năng chốt phiên khi tắt màn hình, loại trừ ứng dụng ngân hàng và fallback foreground process matching.
+    7. Cơ chế 3 tầng fallback độc lập của `OemPermissionHelper`.
+    8. Tính năng giải mã URL và bộ lọc Regex Unicode của `WebFilterList`.
+    9. Tính năng trích xuất dynamic package version fail-closed bảo toàn 64-bit Long của `UsageTrackerService`.
   - *Đặc tả phần cứng thực tế*: Việc kiểm thử các lifecycle thực tế phụ thuộc hệ điều hành Android (`ACTION_SCREEN_OFF`, `ACTION_USER_PRESENT`, tối ưu hóa pin OEM) khi chạy trong môi trường CI không có thiết bị thật/emulator kết nối được bảo vệ bằng thiết kế phòng thủ theo chuẩn tài liệu Android Developers (defensive bounded timeouts 3000ms, non-blocking coroutine dispatch, 1-shot retry, và unregister receiver an toàn).
 - **Kiến trúc Phân quyền Một Thiết Bị - Một Vai Trò (One-Device One-Role Architecture - Chuẩn Google Family Link & Apple Screen Time)**:
   - Một thiết bị đã ghép đôi bảo vệ con (Student Companion) TUYỆT ĐỐI không hiển thị đồng thời giao diện Phụ huynh để con tự ý can thiệp. Mặc định ẩn hoàn toàn thanh chuyển tab `[Phụ Huynh | Học Sinh]`.
@@ -78,7 +96,7 @@
   - Tab phân loại trên dialog giám sát rút gọn nhãn để hiển thị trọn vẹn trên 1 dòng ở mọi kích thước màn hình: `"🌐 Mạng XH"`, `"📚 Học tập"`, `"🎮 Game"`, `"📱 Tất cả"`, kèm thuộc tính `singleLine="true"` và `ellipsize="end"`.
   - Hiển thị Empty State trực quan (`layoutDialogEmptyState`) khi danh mục ứng dụng được lọc trống rỗng, kèm nút dẫn hướng xem tất cả ứng dụng.
 - **Tính toàn vẹn bản phát hành OTA & Chốt Chặn Tải File Trực Tuyến (Zero HTTP 404)**:
-  - Tệp `version.json`, tệp binary `apk/CVA-SmartGuardian-v1.2.8.apk` và node `/app_release.json` trên Firebase RTDB trực tuyến bắt buộc phải đồng nhất 100% về `versionCode` (28), `versionName` ("1.2.8") và `sha256`.
+  - Tệp `version.json`, tệp binary `apk/CVA-SmartGuardian-v1.2.9.apk` và node `/app_release.json` trên Firebase RTDB trực tuyến bắt buộc phải đồng nhất 100% về `versionCode` (29), `versionName` ("1.2.9") và `sha256`.
   - Trường `changelog` trong `version.json` bắt buộc là mảng các chuỗi (`Array<String>`) để đảm bảo tính tương thích ngược tuyệt đối với toàn bộ các client và parser cũ.
   - **Cơ chế Tải Đa Nguồn Dự Phòng (Resilient Multi-Source Fallback)**: `AppUpdateManager` bắt buộc phải duyệt danh sách URL ứng viên (`apkUrl`, `apkFallbackUrl`, và raw GitHub mirror). Khi gặp lỗi HTTP 404 ở nguồn chính (do độ trễ deploy của GitHub Pages), hệ thống tự động fallback tức thời sang nguồn dự phòng mà không làm gián đoạn người dùng.
   - **Chốt Chặn Kiểm Thử Tải File Trực Tuyến (Live OTA Download Gatekeeper)**: Bắt buộc kịch bản kiểm định (`scripts/verify-ota-download.js` và `scripts/codex-audit.js`) phải thực hiện tải byte thực tế qua mạng, xác thực HTTP 200 và kiểm tra SHA-256 của luồng tải về. Nghiêm cấm đưa lên Git (`git push`) nếu việc tải file chưa thành công 100%.

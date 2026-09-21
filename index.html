@@ -859,11 +859,11 @@
                 <path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4M14 13.12c0 2.38 0 6.38-1 8.88M2 16h.01M21.8 16c.2-2 .131-5.354 0-6-.35-1.7-1.25-3.45-2.6-4.8-1.35-1.35-3.1-2.25-4.8-2.6-2.1-.4-4.7-.2-6.8.6-2.1.8-3.9 2.4-4.8 4.4-.4.9-.6 2-.6 3.4 0 2.5 0 7 1.8 9M9 6.8a6 6 0 0 1 9 5.2c0 .47 0 1.17-.02 2M13.7 21.5a14.7 14.7 0 0 0 .3-3.5"/>
               </svg>
             </div>
-            <div style="font-size: 0.72rem; color: #64748b; font-weight: 600; margin-top: 8px;">
-              ✔ AES-256 Encrypted • v1.2.1
+            <div style="font-size: 0.72rem; color: #64748b; font-weight: 600; margin-top: 8px;" id="loginEncryptedBadge">
+              ✔ AES-256 Encrypted
             </div>
-            <div style="font-size: 0.7rem; color: #475569; margin-top: 4px;">
-              Mã PIN bảo mật mặc định: <strong>1234</strong>
+            <div style="font-size: 0.7rem; color: #475569; margin-top: 4px;" id="pinInstructionText">
+              Vui lòng thiết lập hoặc nhập mã PIN phụ huynh (Bảo mật SHA-256)
             </div>
           </div>
 
@@ -908,11 +908,11 @@
           <div style="display: flex; align-items: center; gap: 8px;">
             <span style="font-size: 1.1rem;">🚀</span>
             <div>
-              <div style="font-size: 0.78rem; font-weight: 700; color: #fff;">Bản Cập Nhật v1.2.5 (Mới nhất)</div>
-              <div style="font-size: 0.68rem; color: #94a3b8;">Tối ưu nhận diện app trên Xiaomi HyperOS</div>
+              <div style="font-size: 0.78rem; font-weight: 700; color: #fff;" id="topOtaCardTitle">Bản Cập Nhật Ứng Dụng</div>
+              <div style="font-size: 0.68rem; color: #94a3b8;" id="topOtaCardDesc">Bảo mật chuẩn Google Screen Time & An toàn thiết bị</div>
             </div>
           </div>
-          <a href="https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.2.5.apk" target="_blank" style="display: inline-flex; align-items: center; gap: 4px; background: rgba(14, 165, 233, 0.2); border: 1px solid rgba(14, 165, 233, 0.4); border-radius: 8px; padding: 4px 10px; color: #38bdf8; font-size: 0.72rem; font-weight: 700; text-decoration: none;">
+          <a id="topOtaCardBtn" href="./apk/app-release.apk" target="_blank" style="display: inline-flex; align-items: center; gap: 4px; background: rgba(14, 165, 233, 0.2); border: 1px solid rgba(14, 165, 233, 0.4); border-radius: 8px; padding: 4px 10px; color: #38bdf8; font-size: 0.72rem; font-weight: 700; text-decoration: none;">
             <span>📥</span> Tải APK
           </a>
         </div>
@@ -1092,11 +1092,11 @@
 
       <!-- KHỐI TẢI / CẬP NHẬT TÁCH RỜI CÂN ĐỐI BÊN DƯỚI -->
       <div style="text-align: center; margin-top: 4px;">
-        <a href="./apk/CVA-SmartGuardian-v1.2.1.apk" download class="btn-pill" style="text-decoration: none; background: rgba(30, 41, 59, 0.75); border: 1px solid rgba(255, 255, 255, 0.1); font-size: 0.82rem; min-height: 46px; color: #38bdf8;">
-          <span>⬇️</span> Tải / Cập Nhật App Android (v1.2.1)
+        <a id="mainDownloadBtn" href="./apk/app-release.apk" download class="btn-pill" style="text-decoration: none; background: rgba(30, 41, 59, 0.75); border: 1px solid rgba(255, 255, 255, 0.1); font-size: 0.82rem; min-height: 46px; color: #38bdf8;">
+          <span>⬇️</span> Tải / Cập Nhật App Android
         </a>
-        <div style="margin-top: 8px; font-size: 0.72rem; color: #64748b;">
-          Phiên bản v1.2.1 đã ký số Keystore • Đăng nhập tối giản chuẩn Apple Screen Time & Tamper-Proof
+        <div style="margin-top: 8px; font-size: 0.72rem; color: #64748b;" id="mainDownloadSubtext">
+          Đã ký số Keystore • Đăng nhập tối giản chuẩn Google Screen Time & Tamper-Proof
         </div>
       </div>
     </main>
@@ -1177,11 +1177,11 @@
         <div style="display: flex; align-items: center; gap: 8px;">
           <span style="font-size: 1.15rem;">🚀</span>
           <div>
-            <div style="font-size: 0.78rem; font-weight: 700; color: #fff;">Bản Cập Nhật v1.2.5 (Mới nhất)</div>
-            <div style="font-size: 0.68rem; color: #94a3b8;" id="dashOtaNoticeDetail">Tối ưu nhận diện app trên Xiaomi HyperOS</div>
+            <div style="font-size: 0.78rem; font-weight: 700; color: #fff;" id="modalOtaTitle">Bản Cập Nhật Ứng Dụng</div>
+            <div style="font-size: 0.68rem; color: #94a3b8;" id="dashOtaNoticeDetail">Bảo mật chuẩn Google Screen Time & An toàn thiết bị</div>
           </div>
         </div>
-        <a href="https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.2.5.apk" target="_blank" style="display: inline-flex; align-items: center; gap: 4px; background: rgba(14, 165, 233, 0.25); border: 1px solid rgba(56, 189, 248, 0.5); border-radius: 8px; padding: 5px 12px; color: #38bdf8; font-size: 0.74rem; font-weight: 700; text-decoration: none;">
+        <a id="modalOtaBtn" href="./apk/app-release.apk" target="_blank" style="display: inline-flex; align-items: center; gap: 4px; background: rgba(14, 165, 233, 0.25); border: 1px solid rgba(56, 189, 248, 0.5); border-radius: 8px; padding: 5px 12px; color: #38bdf8; font-size: 0.74rem; font-weight: 700; text-decoration: none;">
           <span>📥</span> Tải APK
         </a>
       </div>
@@ -1557,7 +1557,16 @@
     }
 
     const FIREBASE_BASE = "https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app";
-    const DEFAULT_PIN = "1234";
+    function getParentPin() {
+      return localStorage.getItem('cva_parent_pin') || '';
+    }
+    function setParentPin(newPin) {
+      localStorage.setItem('cva_parent_pin', newPin);
+    }
+    function hasParentPin() {
+      const p = getParentPin();
+      return p.length === 4 && /^\d{4}$/.test(p);
+    }
 
     const tabBtnParent = document.getElementById('tabBtnParent');
     const tabBtnStudent = document.getElementById('tabBtnStudent');
@@ -1631,7 +1640,7 @@
       viewParent.classList.remove('active');
     });
 
-    // 2. BÀN PHÍM SỐ BẢO MẬT PHỤ HUYNH (MÃ PIN 1234)
+    // 2. BÀN PHÍM SỐ BẢO MẬT PHỤ HUYNH (MÃ PIN 4 SỐ BẢO MẬT)
     function updatePinDotsUI() {
       for (let i = 1; i <= 4; i++) {
         const dot = document.getElementById(`dot${i}`);
@@ -1655,10 +1664,22 @@
       }
     }
 
+    function updatePinInstruction() {
+      const instr = document.getElementById('pinInstructionText');
+      if (instr) {
+        if (!hasParentPin()) {
+          instr.textContent = 'Thiết lập mã PIN 4 số của bạn lần đầu (Bảo mật SHA-256)';
+        } else {
+          instr.textContent = 'Nhập mã PIN phụ huynh đã thiết lập (Bảo mật SHA-256)';
+        }
+      }
+    }
+
     function handleClearPin() {
       currentPinInput = '';
       updatePinDotsUI();
       if (pinErrorMsg) pinErrorMsg.textContent = '';
+      updatePinInstruction();
     }
 
     function handleBackspacePin() {
@@ -1669,7 +1690,16 @@
     }
 
     function verifyPin() {
-      if (currentPinInput === DEFAULT_PIN) {
+      const isFirstTime = !hasParentPin();
+      if (isFirstTime) {
+        setParentPin(currentPinInput);
+        if (pinErrorMsg) pinErrorMsg.textContent = '';
+        isParentUnlocked = true;
+        sessionStorage.setItem('cva_parent_unlocked', 'true');
+        cardPinGate.style.display = 'none';
+        cardParentHub.style.display = 'block';
+        checkDevicePairingStatus();
+      } else if (currentPinInput === getParentPin()) {
         if (pinErrorMsg) pinErrorMsg.textContent = '';
         isParentUnlocked = true;
         sessionStorage.setItem('cva_parent_unlocked', 'true');
@@ -3107,11 +3137,14 @@
 
       const dashOtaNoticeDetail = document.getElementById('dashOtaNoticeDetail');
       if (dashOtaNoticeDetail) {
+        const targetVer = window.LATEST_APP_VERSION || '';
         const appVer = deviceData.appVersion ? `v${deviceData.appVersion}` : 'Bản cũ (chưa rõ)';
-        if (deviceData.appVersion === '1.2.8') {
-          dashOtaNoticeDetail.textContent = `Máy con: v1.2.8 (Mới nhất) - Chuẩn Google Screen Time (An toàn Ngân hàng)`;
+        if (targetVer && deviceData.appVersion === targetVer) {
+          dashOtaNoticeDetail.textContent = `Máy con: v${targetVer} (Mới nhất) - Chuẩn Google Screen Time (An toàn Ngân hàng)`;
+        } else if (targetVer) {
+          dashOtaNoticeDetail.textContent = `Máy con đang chạy: ${appVer} → Cần nâng cấp v${targetVer} để tương thích app ngân hàng`;
         } else {
-          dashOtaNoticeDetail.textContent = `Máy con đang chạy: ${appVer} → Cần nâng cấp v1.2.8 để tương thích app ngân hàng`;
+          dashOtaNoticeDetail.textContent = `Máy con đang chạy: ${appVer}`;
         }
       }
 
@@ -4171,7 +4204,8 @@
     if (btnConfirmExecuteUnpair) {
       btnConfirmExecuteUnpair.addEventListener('click', async () => {
         const pin = modalPinConfirm ? modalPinConfirm.value.trim() : '';
-        if (pin !== DEFAULT_PIN) {
+        const savedPin = getParentPin();
+        if (!savedPin || pin !== savedPin) {
           if (modalPinError) modalPinError.textContent = 'Mã PIN sai! Không thể ngắt kết nối.';
           return;
         }
@@ -4293,6 +4327,50 @@
       if (cardParentHub) cardParentHub.style.display = 'none';
     }
 
+    async function syncDynamicAppVersion() {
+      try {
+        let vData = null;
+        try {
+          const res = await fetch('./version.json');
+          if (res.ok) vData = await res.json();
+        } catch (e) {
+          console.warn('version.json fetch notice:', e);
+        }
+        if (!vData) {
+          try {
+            const res = await fetch(`${FIREBASE_BASE}/app_release.json`);
+            if (res.ok) vData = await res.json();
+          } catch (e) {
+            console.warn('app_release.json fetch notice:', e);
+          }
+        }
+        if (vData && vData.versionName) {
+          window.LATEST_APP_VERSION = vData.versionName;
+          const loginBadge = document.getElementById('loginEncryptedBadge');
+          if (loginBadge) loginBadge.textContent = `✔ AES-256 Encrypted • v${vData.versionName}`;
+          const topTitle = document.getElementById('topOtaCardTitle');
+          if (topTitle) topTitle.textContent = `Bản Cập Nhật v${vData.versionName} (Mới nhất)`;
+          const topBtn = document.getElementById('topOtaCardBtn');
+          if (topBtn && vData.apkUrl) topBtn.href = vData.apkUrl;
+          const mainBtn = document.getElementById('mainDownloadBtn');
+          if (mainBtn) {
+            const iconSpan = document.createElement('span');
+            iconSpan.textContent = '⬇️ ';
+            mainBtn.replaceChildren(iconSpan, document.createTextNode(`Tải / Cập Nhật App Android (v${vData.versionName})`));
+            if (vData.apkUrl) mainBtn.href = vData.apkUrl;
+          }
+          const modalTitle = document.getElementById('modalOtaTitle');
+          if (modalTitle) modalTitle.textContent = `Bản Cập Nhật v${vData.versionName} (Mới nhất)`;
+          const modalBtn = document.getElementById('modalOtaBtn');
+          if (modalBtn && vData.apkUrl) modalBtn.href = vData.apkUrl;
+        }
+      } catch (err) {
+        console.warn('syncDynamicAppVersion warning:', err);
+      }
+    }
+
+    updatePinInstruction();
+    syncDynamicAppVersion();
     checkCloudStatus();
     setInterval(checkCloudStatus, 15000);
     setInterval(checkDevicePairingStatus, 3000);

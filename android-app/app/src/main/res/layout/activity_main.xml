@@ -652,7 +652,7 @@
                         </HorizontalScrollView>
                     </LinearLayout>
 
-                    <!-- 2. THẺ HERO CON ĐANG CHỌN (HERO CARD CHUẨN MATERIAL 3) -->
+                    <!-- 2. THẺ TRẠNG THÁI THIẾT BỊ CON ĐANG CHỌN (CLEAN ACTIVE COMPANION CARD) -->
                     <LinearLayout
                         android:id="@+id/layoutParentChildRow"
                         android:layout_width="match_parent"
@@ -666,10 +666,10 @@
                         android:focusable="true">
 
                         <FrameLayout
-                            android:layout_width="44dp"
-                            android:layout_height="44dp"
+                            android:layout_width="38dp"
+                            android:layout_height="38dp"
                             android:background="@drawable/bg_avatar_squircle"
-                            android:layout_marginEnd="12dp">
+                            android:layout_marginEnd="10dp">
 
                             <TextView
                                 android:id="@+id/tvParentChildAvatar"
@@ -677,7 +677,7 @@
                                 android:layout_height="wrap_content"
                                 android:layout_gravity="center"
                                 android:text="👦"
-                                android:textSize="22sp" />
+                                android:textSize="18sp" />
                         </FrameLayout>
 
                         <LinearLayout
@@ -699,8 +699,10 @@
                                     android:layout_weight="1"
                                     android:text="Con (Học Sinh)"
                                     android:textColor="#F8FAFC"
-                                    android:textSize="15sp"
-                                    android:textStyle="bold" />
+                                    android:textSize="14sp"
+                                    android:textStyle="bold"
+                                    android:singleLine="true"
+                                    android:ellipsize="end" />
 
                                 <LinearLayout
                                     android:layout_width="wrap_content"
@@ -710,10 +712,10 @@
 
                                     <View
                                         android:id="@+id/dotParentChildOnline"
-                                        android:layout_width="8dp"
-                                        android:layout_height="8dp"
+                                        android:layout_width="7dp"
+                                        android:layout_height="7dp"
                                         android:background="#64748B"
-                                        android:layout_marginEnd="6dp" />
+                                        android:layout_marginEnd="5dp" />
 
                                     <TextView
                                         android:id="@+id/tvParentChildStatusBadge"
@@ -721,7 +723,7 @@
                                         android:layout_height="wrap_content"
                                         android:text="CHỜ KẾT NỐI"
                                         android:textColor="#94A3B8"
-                                        android:textSize="11sp"
+                                        android:textSize="10sp"
                                         android:textStyle="bold" />
                                 </LinearLayout>
                             </LinearLayout>
@@ -732,16 +734,24 @@
                                 android:layout_height="wrap_content"
                                 android:text="● Đang kiểm tra trạng thái..."
                                 android:textColor="#94A3B8"
-                                android:textSize="12sp"
-                                android:layout_marginTop="3dp" />
+                                android:textSize="11sp"
+                                android:layout_marginTop="2dp"
+                                android:singleLine="true"
+                                android:ellipsize="end" />
                         </LinearLayout>
 
+                        <!-- NÚT MỞ DIALOG GIÁM SÁT DẠNG PILL SANG TRỌNG -->
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text=" ➔"
+                            android:background="@drawable/bg_score_pill"
+                            android:paddingLeft="10dp"
+                            android:paddingRight="10dp"
+                            android:paddingTop="5dp"
+                            android:paddingBottom="5dp"
+                            android:text="Chi Tiết ➔"
                             android:textColor="#38BDF8"
-                            android:textSize="16sp"
+                            android:textSize="11sp"
                             android:textStyle="bold"
                             android:layout_marginStart="8dp" />
                     </LinearLayout>

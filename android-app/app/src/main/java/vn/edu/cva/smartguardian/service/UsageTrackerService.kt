@@ -246,6 +246,37 @@ class UsageTrackerService : Service() {
 
         internal val recordedSessionTokens: MutableSet<String> = LruSessionSet(MAX_RECORDED_SESSIONS, statsLock)
 
+        /**
+         * Trích xuất phiên bản ứng dụng động 100% từ PackageManager.
+         * Tuyệt đối không hardcode phiên bản, fail-closed trả về null nếu không truy xuất được.
+         * Sử dụng Long cho versionCode để bảo toàn nguyên vẹn 64-bit trên Android P+.
+         */
+        fun getDynamicPackageVersion(context: Context): Pair<String, Long>? {
+            return try {
+                val pInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    context.packageManager.getPackageInfo(context.packageName, android.content.pm.PackageManager.PackageInfoFlags.of(0))
+                } else {
+                    @Suppress("DEPRECATION")
+                    context.packageManager.getPackageInfo(context.packageName, 0)
+                }
+                val code = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    pInfo.longVersionCode
+                } else {
+                    @Suppress("DEPRECATION")
+                    pInfo.versionCode.toLong()
+                }
+                val vName = pInfo.versionName
+                if (vName.isNullOrBlank() || code <= 0L) {
+                    null
+                } else {
+                    Pair(vName, code)
+                }
+            } catch (e: Exception) {
+                Log.w("UsageTrackerService", "Fail-closed: Không thể đọc dynamic package info: ${e.message}")
+                null
+            }
+        }
+
         internal fun persistSessionTokensLocked(context: Context): Boolean {
             return try {
                 val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -804,6 +835,13 @@ class UsageTrackerService : Service() {
                             val manufacturer = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
                             val model = Build.MODEL
 
+                            val versionPair = getDynamicPackageVersion(context)
+                            if (versionPair == null) {
+                                Log.w("UsageTrackerService", "Fail-closed: Dynamic version metadata is unavailable, skipping telemetry ping")
+                                return@withLock null
+                            }
+                            val (appVerName, appVerCode) = versionPair
+
                             val pingJson = JSONObject().apply {
                                 put("lastSync", lockNow)
                                 put("lastHeartbeat", lockNow)
@@ -811,8 +849,8 @@ class UsageTrackerService : Service() {
                                 put("deviceId", androidId)
                                 put("deviceModel", "$manufacturer $model")
                                 put("androidVersion", "Android ${Build.VERSION.RELEASE}")
-                                put("appVersion", "1.2.5")
-                                put("appVersionCode", 25)
+                                put("appVersion", appVerName)
+                                put("appVersionCode", appVerCode)
                                 put("isPaired", true)
                                 put("status", "paired")
                             }
@@ -2058,9 +2096,9 @@ class UsageTrackerService : Service() {
 
                 val sizeText = if (updateInfo.fileSize.isNotEmpty()) " (${updateInfo.fileSize})" else ""
                 val notification = NotificationCompat.Builder(context, OTA_CHANNEL_ID)
-                    .setContentTitle("🚀 Có Bản Cập Nhật Mới: v${updateInfo.versionName}")
-                    .setContentText("Chạm vào đây để nâng cấp ngay bản sửa lỗi nhận diện app$sizeText")
-                    .setStyle(NotificationCompat.BigTextStyle().bigText("Đã có bản cập nhật mới v${updateInfo.versionName}$sizeText với cải tiến nhận diện ứng dụng trên Xiaomi HyperOS. Chạm để cài đặt ngay."))
+                    .setContentTitle("Có Bản Cập Nhật Mới: v${updateInfo.versionName}")
+                    .setContentText("Chạm để nâng cấp phiên bản mới$sizeText")
+                    .setStyle(NotificationCompat.BigTextStyle().bigText("Đã có bản cập nhật mới v${updateInfo.versionName}$sizeText với các cải tiến hiệu năng và ổn định hệ thống. Chạm để cài đặt ngay."))
                     .setSmallIcon(android.R.drawable.stat_sys_download_done)
                     .setContentIntent(pendingIntent)
                     .setAutoCancel(true)

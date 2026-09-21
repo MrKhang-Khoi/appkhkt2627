@@ -1,4 +1,4 @@
-﻿package vn.edu.cva.smartguardian.location
+package vn.edu.cva.smartguardian.location
 
 import android.Manifest
 import android.content.Context
@@ -139,22 +139,28 @@ object LocationHelper {
                         try {
                             fusedClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cts.token)
                                 .addOnSuccessListener { loc ->
-                                    if (loc != null) {
-                                        cont.resume(loc)
-                                    } else {
-                                        fusedClient.lastLocation.addOnSuccessListener { lastLoc ->
-                                            cont.resume(lastLoc)
-                                        }.addOnFailureListener {
-                                            cont.resume(null)
+                                    if (cont.isActive) {
+                                        if (loc != null) {
+                                            cont.resume(loc)
+                                        } else {
+                                            fusedClient.lastLocation.addOnSuccessListener { lastLoc ->
+                                                if (cont.isActive) cont.resume(lastLoc)
+                                            }.addOnFailureListener {
+                                                if (cont.isActive) cont.resume(null)
+                                            }
                                         }
                                     }
                                 }
                                 .addOnFailureListener {
-                                    cont.resume(null)
+                                    if (cont.isActive) {
+                                        cont.resume(null)
+                                    }
                                 }
                         } catch (e: SecurityException) {
                             Log.w(TAG, "SecurityException FusedLocation: ${e.message}")
-                            cont.resume(null)
+                            if (cont.isActive) {
+                                cont.resume(null)
+                            }
                         }
                     }
                 }

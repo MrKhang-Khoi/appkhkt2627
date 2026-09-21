@@ -2537,8 +2537,68 @@ class HardwareInvariantTest {
         assertFalse("Sau khi polling nền gặp lỗi mạng, thiết bị bắt buộc chuyển thành snapshot ngoại tuyến", staleChild.isOnline)
     }
 
+    @Test
+    fun testWebFilterListWordBoundaryRegex() {
+        // 1. URLs containing academic terms that previously triggered false-positives
+        val essexResult = vn.edu.cva.smartguardian.data.WebFilterList.checkUrl("https://essex.ac.uk/study")
+        assertFalse("essex.ac.uk must NOT be blocked", essexResult.isBlocked)
 
+        val jsResult = vn.edu.cva.smartguardian.data.WebFilterList.checkUrl("https://developer.mozilla.org/en-US/docs/Web/JavaScript")
+        assertFalse("JavaScript documentation must NOT be blocked", jsResult.isBlocked)
 
+        // 2. Real harmful URLs must still be strictly blocked
+        val adultSearchResult = vn.edu.cva.smartguardian.data.WebFilterList.checkUrl("https://www.google.com/search?q=sex")
+        assertTrue("URL with standalone keyword 'sex' must be blocked", adultSearchResult.isBlocked)
+        assertEquals(vn.edu.cva.smartguardian.data.WebCategory.ADULT, adultSearchResult.category)
+
+        val pornDomainResult = vn.edu.cva.smartguardian.data.WebFilterList.checkUrl("https://pornhub.com/video")
+        assertTrue("pornhub.com must be blocked by domain list", pornDomainResult.isBlocked)
+        assertEquals(vn.edu.cva.smartguardian.data.WebCategory.ADULT, pornDomainResult.category)
+    }
+
+    @Test
+    fun testDynamicPackageVersionFailClosedOnMissingMetadata() {
+        val fakePrefs = FakeSharedPreferences()
+        val fakeCtx = FakeTestContext(fakePrefs)
+
+        // When package manager is null or throws, getDynamicPackageVersion must fail-closed and return null (NEVER return hardcoded strings)
+        val result = UsageTrackerService.getDynamicPackageVersion(fakeCtx)
+        assertNull("getDynamicPackageVersion must fail-closed and return null when package metadata fails", result)
+    }
+
+    @Test
+    fun testWebFilterListPercentEncodingAndUnicodeBoundaries() {
+        // 1. Percent-encoded adult keywords must be decoded and caught
+        val encodedAdultResult = vn.edu.cva.smartguardian.data.WebFilterList.checkUrl("https://example.com/search?q=%73%65%78")
+        assertTrue("Percent-encoded %73%65%78 ('sex') must be blocked", encodedAdultResult.isBlocked)
+        assertEquals(vn.edu.cva.smartguardian.data.WebCategory.ADULT, encodedAdultResult.category)
+
+        // 2. Legitimate compound terms with unicode boundaries must NOT be blocked
+        val unisexResult = vn.edu.cva.smartguardian.data.WebFilterList.checkUrl("https://example.com/product/unisex-fashion-ao-thun")
+        assertFalse("Unisex clothing product must NOT be blocked", unisexResult.isBlocked)
+
+        val sussexResult = vn.edu.cva.smartguardian.data.WebFilterList.checkUrl("https://www.sussex.ac.uk/departments")
+        assertFalse("Sussex University must NOT be blocked", sussexResult.isBlocked)
+
+        // 3. Gambling keywords with dash/space tokens must be blocked
+        val gamblingResult = vn.edu.cva.smartguardian.data.WebFilterList.checkUrl("https://example.com/news/ca-cuoc-online")
+        assertTrue("ca-cuoc keyword must be blocked", gamblingResult.isBlocked)
+        assertEquals(vn.edu.cva.smartguardian.data.WebCategory.GAMBLING, gamblingResult.category)
+    }
+
+    @Test
+    fun testOemPermissionHelperThreeTierFallbackArchitecture() {
+        // 1. Verify manufacturer intents registry contains major OEMs (Xiaomi, Samsung, Oppo, Vivo, Huawei, Asus)
+        assertTrue("OEM intent registry must have >= 10 device-specific intents", vn.edu.cva.smartguardian.util.OemPermissionHelper.OEM_AUTOSTART_INTENTS.size >= 10)
+
+        // 2. Test fallback invocation on test context
+        val fakePrefs = FakeSharedPreferences()
+        val fakeCtx = FakeTestContext(fakePrefs)
+
+        // When activity launcher is invoked on minimal test context without activity manager, must safely execute fallback without crash
+        val launched = vn.edu.cva.smartguardian.util.OemPermissionHelper.openOemBackgroundSettings(fakeCtx)
+        assertTrue("3-tier fallback chain must execute safely and report launch status", launched)
+    }
     private class FakeTestContext(
         val prefs: FakeSharedPreferences
     ) : ContextWrapper(null) {

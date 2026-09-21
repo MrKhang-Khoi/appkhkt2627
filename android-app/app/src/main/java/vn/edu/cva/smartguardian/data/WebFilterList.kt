@@ -3,6 +3,7 @@ package vn.edu.cva.smartguardian.data
 import android.content.Context
 import android.util.Log
 import java.net.URI
+import java.net.URLDecoder
 import java.util.Locale
 import java.util.concurrent.CopyOnWriteArraySet
 
@@ -67,22 +68,26 @@ object WebFilterList {
         "vaytiennhanh-online.com" to WebCategory.SCAM
     )
 
-    // 2. TỪ KHÓA ĐỘC HẠI TRONG URL HOẶC TIÊU ĐỀ (HEURISTIC KEYWORD DETECTION)
-    private val ADULT_KEYWORDS = listOf(
+    // 2. TỪ KHÓA ĐỘC HẠI TRONG URL HOẶC TIÊU ĐỀ (HEURISTIC KEYWORD DETECTION WITH WORD-BOUNDARY)
+    val ADULT_KEYWORDS = listOf(
         "porn", "sex", "xxx", "xvideos", "xnxx", "phimsex", "hentai",
         "jav", "phim18", "gai-goi", "goidau", "loanthuan", "nudity"
     )
 
-    private val GAMBLING_KEYWORDS = listOf(
+    val GAMBLING_KEYWORDS = listOf(
         "nha-cai", "nhacai", "ca-cuoc", "cacuoc", "danh-bac", "danhbac",
         "tai-xiu", "taixiu", "nohu", "no-hu", "lo-de", "lode", "xo-so-online",
         "casino", "quay-hu", "bacarat", "baccarat", "keonhacai"
     )
 
-    private val SCAM_KEYWORDS = listOf(
+    val SCAM_KEYWORDS = listOf(
         "nhan-qua-free", "hack-nick", "nap-the-lau", "mod-skin-mien-phi",
         "kiem-tien-tai-nha", "vay-nong-nhanh"
     )
+
+    private val ADULT_REGEX = Regex("(?<![a-z0-9\\p{L}])(" + ADULT_KEYWORDS.joinToString("|") { Regex.escape(it) } + ")(?![a-z0-9\\p{L}])")
+    private val GAMBLING_REGEX = Regex("(?<![a-z0-9\\p{L}])(" + GAMBLING_KEYWORDS.joinToString("|") { Regex.escape(it) } + ")(?![a-z0-9\\p{L}])")
+    private val SCAM_REGEX = Regex("(?<![a-z0-9\\p{L}])(" + SCAM_KEYWORDS.joinToString("|") { Regex.escape(it) } + ")(?![a-z0-9\\p{L}])")
 
     // 3. DANH SÁCH GIÁO DỤC ĐƯỢC PHÉP TRONG CHẾ ĐỘ GIỜ HỌC (DEFAULT STUDY WHITELIST)
     val DEFAULT_STUDY_WHITELIST = setOf(
@@ -156,6 +161,11 @@ object WebFilterList {
         }
 
         val cleanUrl = rawUrl.trim().lowercase(Locale.ROOT)
+        val decodedUrl = try {
+            URLDecoder.decode(cleanUrl, "UTF-8").lowercase(Locale.ROOT)
+        } catch (e: Exception) {
+            cleanUrl
+        }
 
         // Trích xuất hostname từ URL
         val host = extractHostname(cleanUrl)
@@ -207,36 +217,36 @@ object WebFilterList {
             }
         }
 
-        // 4. Phân tích ngữ nghĩa từ khóa trong đường dẫn URL (Keyword Inspection)
-        for (kw in ADULT_KEYWORDS) {
-            if (cleanUrl.contains(kw)) {
+        // 4. Phân tích ngữ nghĩa từ khóa trong đường dẫn URL (Word Boundary & Percent-Decoded Inspection)
+        val targetsToCheck = if (decodedUrl != cleanUrl) listOf(cleanUrl, decodedUrl) else listOf(cleanUrl)
+        for (target in targetsToCheck) {
+            val adultMatch = ADULT_REGEX.find(target)
+            if (adultMatch != null) {
                 return FilterResult(
                     isBlocked = true,
                     category = WebCategory.ADULT,
                     reason = "Phát hiện từ khóa liên quan đến nội dung người lớn/khiêu dâm không phù hợp với học sinh.",
-                    matchedDomainOrKeyword = kw
+                    matchedDomainOrKeyword = adultMatch.groupValues[1]
                 )
             }
-        }
 
-        for (kw in GAMBLING_KEYWORDS) {
-            if (cleanUrl.contains(kw)) {
+            val gamblingMatch = GAMBLING_REGEX.find(target)
+            if (gamblingMatch != null) {
                 return FilterResult(
                     isBlocked = true,
                     category = WebCategory.GAMBLING,
                     reason = "Phát hiện nội dung cá cược, cờ bạc trực tuyến nguy hại.",
-                    matchedDomainOrKeyword = kw
+                    matchedDomainOrKeyword = gamblingMatch.groupValues[1]
                 )
             }
-        }
 
-        for (kw in SCAM_KEYWORDS) {
-            if (cleanUrl.contains(kw)) {
+            val scamMatch = SCAM_REGEX.find(target)
+            if (scamMatch != null) {
                 return FilterResult(
                     isBlocked = true,
                     category = WebCategory.SCAM,
                     reason = "Phát hiện dấu hiệu lừa đảo, chiếm đoạt tài khoản hoặc nạp thẻ giả mạo.",
-                    matchedDomainOrKeyword = kw
+                    matchedDomainOrKeyword = scamMatch.groupValues[1]
                 )
             }
         }

@@ -63,6 +63,7 @@ import vn.edu.cva.smartguardian.service.UsageTrackerService
 import vn.edu.cva.smartguardian.update.AppUpdateManager
 import vn.edu.cva.smartguardian.update.UpdateInfo
 import vn.edu.cva.smartguardian.location.LocationHelper
+import vn.edu.cva.smartguardian.util.OemPermissionHelper
 
 class MainActivity : AppCompatActivity() {
 
@@ -1300,6 +1301,12 @@ class MainActivity : AppCompatActivity() {
         layoutChildSelectorChips.addView(addChip)
     }
 
+    private fun formatCompactDuration(mins: Long): String {
+        val h = mins / 60
+        val m = mins % 60
+        return if (h > 0 && m > 0) "${h}h ${m}m" else if (h > 0) "${h}h" else "${m}m"
+    }
+
     private fun updateActiveChildDashboard(familyCode: String, child: FamilyChildDevice) {
         val isGirl = child.childName.lowercase().let { it.contains("linh") || it.contains("chi") || it.contains("gái") || it.contains("mai") }
         tvParentChildAvatar.text = if (isGirl) "👧" else "👦"
@@ -1324,8 +1331,8 @@ class MainActivity : AppCompatActivity() {
             tvParentChildStatusBadge.text = "NGOẠI TUYẾN"
             tvParentChildStatusBadge.setTextColor(Color.parseColor("#94A3B8"))
             val minAgo = if (child.lastContact > 0) maxOf(0L, (now - child.lastContact) / 60000L) else 999L
-            val timeText = if (minAgo < 1) "vừa ngắt mạng" else if (minAgo < 60) "ngắt mạng ${minAgo}m trước" else "ngắt mạng ${minAgo / 60}h trước"
-            tvParentChildSubtitle.text = "🔴 LẦN CUỐI GHI NHẬN TRƯỚC KHI NGOẠI TUYẾN ($timeText) • ${child.deviceModel}"
+            val timeText = if (minAgo < 1) "vừa ngắt mạng" else if (minAgo < 60) "${minAgo}m trước" else "${minAgo / 60}h trước"
+            tvParentChildSubtitle.text = "🔴 LẦN CUỐI GHI NHẬN TRƯỚC KHI NGOẠI TUYẾN • ${child.deviceModel} • Ngắt mạng $timeText"
         }
 
         // GPS Location
@@ -1341,6 +1348,8 @@ class MainActivity : AppCompatActivity() {
             val prefix = if (child.isOnline) "Cập nhật" else "[Snapshot Ngoại Tuyến]"
             tvParentLocationTime.text = if (minDiff < 2) (if (child.isOnline) "Vừa cập nhật" else "$prefix Vừa cập nhật") else "$prefix ${minDiff}m trước"
 
+            btnParentOpenMap.text = "🗺️ Xem Vị Trí Trên Bản Đồ"
+            btnParentOpenMap.setTextColor(Color.parseColor("#38BDF8"))
             btnParentOpenMap.setOnClickListener {
                 try {
                     val uri = Uri.parse("geo:$lat,$lng?q=$lat,$lng(${Uri.encode(child.childName)})")
@@ -1359,6 +1368,8 @@ class MainActivity : AppCompatActivity() {
         } else {
             tvParentLocationAddress.text = "Chưa nhận được tọa độ GPS từ thiết bị của ${child.childName}"
             tvParentLocationTime.text = "Chờ tín hiệu..."
+            btnParentOpenMap.text = "📍 Chờ Tín Hiệu GPS..."
+            btnParentOpenMap.setTextColor(Color.parseColor("#64748B"))
             btnParentOpenMap.setOnClickListener {
                 Toast.makeText(this, "Thiết bị con chưa cập nhật vị trí GPS.", Toast.LENGTH_SHORT).show()
             }
@@ -1420,7 +1431,7 @@ class MainActivity : AppCompatActivity() {
             (viewParentProgressEmpty.layoutParams as LinearLayout.LayoutParams).weight = 0f
             viewParentProgressStudy.requestLayout()
 
-            tvParentUsageStats.text = "${prefixUsage}📚 Học tập: ${studyMinutes}m • 💬 Mạng XH: ${socialMinutes}m • 🎮 Game: ${gameMinutes}m"
+            tvParentUsageStats.text = "${prefixUsage}📚 Học tập: ${formatCompactDuration(studyMinutes)} • 💬 Mạng XH: ${formatCompactDuration(socialMinutes)} • 🎮 Game: ${formatCompactDuration(gameMinutes)}"
         } else {
             tvParentScreenTimeTotal.text = "0m"
             (viewParentProgressStudy.layoutParams as LinearLayout.LayoutParams).weight = 0f
@@ -1481,21 +1492,24 @@ class MainActivity : AppCompatActivity() {
                     setTextColor(Color.parseColor("#F8FAFC"))
                     textSize = 14f
                     setTypeface(null, Typeface.BOLD)
+                    isSingleLine = true
                 }
 
                 val tvCat = TextView(this).apply {
-                    text = "${app.categoryLabel} • ${app.durationMinutes} phút"
+                    val timeStr = if (app.lastTimeUsed > 0) " • ${SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(app.lastTimeUsed))}" else ""
+                    text = "${app.categoryLabel}$timeStr"
                     setTextColor(Color.parseColor("#94A3B8"))
                     textSize = 11f
+                    isSingleLine = true
                 }
 
                 infoLayout.addView(tvTitle)
                 infoLayout.addView(tvCat)
 
                 val tvDur = TextView(this).apply {
-                    text = "${app.durationMinutes}m"
+                    text = formatCompactDuration(app.durationMinutes.toLong())
                     setTextColor(Color.parseColor("#38BDF8"))
-                    textSize = 14f
+                    textSize = 13f
                     setTypeface(null, Typeface.BOLD)
                 }
 
@@ -1936,6 +1950,7 @@ class MainActivity : AppCompatActivity() {
         val currentCode = prefs.getString("family_code", "CVA-8A20") ?: "CVA-8A20"
 
         val dialogView = layoutInflater.inflate(R.layout.dialog_child_companion, null)
+        val tvDialogChildAvatar = dialogView.findViewById<TextView>(R.id.tvDialogChildAvatar)
         val tvDialogChildTitle = dialogView.findViewById<TextView>(R.id.tvDialogChildTitle)
         val tvDialogChildSubtitle = dialogView.findViewById<TextView>(R.id.tvDialogChildSubtitle)
         val tvDialogBalanceScore = dialogView.findViewById<TextView>(R.id.tvDialogBalanceScore)
@@ -2051,9 +2066,7 @@ class MainActivity : AppCompatActivity() {
                     tvItemAppStatusBadge.setTextColor(Color.parseColor("#94A3B8"))
                 }
 
-                val h = item.durationMinutes / 60
-                val m = item.durationMinutes % 60
-                tvItemAppDuration.text = if (h > 0) "${h} giờ ${m} phút (${item.durationMinutes}p)" else "${item.durationMinutes} phút"
+                tvItemAppDuration.text = formatCompactDuration(item.durationMinutes.toLong())
 
                 tvItemAppLastUsed.text = if (item.lastTimeUsed > 0) {
                     "${timeFormat.format(Date(item.lastTimeUsed))} hôm nay"
@@ -2185,9 +2198,11 @@ class MainActivity : AppCompatActivity() {
 
 
                                 withContext(Dispatchers.Main) {
-                                    val savedChildName = targetDeviceObj.optString("childName", "")
-                                    val titleName = if (savedChildName.isNotEmpty()) "$savedChildName ($devModel)" else devModel
-                                    tvDialogChildTitle.text = "Giám Sát: $titleName"
+                                    val savedChildName = targetDeviceObj.optString("childName", "").trim()
+                                    val titleName = if (savedChildName.isNotEmpty()) "$savedChildName • $devModel" else devModel
+                                    tvDialogChildTitle.text = titleName
+                                    val lowerName = savedChildName.lowercase()
+                                    tvDialogChildAvatar.text = if (lowerName.contains("loan") || lowerName.contains("mẹ") || lowerName.contains("chị") || lowerName.contains("hoa") || lowerName.contains("linh") || lowerName.contains("nga") || lowerName.contains("mrs")) "👧" else "👦"
                                     tvDialogBalanceScore.text = "⚖️ $balanceScore/100"
 
                                     if (isOnline) {
@@ -2198,7 +2213,7 @@ class MainActivity : AppCompatActivity() {
                                             tvActiveAppTitle.text = "ỨNG DỤNG ĐANG MỞ TRÊN MÀN HÌNH:"
                                             tvActiveAppTitle.setTextColor(Color.parseColor("#FDE047"))
                                             tvActiveAppIcon.text = getAppIcon(activeCat, activePkg, activeName)
-                                            tvActiveAppName.text = "$activeName (Đang mở trên màn hình)"
+                                            tvActiveAppName.text = activeName
                                             tvActiveAppLiveBadge.text = "🟢 ONLINE"
                                             tvActiveAppLiveBadge.setBackgroundColor(Color.parseColor("#15803D"))
                                             tvActiveAppLiveBadge.setTextColor(Color.parseColor("#86EFAC"))
@@ -2220,7 +2235,7 @@ class MainActivity : AppCompatActivity() {
                                         tvActiveAppTitle.text = "LẦN CUỐI GHI NHẬN TRƯỚC KHI NGOẠI TUYẾN:"
                                         tvActiveAppTitle.setTextColor(Color.parseColor("#F87171"))
                                         tvActiveAppIcon.text = if (activePkg != "SCREEN_OFF" && activePkg != "HOME") getAppIcon(activeCat, activePkg, activeName) else "⚪"
-                                        tvActiveAppName.text = if (activePkg != "SCREEN_OFF" && activePkg != "HOME") "$activeName (Trước khi ngắt mạng)" else "Màn hình tắt / Không kết nối"
+                                        tvActiveAppName.text = if (activePkg != "SCREEN_OFF" && activePkg != "HOME") activeName else "Màn hình tắt / Không kết nối"
                                         tvActiveAppLiveBadge.text = "🔴 OFFLINE"
                                         tvActiveAppLiveBadge.setBackgroundColor(Color.parseColor("#7F1D1D"))
                                         tvActiveAppLiveBadge.setTextColor(Color.parseColor("#FCA5A5"))
@@ -2811,76 +2826,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openAppDetailsSettings() {
-        try {
-            Toast.makeText(
-                this,
-                "👉 Bấm dấu 3 chấm ⋮ ở góc trên bên phải -> Chọn 'Cho phép cài đặt bị hạn chế'",
-                Toast.LENGTH_LONG
-            ).show()
-            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                data = Uri.fromParts("package", packageName, null)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            startActivity(intent)
-        } catch (e: Exception) {
-            android.util.Log.w("MainActivity", "openApplicationDetailsSettings fallback: ${e.message}")
-            try {
-                startActivity(Intent(Settings.ACTION_SETTINGS))
-            } catch (ex: Exception) {
-                android.util.Log.w("MainActivity", "Failed to open settings: ${ex.message}")
-            }
-        }
+        OemPermissionHelper.openAppDetails(this)
     }
 
     private fun openAccessibilitySettings() {
-        try {
-            Toast.makeText(
-                this,
-                "👉 Chọn 'Ứng dụng đã tải xuống' -> CVA-SmartGuardian -> BẬT",
-                Toast.LENGTH_LONG
-            ).show()
-            val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            startActivity(intent)
-        } catch (e: Exception) {
-            android.util.Log.w("MainActivity", "openAccessibilitySettings fallback: ${e.message}")
-            try {
-                startActivity(Intent(Settings.ACTION_SETTINGS))
-            } catch (ex: Exception) {
-                android.util.Log.w("MainActivity", "Failed to open settings: ${ex.message}")
-            }
-        }
+        OemPermissionHelper.openAccessibility(this)
     }
 
     private fun openUsageAccessSettings() {
-        try {
-            Toast.makeText(
-                this,
-                "👉 Tìm 'CVA-SmartGuardian' -> BẬT Cho phép",
-                Toast.LENGTH_SHORT
-            ).show()
-            val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
-                data = Uri.parse("package:$packageName")
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            startActivity(intent)
-        } catch (e: Exception) {
-            android.util.Log.w("MainActivity", "openUsageAccessSettings fallback: ${e.message}")
-            try {
-                val fallbackIntent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                startActivity(fallbackIntent)
-            } catch (ex: Exception) {
-                android.util.Log.w("MainActivity", "openUsageAccessSettings root fallback: ${ex.message}")
-                try {
-                    startActivity(Intent(Settings.ACTION_SETTINGS))
-                } catch (finalEx: Exception) {
-                    android.util.Log.w("MainActivity", "Failed to open settings: ${finalEx.message}")
-                }
-            }
-        }
+        OemPermissionHelper.openUsageAccess(this)
     }
 
     private fun handleSmartPermissionWizardClick() {
@@ -2888,35 +2842,32 @@ class MainActivity : AppCompatActivity() {
         val hasA11y = hasAccessibilityPermission()
 
         if (!hasUsage) {
-            // Bước 1 (Cốt lõi - Chuẩn Google Screen Time): Quyền Dữ liệu sử dụng
             AlertDialog.Builder(this)
-                .setTitle("🟢 Kích Hoạt Quyền Giám Sát (Chuẩn Google)")
-                .setMessage("Để theo dõi thời lượng sử dụng và phân loại ứng dụng học tập/giải trí chuẩn xác mà 100% KHÔNG BỊ APP NGÂN HÀNG BÁO ĐỘNG ĐỎ:\n\n1. Bấm 'MỞ CÀI ĐẶT' bên dưới\n2. Tìm 'CVA-SmartGuardian'\n3. BẬT 'Cho phép truy cập dữ liệu sử dụng'\n\n*(Chuẩn Google Digital Wellbeing / Family Link, an toàn tuyệt đối với mọi ứng dụng ngân hàng)*")
-                .setPositiveButton("MỞ CÀI ĐẶT NGAY") { _, _ ->
+                .setTitle("Cấp quyền Dữ liệu sử dụng")
+                .setMessage("Cho phép ứng dụng thống kê thời gian học tập.")
+                .setPositiveButton("Mở cài đặt") { _, _ ->
                     openUsageAccessSettings()
                 }
                 .setNegativeButton("Đóng", null)
                 .show()
         } else if (!hasA11y) {
-            // Bước 2 (Tùy chọn nâng cao): Quyền Trợ năng (Lọc web)
             AlertDialog.Builder(this)
-                .setTitle("🛡️ Chế Độ Chuẩn Google Đang Hoạt Động")
-                .setMessage("✅ Quyền Dữ Liệu: Đang hoạt động chuẩn xác 100%.\n✅ An toàn tuyệt đối với App Ngân Hàng: Không bao giờ bị cảnh báo bảo mật.\n\n👉 TÙY CHỌN NÂNG CAO (Lọc Web):\nBạn có muốn bật thêm Quyền Trợ Năng để lọc và chặn website độc hại trực tiếp trên trình duyệt Chrome không?\n\n*(Lưu ý: Nếu bạn thường xuyên chuyển tiền trên máy này, bạn có thể không cần bật quyền Trợ năng mà app vẫn giám sát thời gian hoàn hảo)*")
-                .setPositiveButton("BẬT TRỢ NĂNG (TÙY CHỌN)") { _, _ ->
+                .setTitle("Cấp quyền Trợ năng")
+                .setMessage("Bật trợ năng để hỗ trợ lọc web an toàn.")
+                .setPositiveButton("Bật trợ năng") { _, _ ->
                     openAccessibilitySettings()
                 }
-                .setNeutralButton("Mở Khóa ⋮ (Xiaomi)") { _, _ ->
-                    openAppDetailsSettings()
+                .setNeutralButton("Cài đặt quyền hãng") { _, _ ->
+                    OemPermissionHelper.openOemBackgroundSettings(this)
                 }
-                .setNegativeButton("Giữ Chuẩn An Toàn", null)
+                .setNegativeButton("Để sau", null)
                 .show()
         } else {
-            // Đã bật cả hai
             AlertDialog.Builder(this)
-                .setTitle("🛡️ Bảo Vệ Toàn Diện & Trợ Năng")
-                .setMessage("Hệ thống đã nhận diện đầy đủ các quyền:\n\n✅ Quyền Dữ Liệu (Chuẩn Google): Đang đo thời lượng khoa học\n✅ Quyền Trợ Năng: Đang hỗ trợ lọc website độc hại\n✅ Bảo Vệ Ngân Hàng: Đã tự động loại trừ mọi app ngân hàng khỏi danh sách giám sát\n\n💡 MẸO GIAO DỊCH NGÂN HÀNG:\nNếu app ngân hàng yêu cầu tắt Trợ năng trước khi chuyển tiền, bạn có thể bấm 'Cài Đặt Trợ Năng' bên dưới để tạm tắt, sau khi giao dịch xong có thể bật lại.")
-                .setPositiveButton("Đã Hiểu", null)
-                .setNeutralButton("Cài Đặt Trợ Năng") { _, _ ->
+                .setTitle("Quyền hệ thống đã đầy đủ")
+                .setMessage("Tất cả quyền giám sát an toàn đã sẵn sàng.")
+                .setPositiveButton("Đã hiểu", null)
+                .setNeutralButton("Cài đặt trợ năng") { _, _ ->
                     openAccessibilitySettings()
                 }
                 .show()
