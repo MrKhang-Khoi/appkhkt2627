@@ -1,10 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/layoutDialogAdaptiveWrapper"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:background="@drawable/bg_dialog_modern"
-    android:padding="20dp">
+    android:background="@android:color/transparent">
+
+    <!-- ADAPTIVE M3 RESPONSIVE CARD CONTAINER: CĂN GIỮA VÀ GIỚI HẠN MAXWIDTH TRÊN TABLET / FOLDABLE -->
+    <LinearLayout
+        android:id="@+id/layoutDialogMainCard"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:orientation="vertical"
+        android:background="@drawable/bg_dialog_modern"
+        android:padding="20dp">
 
     <!-- 1. TIÊU ĐỀ DIALOG & HERO SCORE PILL -->
     <LinearLayout
@@ -96,8 +105,10 @@
 
     <!-- 2. VÙNG CUỘN RESPONSIVE TOÀN DIỆN (CHỐNG OVERFLOW TRÊN MÀN HÌNH NHỎ VÀ FONT SCALE 2.0X) -->
     <androidx.core.widget.NestedScrollView
+        android:id="@+id/layoutDialogScrollView"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
         android:fillViewport="true"
         android:scrollbars="none"
         android:layout_marginBottom="12dp">
@@ -615,4 +626,5 @@
             android:paddingRight="14dp"
             android:textSize="13sp" />
     </LinearLayout>
-</LinearLayout>
+    </LinearLayout>
+</FrameLayout>

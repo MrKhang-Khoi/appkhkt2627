@@ -3671,6 +3671,42 @@ class HardwareInvariantTest {
         assertTrue("layoutDialogError must default to gone", xmlContent.contains("""android:id="@+id/layoutDialogError"""") && xmlContent.contains("""android:visibility="gone""""))
         assertTrue("layoutDialogEmptyState must default to gone", xmlContent.contains("""android:id="@+id/layoutDialogEmptyState"""") && xmlContent.contains("""android:visibility="gone""""))
         assertTrue("layoutTabEmptyState must be present for category tab filtering", xmlContent.contains("""android:id="@+id/layoutTabEmptyState""""))
+
+        // Verify Adaptive M3 Responsive Architecture: FrameLayout root wrapper and centered card
+        assertTrue("Root container must be layoutDialogAdaptiveWrapper FrameLayout", xmlContent.contains("""android:id="@+id/layoutDialogAdaptiveWrapper""""))
+        assertTrue("Card container must be layoutDialogMainCard with center_horizontal gravity",
+            xmlContent.contains("""android:id="@+id/layoutDialogMainCard"""") && xmlContent.contains("""android:layout_gravity="center_horizontal""""))
+        assertTrue("ScrollView must be layoutDialogScrollView with fillViewport and center_horizontal",
+            xmlContent.contains("""android:id="@+id/layoutDialogScrollView"""") &&
+            xmlContent.contains("""android:layout_gravity="center_horizontal"""") &&
+            xmlContent.contains("""android:fillViewport="true""""))
+
+        // Verify Adaptive Width Calculation across Phone, Foldable, Tablet, and Desktop screen widths
+        // 1. Phone portrait (360dp width): full screen width (no artificial padding constraint)
+        val phoneWidthPx = (360 * 2.0f).toInt()
+        val computedPhone = MainActivity.ChildCompanionBottomSheetDialogFragment.computeAdaptiveSheetWidth(phoneWidthPx, 2.0f, maxWidthDp = 640)
+        assertEquals("Phone width 360dp must remain 100% width", phoneWidthPx, computedPhone)
+
+        // 2. Foldable unfolded (840dp width): clamped to 640dp max
+        val foldableWidthPx = (840 * 2.0f).toInt()
+        val computedFoldable = MainActivity.ChildCompanionBottomSheetDialogFragment.computeAdaptiveSheetWidth(foldableWidthPx, 2.0f, maxWidthDp = 640)
+        assertEquals("Foldable width 840dp must clamp to 640dp", (640 * 2.0f).toInt(), computedFoldable)
+        assertTrue("Foldable width must not exceed 640dp", computedFoldable <= (640 * 2.0f).toInt())
+
+        // 3. Tablet (1000dp width): clamped to 640dp max
+        val tabletWidthPx = (1000 * 1.5f).toInt()
+        val computedTablet = MainActivity.ChildCompanionBottomSheetDialogFragment.computeAdaptiveSheetWidth(tabletWidthPx, 1.5f, maxWidthDp = 640)
+        assertEquals("Tablet width 1000dp must clamp to 640dp", (640 * 1.5f).toInt(), computedTablet)
+        assertTrue("Tablet width must not exceed 640dp", computedTablet <= (640 * 1.5f).toInt())
+
+        // 4. Large Desktop / TV (1920dp width): clamped to 640dp max
+        val desktopWidthPx = (1920 * 2.0f).toInt()
+        val computedDesktop = MainActivity.ChildCompanionBottomSheetDialogFragment.computeAdaptiveSheetWidth(desktopWidthPx, 2.0f, maxWidthDp = 640)
+        assertEquals("Desktop width 1920dp must clamp to 640dp", (640 * 2.0f).toInt(), computedDesktop)
+
+        // Verify Font Scale 1.5x - 2.0x Resilience: No fixed-height overflow traps on content text views
+        assertFalse("Layout must not contain fixed-height overflow traps (layout_height=280dp)", xmlContent.contains("""android:layout_height="280dp""""))
+        assertTrue("Touch targets must meet Material minimum height 48dp", xmlContent.contains("""android:minHeight="48dp""""))
     }
 
     @Test

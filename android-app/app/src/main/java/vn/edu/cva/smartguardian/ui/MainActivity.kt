@@ -34,6 +34,7 @@ import android.view.inputmethod.InputMethodManager
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import androidx.coordinatorlayout.widget.CoordinatorLayout
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
@@ -2268,6 +2269,11 @@ class MainActivity : AppCompatActivity() {
                 emptyView: View?,
                 errorView: View?
             ) = renderDialogState(state, loadingView, contentView, emptyView, errorView)
+
+            internal fun computeAdaptiveSheetWidth(screenWidthPx: Int, density: Float, maxWidthDp: Int = 640): Int {
+                val maxAllowedPx = (maxWidthDp * density).toInt()
+                return if (screenWidthPx > maxAllowedPx) maxAllowedPx else screenWidthPx
+            }
         }
 
         override fun onCreateView(
@@ -2282,14 +2288,20 @@ class MainActivity : AppCompatActivity() {
             super.onStart()
             val sheetDialog = dialog as? BottomSheetDialog ?: return
             val bottomSheet = sheetDialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
+            val density = resources.displayMetrics.density
+            val screenWidth = resources.displayMetrics.widthPixels
+            val maxSheetWidth = computeAdaptiveSheetWidth(screenWidth, density, maxWidthDp = 640)
+
             bottomSheet?.let { sheet ->
                 val behavior = BottomSheetBehavior.from(sheet)
-                val density = resources.displayMetrics.density
-                val screenWidth = resources.displayMetrics.widthPixels
-                val maxSheetWidth = (560 * density).toInt()
                 if (screenWidth > maxSheetWidth) {
                     val lp = sheet.layoutParams
                     lp.width = maxSheetWidth
+                    if (lp is CoordinatorLayout.LayoutParams) {
+                        lp.gravity = Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM
+                    } else if (lp is FrameLayout.LayoutParams) {
+                        lp.gravity = Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM
+                    }
                     sheet.layoutParams = lp
                 }
                 behavior.maxWidth = maxSheetWidth
@@ -2297,8 +2309,14 @@ class MainActivity : AppCompatActivity() {
                 behavior.skipCollapsed = true
                 sheet.setBackgroundResource(android.R.color.transparent)
             }
-            sheetDialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-            sheetDialog.window?.setDimAmount(0.65f)
+            sheetDialog.window?.let { win ->
+                win.setBackgroundDrawableResource(android.R.color.transparent)
+                win.setDimAmount(0.65f)
+                win.setGravity(Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM)
+                if (screenWidth > maxSheetWidth) {
+                    win.setLayout(maxSheetWidth, ViewGroup.LayoutParams.WRAP_CONTENT)
+                }
+            }
         }
 
         override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -2310,6 +2328,21 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(ctx, "Chưa thiết lập mã gia đình!", Toast.LENGTH_SHORT).show()
                 dismissAllowingStateLoss()
                 return
+            }
+
+            // Adaptive M3 Responsive: Căn giữa và áp đặt maxWidth 640dp trên màn hình lớn / tablet / foldable
+            val layoutDialogMainCard = view.findViewById<LinearLayout>(R.id.layoutDialogMainCard)
+            val density = resources.displayMetrics.density
+            val screenWidth = resources.displayMetrics.widthPixels
+            val maxCardWidth = computeAdaptiveSheetWidth(screenWidth, density, maxWidthDp = 640)
+            if (screenWidth > maxCardWidth) {
+                layoutDialogMainCard?.layoutParams?.let { lp ->
+                    lp.width = maxCardWidth
+                    if (lp is FrameLayout.LayoutParams) {
+                        lp.gravity = Gravity.CENTER_HORIZONTAL
+                    }
+                    layoutDialogMainCard.layoutParams = lp
+                }
             }
 
             val ivDialogChildAvatar = view.findViewById<ImageView>(R.id.ivDialogChildAvatar)
