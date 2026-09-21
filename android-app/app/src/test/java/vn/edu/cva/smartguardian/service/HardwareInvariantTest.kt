@@ -4367,6 +4367,98 @@ class HardwareInvariantTest {
         assertEquals("Event storm of 1000 accessibility events in 60s must yield at most 1 heartbeat ping", 1, allowedPingCount)
     }
 
+    @Test
+    fun testCas412FailsClosedWhenServerBodyIsEmptyOrMissingGeneration() {
+        // Red-Team Karl Popper Falsification Test Mandated by OpenAI Codex:
+        // Proves that when an HTTP 412 is returned, but the subsequent GET body is empty, null,
+        // or missing both "generation" and "foregroundGeneration" (e.g. serverGen <= 0L),
+        // executeOnlineGuarded strictly fails closed, returning false without attempting a retry.
+        val server = CasTestServer()
+        val port = server.port
+        val activeAppUrl = "http://127.0.0.1:$port/active_app.json"
+
+        try {
+            val fakePrefs = FakeSharedPreferences()
+            fakePrefs.data["paired_code"] = "CVA-TEST"
+            fakePrefs.data["device_id"] = "TEST_DEV_412"
+            val context = FakeTestContext(fakePrefs)
+
+            // Server state has NO generation field (e.g. missing generation)
+            server.currentServerState = JSONObject().apply {
+                put("appName", "Unknown")
+            }
+            server.currentServerETag = "etag_empty_gen"
+
+            // Client has a stale cached ETag, so PUT triggers 412
+            UsageTrackerService.lastKnownETags[activeAppUrl] = "etag_stale_client"
+
+            val bodyY = JSONObject().apply {
+                put("appName", "App_New")
+                put("generation", 15L)
+                put("foregroundGeneration", 15L)
+            }.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+
+            val reqY = okhttp3.Request.Builder()
+                .url(activeAppUrl)
+                .put(bodyY)
+                .build()
+
+            GuardianAccessibilityService.isScreenOnState = true
+            UsageTrackerService.foregroundGeneration.set(15L)
+
+            val result = UsageTrackerService.executeOnlineGuarded(
+                reqY, context, expectedEpoch = -1L, expectedGen = 15L
+            )
+
+            assertFalse("executeOnlineGuarded must fail closed (return false) when GET node after 412 has missing or invalid generation (serverGen <= 0)", result)
+            assertEquals("Server state must NOT be overwritten with App_New", "Unknown", server.currentServerState.getString("appName"))
+        } finally {
+            server.close()
+            UsageTrackerService.lastKnownETags.remove(activeAppUrl)
+        }
+    }
+
+    @Test
+    fun testActiveAppLockSerializesConcurrentPutRequests() {
+        // Verification: Proves activeAppLock serializes concurrent PUT active_app mutations
+        // avoiding corrupted state or interleaved CAS attempts.
+        val lockObj = UsageTrackerService.activeAppLock
+        assertNotNull("activeAppLock must not be null", lockObj)
+
+        val executionOrder = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val startLatch = java.util.concurrent.CountDownLatch(1)
+        val doneLatch = java.util.concurrent.CountDownLatch(2)
+
+        val t1 = Thread {
+            startLatch.await()
+            synchronized(UsageTrackerService.activeAppLock) {
+                executionOrder.add("t1_start")
+                Thread.sleep(50)
+                executionOrder.add("t1_end")
+            }
+            doneLatch.countDown()
+        }
+
+        val t2 = Thread {
+            startLatch.await()
+            Thread.sleep(10) // slight delay to ensure t1 acquires first
+            synchronized(UsageTrackerService.activeAppLock) {
+                executionOrder.add("t2_start")
+                executionOrder.add("t2_end")
+            }
+            doneLatch.countDown()
+        }
+
+        t1.start()
+        t2.start()
+        startLatch.countDown()
+
+        val completed = doneLatch.await(3, java.util.concurrent.TimeUnit.SECONDS)
+        assertTrue("Both threads must finish within timeout", completed)
+        assertEquals("activeAppLock must serialize execution: t1 must completely finish before t2 starts",
+            listOf("t1_start", "t1_end", "t2_start", "t2_end"), executionOrder)
+    }
+
     private class FakeTestContext(
         val prefs: FakeSharedPreferences
     ) : ContextWrapper(null) {

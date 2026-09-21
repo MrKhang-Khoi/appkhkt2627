@@ -219,6 +219,7 @@ class UsageTrackerService : Service() {
         val isHeartbeatInFlight = java.util.concurrent.atomic.AtomicBoolean(false)
         val foregroundGeneration = java.util.concurrent.atomic.AtomicLong(0L)
         internal val lastKnownETags = java.util.concurrent.ConcurrentHashMap<String, String>()
+        internal val activeAppLock = Any()
         private const val MAX_RECORDED_SESSIONS = 500
 
         internal class LruSessionSet(
@@ -716,7 +717,12 @@ class UsageTrackerService : Service() {
                         Log.w("UsageTrackerService", "JSON parse on Pre-GET: ${e.message}")
                         null
                     }
-                    val gGen = gJson?.optLong("foregroundGeneration", -1L) ?: -1L
+                    val gGen = when {
+                        gJson == null -> -1L
+                        gJson.has("generation") -> gJson.optLong("generation", -1L)
+                        gJson.has("foregroundGeneration") -> gJson.optLong("foregroundGeneration", -1L)
+                        else -> -1L
+                    }
                     Pair(gGen, gEtag)
                 }
             } catch (e: Exception) {
@@ -730,7 +736,7 @@ class UsageTrackerService : Service() {
                 lastKnownETags[urlStr] = freshEtag
             }
 
-            if (serverGen >= expectedGen && expectedGen != -1L) {
+            if (serverGen >= expectedGen && expectedGen != -1L && serverGen > 0L) {
                 Log.w("UsageTrackerService", "CAS Pre-GET Aborted: Server already holds newer/equal generation ($serverGen >= $expectedGen) at $urlStr. Stale overwrite safely prevented!")
                 return Pair(null, false)
             }
@@ -758,7 +764,14 @@ class UsageTrackerService : Service() {
             expectedEpoch: Long = -1L,
             expectedGen: Long = -1L
         ): Boolean {
-            // Fencing trước khi gửi request
+            val isPutActiveApp = request.method == "PUT" && request.url.toString().contains("active_app")
+            if (isPutActiveApp) {
+                return synchronized(activeAppLock) {
+                    executeActiveAppGuardedLocked(request, context, expectedEpoch, expectedGen)
+                }
+            }
+
+            // Fencing trước khi gửi request cho non-active_app
             if (!isHardwareOnlineValid(context, expectedEpoch)) {
                 Log.w("UsageTrackerService", "Hủy bỏ request online trước khi gửi do phần cứng không online")
                 return false
@@ -768,23 +781,7 @@ class UsageTrackerService : Service() {
                 return false
             }
 
-            // Server-Side CAS Header Enrichment for active_app mutations:
-            // Bắt buộc phải có ETag hợp lệ trước khi gửi PUT active_app (chuẩn CAS tuyệt đối)
-            val isPutActiveApp = request.method == "PUT" && request.url.toString().contains("active_app")
-            val effectiveRequest = if (isPutActiveApp) {
-                val (etag, shouldProceed) = ensureFreshActiveAppETag(request.url, expectedEpoch, expectedGen, context)
-                if (!shouldProceed || etag.isNullOrEmpty()) {
-                    return false
-                }
-                request.newBuilder()
-                    .header("X-Firebase-ETag", "true")
-                    .header("if-match", etag)
-                    .build()
-            } else {
-                request
-            }
-
-            val call = sharedHttpClient.newCall(effectiveRequest)
+            val call = sharedHttpClient.newCall(request)
             activeOnlineCalls.add(call)
 
             // Double check: Fencing ngay sau khi đăng ký call để triệt tiêu race condition nếu màn hình tắt trong tích tắc trước đó
@@ -804,13 +801,74 @@ class UsageTrackerService : Service() {
             try {
                 val response = call.execute()
                 response.use { resp ->
+                    // Fencing ngay sau khi nhận phản hồi từ server
+                    if (!isHardwareOnlineValid(context, expectedEpoch)) {
+                        Log.w("UsageTrackerService", "Phần cứng đã ngắt trong khi request đang gửi! Hủy bỏ kết quả online.")
+                        return false
+                    }
+                    if (expectedGen != -1L && foregroundGeneration.get() != expectedGen) {
+                        Log.w("UsageTrackerService", "App đã thay đổi thế hệ trong khi request đang gửi! Hủy bỏ kết quả online.")
+                        return false
+                    }
+                    return resp.isSuccessful
+                }
+            } catch (e: Exception) {
+                Log.w("UsageTrackerService", "executeOnlineGuarded failed/cancelled: ${e.message}")
+                return false
+            } finally {
+                activeOnlineCalls.remove(call)
+            }
+        }
+
+        private fun executeActiveAppGuardedLocked(
+            request: okhttp3.Request,
+            context: Context,
+            expectedEpoch: Long,
+            expectedGen: Long
+        ): Boolean {
+            val isPutActiveApp = true
+            if (!isHardwareOnlineValid(context, expectedEpoch)) {
+                Log.w("UsageTrackerService", "Hủy bỏ active_app online do phần cứng không online")
+                return false
+            }
+            if (expectedGen != -1L && foregroundGeneration.get() != expectedGen) {
+                Log.w("UsageTrackerService", "Hủy bỏ active_app online do stale foreground generation ($expectedGen != ${foregroundGeneration.get()})")
+                return false
+            }
+
+            val (etag, shouldProceed) = ensureFreshActiveAppETag(request.url, expectedEpoch, expectedGen, context)
+            if (!shouldProceed || etag.isNullOrEmpty()) {
+                return false
+            }
+            val effectiveRequest = request.newBuilder()
+                .header("X-Firebase-ETag", "true")
+                .header("if-match", etag)
+                .build()
+
+            val call = sharedHttpClient.newCall(effectiveRequest)
+            activeOnlineCalls.add(call)
+
+            if (!isHardwareOnlineValid(context, expectedEpoch)) {
+                activeOnlineCalls.remove(call)
+                call.cancel()
+                Log.w("UsageTrackerService", "Hủy bỏ active_app sau khi đăng ký do phần cứng đã ngắt")
+                return false
+            }
+            if (expectedGen != -1L && foregroundGeneration.get() != expectedGen) {
+                activeOnlineCalls.remove(call)
+                call.cancel()
+                Log.w("UsageTrackerService", "Hủy bỏ active_app sau khi đăng ký do stale foreground generation ($expectedGen != ${foregroundGeneration.get()})")
+                return false
+            }
+
+            try {
+                val response = call.execute()
+                response.use { resp ->
                     val etagHeader = resp.header("ETag")
-                    if (isPutActiveApp && etagHeader != null) {
+                    if (etagHeader != null) {
                         lastKnownETags[request.url.toString()] = etagHeader
                     }
 
-                    // Server-Side CAS Failure Handling (HTTP 412 Precondition Failed):
-                    // Bắt buộc GET lại node kèm X-Firebase-ETag: true để đọc body và ETag mới nhất từ server
                     if (isPutActiveApp && resp.code == 412) {
                         val getReq = okhttp3.Request.Builder()
                             .url(request.url)
@@ -825,7 +883,12 @@ class UsageTrackerService : Service() {
                                 val gEtag = gResp.header("ETag")
                                 val gBody = gResp.body?.string() ?: ""
                                 val gJson = try { JSONObject(gBody) } catch (e: Exception) { null }
-                                val gGen = gJson?.optLong("foregroundGeneration", -1L) ?: -1L
+                                val gGen = when {
+                                    gJson == null -> -1L
+                                    gJson.has("generation") -> gJson.optLong("generation", -1L)
+                                    gJson.has("foregroundGeneration") -> gJson.optLong("foregroundGeneration", -1L)
+                                    else -> -1L
+                                }
                                 Pair(gGen, gEtag)
                             }
                         } catch (e: Exception) {
@@ -839,12 +902,13 @@ class UsageTrackerService : Service() {
                             lastKnownETags[request.url.toString()] = freshEtag
                         }
 
-                        if (serverGen >= expectedGen && expectedGen != -1L) {
-                            Log.w("UsageTrackerService", "CAS Aborted: Server already holds newer/equal generation ($serverGen >= $expectedGen) at ${request.url}. Stale overwrite safely prevented at server!")
+                        // FAIL-CLOSED: Bắt buộc hủy nếu serverGen <= 0L (không đọc được generation) hoặc serverGen >= expectedGen
+                        if (serverGen <= 0L || (expectedGen != -1L && serverGen >= expectedGen)) {
+                            Log.w("UsageTrackerService", "CAS 412 Aborted: serverGen=$serverGen, expectedGen=$expectedGen. Fail-closed!")
                             return false
                         }
 
-                        // Chỉ khi serverGen < expectedGen VÀ freshEtag != null VÀ phần cứng online VÀ expectedGen vẫn hợp lệ:
+                        // Chỉ retry khi serverGen > 0L && serverGen < expectedGen && freshEtag != null && expectedGen còn hiệu lực
                         if (freshEtag != null && isHardwareOnlineValid(context, expectedEpoch) && (expectedGen == -1L || foregroundGeneration.get() == expectedGen)) {
                             Log.i("UsageTrackerService", "CAS Retry: Server generation is older ($serverGen < $expectedGen). Retrying with fresh server ETag...")
                             val retryReq = request.newBuilder()
@@ -869,7 +933,6 @@ class UsageTrackerService : Service() {
                         return false
                     }
 
-                    // Fencing ngay sau khi nhận phản hồi từ server
                     if (!isHardwareOnlineValid(context, expectedEpoch)) {
                         Log.w("UsageTrackerService", "Phần cứng đã ngắt trong khi request đang gửi! Hủy bỏ kết quả online.")
                         return false
@@ -881,7 +944,7 @@ class UsageTrackerService : Service() {
                     return resp.isSuccessful
                 }
             } catch (e: Exception) {
-                Log.w("UsageTrackerService", "executeOnlineGuarded failed/cancelled: ${e.message}")
+                Log.w("UsageTrackerService", "executeActiveAppGuardedLocked failed/cancelled: ${e.message}")
                 return false
             } finally {
                 activeOnlineCalls.remove(call)
@@ -894,27 +957,73 @@ class UsageTrackerService : Service() {
             expectedEpoch: Long = -1L,
             expectedGen: Long = -1L
         ): HttpResult? {
+            val isPutActiveApp = request.method == "PUT" && request.url.toString().contains("active_app")
+            if (isPutActiveApp) {
+                return synchronized(activeAppLock) {
+                    executeActiveAppHttpGuardedLocked(request, context, expectedEpoch, expectedGen)
+                }
+            }
+
             if (!isHardwareOnlineValid(context, expectedEpoch)) return null
             if (expectedGen != -1L && foregroundGeneration.get() != expectedGen) return null
 
-            val isPutActiveApp = request.method == "PUT" && request.url.toString().contains("active_app")
-            val effectiveRequest = if (isPutActiveApp) {
-                val (etag, shouldProceed) = ensureFreshActiveAppETag(request.url, expectedEpoch, expectedGen, context)
-                if (!shouldProceed || etag.isNullOrEmpty()) {
-                    return null
-                }
-                request.newBuilder()
-                    .header("X-Firebase-ETag", "true")
-                    .header("if-match", etag)
-                    .build()
-            } else {
-                request
+            val call = sharedHttpClient.newCall(request)
+            activeOnlineCalls.add(call)
+
+            if (!isHardwareOnlineValid(context, expectedEpoch)) {
+                activeOnlineCalls.remove(call)
+                call.cancel()
+                return null
             }
+            if (expectedGen != -1L && foregroundGeneration.get() != expectedGen) {
+                activeOnlineCalls.remove(call)
+                call.cancel()
+                return null
+            }
+
+            try {
+                val response = call.execute()
+                response.use { resp ->
+                    if (!isHardwareOnlineValid(context, expectedEpoch)) return null
+                    if (expectedGen != -1L && foregroundGeneration.get() != expectedGen) return null
+                    val bodyString = resp.body?.string()
+                    return HttpResult(
+                        code = resp.code,
+                        body = bodyString,
+                        etag = resp.header("ETag"),
+                        isSuccessful = resp.isSuccessful
+                    )
+                }
+            } catch (e: Exception) {
+                Log.w("UsageTrackerService", "executeOnlineHttpGuarded failed/cancelled: ${e.message}")
+                return null
+            } finally {
+                activeOnlineCalls.remove(call)
+            }
+        }
+
+        private fun executeActiveAppHttpGuardedLocked(
+            request: okhttp3.Request,
+            context: Context,
+            expectedEpoch: Long,
+            expectedGen: Long
+        ): HttpResult? {
+            val isPutActiveApp = true
+            if (!isHardwareOnlineValid(context, expectedEpoch)) return null
+            if (expectedGen != -1L && foregroundGeneration.get() != expectedGen) return null
+
+            val (etag, shouldProceed) = ensureFreshActiveAppETag(request.url, expectedEpoch, expectedGen, context)
+            if (!shouldProceed || etag.isNullOrEmpty()) {
+                return null
+            }
+            val effectiveRequest = request.newBuilder()
+                .header("X-Firebase-ETag", "true")
+                .header("if-match", etag)
+                .build()
 
             val call = sharedHttpClient.newCall(effectiveRequest)
             activeOnlineCalls.add(call)
 
-            // Double check: Fencing ngay sau khi đăng ký call
             if (!isHardwareOnlineValid(context, expectedEpoch)) {
                 activeOnlineCalls.remove(call)
                 call.cancel()
@@ -930,9 +1039,9 @@ class UsageTrackerService : Service() {
             try {
                 val response = call.execute()
                 response.use { resp ->
-                    val etag = resp.header("ETag")
-                    if (isPutActiveApp && etag != null) {
-                        lastKnownETags[request.url.toString()] = etag
+                    val respEtag = resp.header("ETag")
+                    if (respEtag != null) {
+                        lastKnownETags[request.url.toString()] = respEtag
                     }
 
                     if (isPutActiveApp && resp.code == 412) {
@@ -949,7 +1058,12 @@ class UsageTrackerService : Service() {
                                 val gEtag = gResp.header("ETag")
                                 val gBody = gResp.body?.string() ?: ""
                                 val gJson = try { JSONObject(gBody) } catch (e: Exception) { null }
-                                val gGen = gJson?.optLong("foregroundGeneration", -1L) ?: -1L
+                                val gGen = when {
+                                    gJson == null -> -1L
+                                    gJson.has("generation") -> gJson.optLong("generation", -1L)
+                                    gJson.has("foregroundGeneration") -> gJson.optLong("foregroundGeneration", -1L)
+                                    else -> -1L
+                                }
                                 Triple(gGen, gEtag, gBody)
                             }
                         } catch (e: Exception) {
@@ -962,8 +1076,8 @@ class UsageTrackerService : Service() {
                             lastKnownETags[request.url.toString()] = freshEtag
                         }
 
-                        if (serverGen >= expectedGen && expectedGen != -1L) {
-                            Log.w("UsageTrackerService", "CAS Aborted: Server holds newer/equal generation ($serverGen >= $expectedGen).")
+                        if (serverGen <= 0L || (expectedGen != -1L && serverGen >= expectedGen)) {
+                            Log.w("UsageTrackerService", "CAS Aborted: Server holds invalid or newer/equal generation ($serverGen, expectedGen=$expectedGen).")
                             return HttpResult(code = resp.code, body = bodyStr, etag = freshEtag, isSuccessful = false)
                         }
                     }
@@ -974,12 +1088,12 @@ class UsageTrackerService : Service() {
                     return HttpResult(
                         code = resp.code,
                         body = bodyString,
-                        etag = etag,
+                        etag = respEtag,
                         isSuccessful = resp.isSuccessful
                     )
                 }
             } catch (e: Exception) {
-                Log.w("UsageTrackerService", "executeOnlineHttpGuarded failed/cancelled: ${e.message}")
+                Log.w("UsageTrackerService", "executeActiveAppHttpGuardedLocked failed/cancelled: ${e.message}")
                 return null
             } finally {
                 activeOnlineCalls.remove(call)
@@ -1765,6 +1879,7 @@ class UsageTrackerService : Service() {
                     .apply()
 
                 val currentGen = foregroundGeneration.incrementAndGet()
+                lastKnownETags.clear()
                 // Active Cancellation: Hủy bỏ ngay các kết nối mạng in-flight của thế hệ cũ
                 cancelActiveOnlineCalls()
 
@@ -1777,6 +1892,7 @@ class UsageTrackerService : Service() {
                     put("categoryLabel", targetLabel)
                     put("timestamp", System.currentTimeMillis())
                     put("isForeground", effectiveOnline && isForeground)
+                    put("generation", currentGen)
                     put("foregroundGeneration", currentGen)
                     if (targetEpoch != -1L) put("telemetryEpoch", targetEpoch)
                 }
@@ -1802,6 +1918,7 @@ class UsageTrackerService : Service() {
                         put("lastHeartbeat", activeJson.getLong("timestamp"))
                         put("lastSync", activeJson.getLong("timestamp"))
                         put("online", true)
+                        put("generation", currentGen)
                         put("foregroundGeneration", currentGen)
                         if (targetEpoch != -1L) put("telemetryEpoch", targetEpoch)
                     }
@@ -2601,7 +2718,6 @@ class UsageTrackerService : Service() {
                 Intent.ACTION_SCREEN_OFF -> {
                     Log.d("UsageTrackerService", "Phát hiện tắt màn hình (SCREEN_OFF): Đóng băng bộ đếm và cập nhật active_app")
                     GuardianAccessibilityService.isScreenOnState = false
-                    val screenOffEpoch = GuardianAccessibilityService.telemetryEpoch.incrementAndGet()
                     lastHeartbeatSentTimestamp.set(0L)
                     cancelActiveOnlineCalls()
 
@@ -2609,9 +2725,12 @@ class UsageTrackerService : Service() {
                     closePolledSession(ctx, "SCREEN_OFF")
 
                     val accessService = GuardianAccessibilityService.instance
-                    if (accessService != null) {
-                        accessService.handleScreenOff(screenOffEpoch)
+                    val screenOffEpoch = if (accessService != null) {
+                        accessService.handleScreenOff()
                     } else {
+                        GuardianAccessibilityService.telemetryEpoch.incrementAndGet()
+                    }
+                    if (accessService == null) {
                         sendUrgentOfflineStatus(ctx, screenOffEpoch)
 
                         val prefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -2655,10 +2774,11 @@ class UsageTrackerService : Service() {
                     val isHardwareOnline = (pm?.isInteractive == true && km?.isKeyguardLocked != true)
                     GuardianAccessibilityService.isScreenOnState = isHardwareOnline
                     lastDispatchedOfflineEpoch.set(-1L)
-                    val userPresentEpoch = GuardianAccessibilityService.telemetryEpoch.incrementAndGet()
                     val accessService = GuardianAccessibilityService.instance
-                    if (accessService != null) {
-                        accessService.handleScreenOn(userPresentEpoch)
+                    val userPresentEpoch = if (accessService != null) {
+                        accessService.handleScreenOn()
+                    } else {
+                        GuardianAccessibilityService.telemetryEpoch.incrementAndGet()
                     }
                     if (isHardwareOnline) {
                         sendHeartbeatPing(ctx, force = true)

@@ -337,11 +337,11 @@ class GuardianAccessibilityService : AccessibilityService() {
         }
     }
 
-    fun handleScreenOff(passedEpoch: Long = -1L) {
-        // 1. NGAY LẬP TỨC và ĐỒNG BỘ: Ngắt cờ phần cứng, hủy heartbeat, xác lập epoch duy nhất và ngắt socket mạng online in-flight
+    fun handleScreenOff(): Long {
+        // 1. NGAY LẬP TỨC và ĐỒNG BỘ: Ngắt cờ phần cứng, hủy heartbeat, tăng epoch duy nhất và ngắt socket mạng online in-flight
         isScreenOnState = false
         heartbeatJob?.cancel()
-        val currentEpoch = if (passedEpoch != -1L) passedEpoch else telemetryEpoch.incrementAndGet()
+        val currentEpoch = telemetryEpoch.incrementAndGet()
         UsageTrackerService.foregroundGeneration.incrementAndGet() // Triệt tiêu ngay lập tức mọi foreground telemetry in-flight
         UsageTrackerService.cancelActiveOnlineCalls()
 
@@ -393,9 +393,10 @@ class GuardianAccessibilityService : AccessibilityService() {
                     ?.apply()
             }
         }
+        return currentEpoch
     }
 
-    fun handleScreenOn(passedEpoch: Long = -1L) {
+    fun handleScreenOn(): Long {
         val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
         val km = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
         val isHardwareOnline = (pm?.isInteractive == true && km?.isKeyguardLocked != true)
@@ -404,11 +405,12 @@ class GuardianAccessibilityService : AccessibilityService() {
             isScreenOnState = false
             heartbeatJob?.cancel()
             Log.d("GuardianAccess", "handleScreenOn: Thiết bị chưa online hoàn toàn (isInteractive=${pm?.isInteractive}, isKeyguardLocked=${km?.isKeyguardLocked}) -> Chưa kích hoạt heartbeat")
-            return
+            return telemetryEpoch.get()
         }
 
-        // Tăng epoch trước khi bật cờ isScreenOnState để đảm bảo mọi coroutine SCREEN_OFF trước đó lập tức bị stale
-        val currentEpoch = if (passedEpoch != -1L) passedEpoch else telemetryEpoch.incrementAndGet()
+        // Bất biến chuyển trạng thái phần cứng (Hardware State Transition Invariant - Codex Mandate):
+        // Mọi lần chuyển phần cứng OFFLINE -> ONLINE bắt buộc phải incrementAndGet() dưới state transition nguyên tử!
+        val currentEpoch = telemetryEpoch.incrementAndGet()
         isScreenOnState = true
         UsageTrackerService.lastDispatchedOfflineEpoch.set(-1L)
         UsageTrackerService.cancelActiveOfflineCalls()
@@ -447,6 +449,7 @@ class GuardianAccessibilityService : AccessibilityService() {
                 }
             }
         }
+        return currentEpoch
     }
 
     private fun startPeriodicHeartbeat() {

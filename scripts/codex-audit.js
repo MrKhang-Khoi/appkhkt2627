@@ -239,12 +239,12 @@ if (fs.existsSync(guardianAccessFile) && fs.existsSync(usageTrackerFile) && fs.e
   const hasUrgentOffline = utCode.includes('fun sendUrgentOfflineStatus(') && gaCode.includes('UsageTrackerService.sendUrgentOfflineStatus(this, currentEpoch)');
 
   // Kiểm tra epoch increment duy nhất 1 lần (loại bỏ tăng kép giữa Receiver và AccessibilityService)
-  const hasSingleEpochScreenOff = utCode.includes('accessService.handleScreenOff(screenOffEpoch)') &&
-    gaCode.includes('fun handleScreenOff(passedEpoch: Long = -1L)') &&
-    gaCode.includes(`val currentEpoch = if (passedEpoch ${NEQ} -1L) passedEpoch else telemetryEpoch.incrementAndGet()`);
-  const hasSingleEpochScreenOn = utCode.includes('accessService.handleScreenOn(userPresentEpoch)') &&
-    gaCode.includes('fun handleScreenOn(passedEpoch: Long = -1L)') &&
-    gaCode.includes(`val currentEpoch = if (passedEpoch ${NEQ} -1L) passedEpoch else telemetryEpoch.incrementAndGet()`);
+  const hasSingleEpochScreenOff = utCode.includes('accessService.handleScreenOff()') &&
+    gaCode.includes('fun handleScreenOff(): Long') &&
+    gaCode.includes('val currentEpoch = telemetryEpoch.incrementAndGet()');
+  const hasSingleEpochScreenOn = utCode.includes('accessService.handleScreenOn()') &&
+    gaCode.includes('fun handleScreenOn(): Long') &&
+    gaCode.includes('val currentEpoch = telemetryEpoch.incrementAndGet()');
 
   // Kiểm tra isForegroundApp ủy quyền cho evaluateForegroundEvidence xác minh danh tính và importance
   const isForegroundFn = gaCode.substring(gaCode.indexOf('private fun isForegroundApp('), gaCode.indexOf('suspend fun handleWindowStateChangedLocked('));
@@ -872,7 +872,9 @@ try {
     'testZeroWindowEvidenceWithStaleOrRecentUsageStatsStrictlyFailsClosed',
     'testSplitScreenWithMatchingRootAndConflictingActiveWindowStrictlyFailsClosed',
     'testUnifiedHeartbeatRateLimiterEnforcesMinimum60SecondsInterval',
-    'testAccessibilityEventStormDoesNotSpamHeartbeat'
+    'testAccessibilityEventStormDoesNotSpamHeartbeat',
+    'testCas412FailsClosedWhenServerBodyIsEmptyOrMissingGeneration',
+    'testActiveAppLockSerializesConcurrentPutRequests'
   ];
 
   for (const testName of requiredProductionFeatureTests) {
