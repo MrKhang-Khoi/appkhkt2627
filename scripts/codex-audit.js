@@ -354,11 +354,14 @@ if (fs.existsSync(guardianAccessFile) && fs.existsSync(usageTrackerFile) && fs.e
     testCode.includes('testScreenOffInterleavedWithRapidScreenOnPreservesAppSessionDurablyWithoutLoss');
 
   const hasDurablePendingQueue = utCode.includes('PREF_PENDING_SESSIONS_JSON') &&
-    utCode.includes('PENDING_SESSIONS_JOURNAL_FILE') &&
+    utCode.includes('PENDING_SESSIONS_WAL_FILE') &&
+    utCode.includes('computeCrc32Hex') &&
     utCode.includes('fun flushPendingSessions(') &&
     utCode.includes('fun enqueuePendingSession(') &&
     testCode.includes('testRecordAppSessionEnqueuesToPendingQueueOnCommitFailureAndFlushesSuccessfully') &&
-    testCode.includes('testEnqueuePendingSessionSurvivesProcessKillViaDurableFileJournalWhenSharedPrefsFails');
+    testCode.includes('testEnqueuePendingSessionSurvivesProcessKillViaDurableFileJournalWhenSharedPrefsFails') &&
+    testCode.includes('testWalJournalRecoversValidSessionsWhenFileIsTruncatedOrCorruptAndPreservesSessionAWhenAddingSessionB') &&
+    testCode.includes('testWalJournalRejectsMismatchedCrcAndDoesNotExecuteCorruptRecord');
 
   if (!hasVolatileScreen || !hasTelemetryEpoch || !hasSyncScreenOff || !hasConcurrentCallSet ||
       !hasUrgentOffline || !hasSingleEpochScreenOff || !hasSingleEpochScreenOn || !noEarlyRejection ||
@@ -916,7 +919,9 @@ try {
     'testScreenOffTransitionsImmediatelyWithoutWaitingForScreenOnDiskIo',
     'testScreenOffInterleavedWithRapidScreenOnPreservesAppSessionDurablyWithoutLoss',
     'testRecordAppSessionEnqueuesToPendingQueueOnCommitFailureAndFlushesSuccessfully',
-    'testEnqueuePendingSessionSurvivesProcessKillViaDurableFileJournalWhenSharedPrefsFails'
+    'testEnqueuePendingSessionSurvivesProcessKillViaDurableFileJournalWhenSharedPrefsFails',
+    'testWalJournalRecoversValidSessionsWhenFileIsTruncatedOrCorruptAndPreservesSessionAWhenAddingSessionB',
+    'testWalJournalRejectsMismatchedCrcAndDoesNotExecuteCorruptRecord'
   ];
 
   for (const testName of requiredProductionFeatureTests) {

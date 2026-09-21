@@ -56,6 +56,13 @@ class UsageTrackerService : Service() {
         val isSuccessful: Boolean
     )
 
+    data class PendingSessionRecord(
+        val packageName: String,
+        val durationMs: Long,
+        val sessionToken: String,
+        val timestamp: Long
+    )
+
     object LocationProtocol {
         const val COMMAND_LOCATE_NOW = "locate_now"
         const val STATUS_PENDING = "PENDING"
@@ -202,6 +209,7 @@ class UsageTrackerService : Service() {
         const val PREFS_NAME = "cva_guardian_stats"
         const val PREF_PENDING_SESSIONS_JSON = "pending_sessions_json"
         const val PENDING_SESSIONS_JOURNAL_FILE = "pending_sessions.journal"
+        const val PENDING_SESSIONS_WAL_FILE = "pending_sessions.wal"
         const val FIREBASE_RTDB_URL = "https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app"
 
         private val sharedHttpClient by lazy {
@@ -2350,14 +2358,85 @@ class UsageTrackerService : Service() {
             }
             return true
         }
-
-        internal data class PendingSessionRecord(
-            val packageName: String,
-            val durationMs: Long,
-            val sessionToken: String,
-            val timestamp: Long
-        )
         internal val inMemoryPendingSessions = java.util.concurrent.ConcurrentLinkedQueue<PendingSessionRecord>()
+
+        internal fun computeCrc32Hex(data: ByteArray): String {
+            val crc = java.util.zip.CRC32()
+            crc.update(data)
+            return String.format(java.util.Locale.US, "%08X", crc.value)
+        }
+
+        internal fun formatWalLine(record: PendingSessionRecord): String {
+            val obj = org.json.JSONObject().apply {
+                put("pkg", record.packageName)
+                put("duration", record.durationMs)
+                put("token", record.sessionToken)
+                put("timestamp", record.timestamp)
+            }
+            val jsonStr = obj.toString()
+            val crcHex = computeCrc32Hex(jsonStr.toByteArray(Charsets.UTF_8))
+            return "$crcHex:$jsonStr\n"
+        }
+
+        internal fun parseWalLine(line: String): PendingSessionRecord? {
+            val trimmed = line.trim()
+            if (trimmed.isEmpty()) return null
+            val colonIdx = trimmed.indexOf(':')
+            if (colonIdx <= 0) return null
+            val expectedCrc = trimmed.substring(0, colonIdx).trim().uppercase(java.util.Locale.US)
+            val jsonStr = trimmed.substring(colonIdx + 1).trim()
+            if (jsonStr.isEmpty()) return null
+
+            val actualCrc = computeCrc32Hex(jsonStr.toByteArray(Charsets.UTF_8))
+            if (expectedCrc != actualCrc) {
+                Log.w("UsageTrackerService", "parseWalLine: CRC32 mismatch (expected $expectedCrc, actual $actualCrc)")
+                return null
+            }
+
+            return try {
+                val obj = org.json.JSONObject(jsonStr)
+                val pkg = obj.optString("pkg", "")
+                val duration = obj.optLong("duration", 0L)
+                val token = obj.optString("token", "")
+                val timestamp = obj.optLong("timestamp", 0L)
+                if (pkg.isNotEmpty() && duration >= 1000L && token.isNotEmpty()) {
+                    PendingSessionRecord(pkg, duration, token, timestamp)
+                } else {
+                    null
+                }
+            } catch (e: Exception) {
+                Log.w("UsageTrackerService", "parseWalLine: JSON parse error: ${e.message}")
+                null
+            }
+        }
+
+        internal fun readWalRecords(walFile: java.io.File): Pair<List<PendingSessionRecord>, Boolean> {
+            if (!walFile.exists() || walFile.length() == 0L) {
+                return Pair(emptyList(), false)
+            }
+            val validRecords = mutableListOf<PendingSessionRecord>()
+            var hasCorruptLines = false
+
+            try {
+                walFile.forEachLine { line ->
+                    val trimmed = line.trim()
+                    if (trimmed.isNotEmpty()) {
+                        val record = parseWalLine(trimmed)
+                        if (record != null) {
+                            validRecords.add(record)
+                        } else {
+                            hasCorruptLines = true
+                            Log.w("UsageTrackerService", "readWalRecords: Bỏ qua dòng hỏng trong WAL: $trimmed")
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                hasCorruptLines = true
+                Log.w("UsageTrackerService", "readWalRecords: Lỗi khi đọc file WAL: ${e.message}")
+            }
+
+            return Pair(validRecords, hasCorruptLines)
+        }
 
         fun enqueuePendingSession(
             context: Context,
@@ -2368,7 +2447,7 @@ class UsageTrackerService : Service() {
             if (packageName.isEmpty() || durationMs < 1000L || sessionToken.isEmpty()) return false
             val record = PendingSessionRecord(packageName, durationMs, sessionToken, System.currentTimeMillis())
 
-            // 1. Luôn lưu vào hàng đợi bộ nhớ (RAM fallback)
+            // 1. Luôn bảo vệ trong RAM fallback queue
             val existsInRam = inMemoryPendingSessions.any { it.sessionToken == sessionToken }
             if (!existsInRam) {
                 inMemoryPendingSessions.add(record)
@@ -2406,71 +2485,97 @@ class UsageTrackerService : Service() {
                         persisted = true
                         Log.i("UsageTrackerService", "Đã lưu phiên $packageName ($sessionToken) vào SharedPreferences pending thành công")
                     } else {
-                        Log.w("UsageTrackerService", "commit SharedPreferences hoặc xác minh đĩa pending thất bại, chuyển sang Atomic File Journal")
+                        Log.w("UsageTrackerService", "commit SharedPreferences hoặc xác minh đĩa pending thất bại, chuyển sang WAL Append-Only Journal")
                     }
                 } catch (e: Exception) {
-                    Log.w("UsageTrackerService", "enqueuePendingSession SharedPreferences thất bại: ${e.message}, chuyển sang Atomic File Journal")
+                    Log.w("UsageTrackerService", "enqueuePendingSession SharedPreferences thất bại: ${e.message}, chuyển sang WAL Append-Only Journal")
                 }
 
-                // 3. Tầng 2: Atomic Durable File Journal Fallback nếu tầng 1 thất bại
+                // 3. Tầng 2: Write-Ahead Log (WAL) Append-Only Journal với CRC32 per-record và hardware fsync
                 if (!persisted) {
                     try {
                         val filesDir = context.filesDir ?: java.io.File(".")
                         if (!filesDir.exists()) {
                             filesDir.mkdirs()
                         }
-                        val journalFile = java.io.File(filesDir, PENDING_SESSIONS_JOURNAL_FILE)
-                        val journalArray = if (journalFile.exists() && journalFile.length() > 0) {
+                        val walFile = java.io.File(filesDir, PENDING_SESSIONS_WAL_FILE)
+
+                        val (existingRecords, hasCorruptLines) = readWalRecords(walFile)
+
+                        // Nếu phát hiện file WAL có dòng bị cắt dở/hỏng từ sự cố trước:
+                        // Giữ nguyên file hỏng sang bản sao lưu forensics (.corrupt.<ts>),
+                        // và ghi lại danh sách validRecords nguyên vẹn vào file WAL mới.
+                        if (hasCorruptLines && walFile.exists()) {
                             try {
-                                org.json.JSONArray(journalFile.readText())
+                                val corruptBackup = java.io.File(filesDir, "$PENDING_SESSIONS_WAL_FILE.corrupt_${System.currentTimeMillis()}")
+                                walFile.copyTo(corruptBackup, overwrite = true)
+                                Log.w("UsageTrackerService", "Đã sao lưu WAL bị cắt dở sang ${corruptBackup.name}")
                             } catch (e: Exception) {
-                                org.json.JSONArray()
+                                Log.w("UsageTrackerService", "Không thể sao lưu file WAL hỏng: ${e.message}")
                             }
-                        } else {
-                            org.json.JSONArray()
-                        }
 
-                        var alreadyInJournal = false
-                        for (i in 0 until journalArray.length()) {
-                            val item = journalArray.optJSONObject(i)
-                            if (item?.optString("token") == sessionToken) {
-                                alreadyInJournal = true
-                                break
+                            // Tạo lại file WAL sạch chỉ chứa các record hợp lệ
+                            val tmpRecover = java.io.File(filesDir, "$PENDING_SESSIONS_WAL_FILE.tmp")
+                            java.io.FileOutputStream(tmpRecover).use { fos ->
+                                for (validRec in existingRecords) {
+                                    fos.write(formatWalLine(validRec).toByteArray(Charsets.UTF_8))
+                                }
+                                fos.flush()
+                                fos.fd.sync()
+                            }
+                            if (walFile.exists()) {
+                                walFile.delete()
+                            }
+                            if (!tmpRecover.renameTo(walFile)) {
+                                try {
+                                    java.nio.file.Files.move(
+                                        tmpRecover.toPath(),
+                                        walFile.toPath(),
+                                        java.nio.file.StandardCopyOption.REPLACE_EXISTING
+                                    )
+                                } catch (e: Exception) {
+                                    Log.w("UsageTrackerService", "Move tmpRecover failed: ${e.message}")
+                                }
                             }
                         }
 
-                        if (!alreadyInJournal) {
-                            val obj = org.json.JSONObject().apply {
-                                put("pkg", packageName)
-                                put("duration", durationMs)
-                                put("token", sessionToken)
-                                put("timestamp", record.timestamp)
+                        // Kiểm tra xem sessionToken đã tồn tại trong WAL chưa
+                        val tokenAlreadyInWal = existingRecords.any { it.sessionToken == sessionToken }
+                        if (!tokenAlreadyInWal) {
+                            val walLine = formatWalLine(record)
+                            java.io.FileOutputStream(walFile, true).use { fos ->
+                                if (walFile.length() > 0L) {
+                                    var lastByte: Byte = 0
+                                    try {
+                                        java.io.RandomAccessFile(walFile, "r").use { raf ->
+                                            raf.seek(raf.length() - 1)
+                                            lastByte = raf.readByte()
+                                        }
+                                    } catch (e: Exception) {
+                                        Log.w("UsageTrackerService", "Check lastByte error: ${e.message}")
+                                    }
+                                    if (lastByte != '\n'.code.toByte()) {
+                                        fos.write('\n'.code)
+                                    }
+                                }
+                                fos.write(walLine.toByteArray(Charsets.UTF_8))
+                                fos.flush()
+                                fos.fd.sync()
                             }
-                            journalArray.put(obj)
                         }
 
-                        val tmpFile = java.io.File(filesDir, "$PENDING_SESSIONS_JOURNAL_FILE.tmp")
-                        java.io.FileOutputStream(tmpFile).use { fos ->
-                            fos.write(journalArray.toString().toByteArray(Charsets.UTF_8))
-                            fos.flush()
-                            fos.fd.sync()
-                        }
-                        val renamed = tmpFile.renameTo(journalFile)
-                        if (!renamed) {
-                            tmpFile.copyTo(journalFile, overwrite = true)
-                            tmpFile.delete()
-                        }
+                        // Post-write verification: Đọc lại WAL và xác minh sessionToken có mặt và CRC32 hợp lệ
+                        val (verifyRecords, _) = readWalRecords(walFile)
+                        val verifiedInWal = verifyRecords.any { it.sessionToken == sessionToken }
 
-                        val verifiedInJournal = journalFile.exists() && journalFile.length() > 0 &&
-                                journalFile.readText().contains(sessionToken)
-                        if (verifiedInJournal) {
+                        if (verifiedInWal) {
                             persisted = true
-                            Log.i("UsageTrackerService", "Đã lưu phiên $packageName ($sessionToken) vào Atomic Journal File thành công")
+                            Log.i("UsageTrackerService", "Đã lưu phiên $packageName ($sessionToken) vào WAL Journal bền vững thành công")
                         } else {
-                            Log.e("UsageTrackerService", "Xác minh Atomic Journal File thất bại cho $sessionToken")
+                            Log.e("UsageTrackerService", "Xác minh WAL Journal thất bại cho $sessionToken")
                         }
                     } catch (e: Exception) {
-                        Log.e("UsageTrackerService", "Ghi Atomic Journal File thất bại: ${e.message}")
+                        Log.e("UsageTrackerService", "Ghi WAL Journal thất bại: ${e.message}")
                     }
                 }
 
@@ -2522,15 +2627,63 @@ class UsageTrackerService : Service() {
                     Log.w("UsageTrackerService", "flushPendingSessions SharedPreferences thất bại: ${e.message}")
                 }
 
-                // 3. Xả các phiên trong Atomic Durable File Journal
+                // 3. Xả các phiên trong Write-Ahead Log (WAL) Journal
                 try {
                     val filesDir = context.filesDir ?: java.io.File(".")
-                    val journalFile = java.io.File(filesDir, PENDING_SESSIONS_JOURNAL_FILE)
-                    if (journalFile.exists() && journalFile.length() > 0) {
-                        val journalContent = journalFile.readText()
+                    val walFile = java.io.File(filesDir, PENDING_SESSIONS_WAL_FILE)
+                    if (walFile.exists() && walFile.length() > 0L) {
+                        val (records, hasCorruptLines) = readWalRecords(walFile)
+                        val remainingRecords = mutableListOf<PendingSessionRecord>()
+
+                        for (rec in records) {
+                            val recorded = recordAppSessionInternalLocked(context, rec.packageName, rec.durationMs, rec.sessionToken)
+                            if (!recorded) {
+                                remainingRecords.add(rec)
+                            }
+                        }
+
+                        if (remainingRecords.isEmpty()) {
+                            walFile.delete()
+                            Log.i("UsageTrackerService", "Đã xả toàn bộ WAL Journal và xóa file thành công")
+                        } else {
+                            // Nếu còn record chưa ghi được hoặc file có dòng hỏng, viết lại file tmp với fsync + rename
+                            val tmpFile = java.io.File(filesDir, "$PENDING_SESSIONS_WAL_FILE.tmp")
+                            java.io.FileOutputStream(tmpFile).use { fos ->
+                                for (rem in remainingRecords) {
+                                    fos.write(formatWalLine(rem).toByteArray(Charsets.UTF_8))
+                                }
+                                fos.flush()
+                                fos.fd.sync()
+                            }
+                            if (walFile.exists()) {
+                                walFile.delete()
+                            }
+                            if (!tmpFile.renameTo(walFile)) {
+                                try {
+                                    java.nio.file.Files.move(
+                                        tmpFile.toPath(),
+                                        walFile.toPath(),
+                                        java.nio.file.StandardCopyOption.REPLACE_EXISTING
+                                    )
+                                } catch (e: Exception) {
+                                    Log.w("UsageTrackerService", "Move tmpFile failed: ${e.message}")
+                                }
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w("UsageTrackerService", "flushPendingSessions WAL Journal thất bại: ${e.message}")
+                }
+
+                // 4. Xả Legacy pending_sessions.journal nếu còn tồn tại từ phiên bản trước
+                try {
+                    val filesDir = context.filesDir ?: java.io.File(".")
+                    val legacyJournalFile = java.io.File(filesDir, PENDING_SESSIONS_JOURNAL_FILE)
+                    if (legacyJournalFile.exists() && legacyJournalFile.length() > 0L) {
+                        val journalContent = legacyJournalFile.readText()
                         val journalArray = try { org.json.JSONArray(journalContent) } catch (e: Exception) { null }
                         if (journalArray != null && journalArray.length() > 0) {
-                            val remainingJournal = org.json.JSONArray()
+                            var allLegacyRecorded = true
                             for (i in 0 until journalArray.length()) {
                                 val item = journalArray.optJSONObject(i) ?: continue
                                 val pkg = item.optString("pkg")
@@ -2539,29 +2692,20 @@ class UsageTrackerService : Service() {
                                 if (pkg.isNotEmpty() && duration >= 1000L && token.isNotEmpty()) {
                                     val recorded = recordAppSessionInternalLocked(context, pkg, duration, token)
                                     if (!recorded) {
-                                        remainingJournal.put(item)
+                                        allLegacyRecorded = false
                                     }
                                 }
                             }
-                            if (remainingJournal.length() == 0) {
-                                journalFile.delete()
-                                Log.i("UsageTrackerService", "Đã xả toàn bộ Atomic Journal File và xóa file thành công")
-                            } else {
-                                val tmpFile = java.io.File(filesDir, "$PENDING_SESSIONS_JOURNAL_FILE.tmp")
-                                java.io.FileOutputStream(tmpFile).use { fos ->
-                                    fos.write(remainingJournal.toString().toByteArray(Charsets.UTF_8))
-                                    fos.flush()
-                                    fos.fd.sync()
-                                }
-                                if (!tmpFile.renameTo(journalFile)) {
-                                    tmpFile.copyTo(journalFile, overwrite = true)
-                                    tmpFile.delete()
-                                }
+                            if (allLegacyRecorded) {
+                                legacyJournalFile.delete()
+                                Log.i("UsageTrackerService", "Đã xả và xóa legacy journal file thành công")
                             }
+                        } else {
+                            legacyJournalFile.delete()
                         }
                     }
                 } catch (e: Exception) {
-                    Log.w("UsageTrackerService", "flushPendingSessions Atomic Journal File thất bại: ${e.message}")
+                    Log.w("UsageTrackerService", "flushPendingSessions legacy journal thất bại: ${e.message}")
                 }
             }
         }

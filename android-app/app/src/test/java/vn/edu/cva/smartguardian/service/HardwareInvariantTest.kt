@@ -56,9 +56,11 @@ class HardwareInvariantTest {
         AppUpdateManager.mainDispatcher = kotlinx.coroutines.Dispatchers.Unconfined
         val tempDir = java.io.File(System.getProperty("java.io.tmpdir"), "test_guardian_ctx")
         val journalFile = java.io.File(tempDir, UsageTrackerService.PENDING_SESSIONS_JOURNAL_FILE)
-        if (journalFile.exists()) {
-            journalFile.delete()
-        }
+        if (journalFile.exists()) journalFile.delete()
+        val walFile = java.io.File(tempDir, UsageTrackerService.PENDING_SESSIONS_WAL_FILE)
+        if (walFile.exists()) walFile.delete()
+        val walTmp = java.io.File(tempDir, "${UsageTrackerService.PENDING_SESSIONS_WAL_FILE}.tmp")
+        if (walTmp.exists()) walTmp.delete()
     }
 
     @Test
@@ -4889,21 +4891,21 @@ class HardwareInvariantTest {
     fun testEnqueuePendingSessionSurvivesProcessKillViaDurableFileJournalWhenSharedPrefsFails() {
         // Invariant (Codex Karl Popper Multi-Layer Durable Journal Mandate):
         // Nếu commit SharedPreferences thất bại (commit() == false) hoặc bộ nhớ SharedPreferences bị chặn,
-        // enqueuePendingSession BẮT BUỘC phải chuyển hướng sang Atomic Durable File Journal trên flash storage
-        // (pending_sessions.journal với fsync và atomic rename) và thực hiện post-write verification.
+        // enqueuePendingSession BẮT BUỘC phải chuyển hướng sang WAL Append-Only Journal trên flash storage
+        // (pending_sessions.wal với CRC32 per-record và hardware fsync) và thực hiện post-write verification.
         // Khi toàn bộ tiến trình bị Terminate / Process Kill (RAM bị xóa sạch 100%),
         // phiên snapshot vẫn phải sống sót nguyên vẹn trên đĩa flash.
         // Khi hệ thống khởi động lại (hoặc SCREEN_ON) và điều kiện ghi SharedPreferences hồi phục,
-        // flushPendingSessions() BẮT BUỘC phải đọc journal file, ghi nhận chính xác phiên vào SharedPreferences,
-        // và dọn sạch file journal sau khi hoàn tất.
+        // flushPendingSessions() BẮT BUỘC phải đọc WAL file, ghi nhận chính xác phiên vào SharedPreferences,
+        // và dọn sạch file WAL sau khi hoàn tất.
 
         val fakePrefs = FakeSharedPreferences(commitReturnsSuccess = false)
         val context = FakeTestContext(fakePrefs)
 
         val filesDir = context.filesDir
-        val journalFile = java.io.File(filesDir, UsageTrackerService.PENDING_SESSIONS_JOURNAL_FILE)
-        if (journalFile.exists()) {
-            journalFile.delete()
+        val walFile = java.io.File(filesDir, UsageTrackerService.PENDING_SESSIONS_WAL_FILE)
+        if (walFile.exists()) {
+            walFile.delete()
         }
         UsageTrackerService.inMemoryPendingSessions.clear()
         UsageTrackerService.recordedSessionTokens.clear()
@@ -4914,24 +4916,21 @@ class HardwareInvariantTest {
 
         // 1. Enqueue khi SharedPreferences commit BỊ LỖI (commitReturnsSuccess = false)
         val enqueued = UsageTrackerService.enqueuePendingSession(context, pkg, durationMs, token)
-        assertTrue("enqueuePendingSession must return true via Atomic File Journal fallback", enqueued)
+        assertTrue("enqueuePendingSession must return true via WAL Journal fallback", enqueued)
 
         // SharedPreferences KHÔNG chứa pending sessions vì commit thất bại
         assertNull("SharedPreferences must NOT have pending sessions due to commit failure",
             fakePrefs.getString(UsageTrackerService.PREF_PENDING_SESSIONS_JSON, null))
 
-        // Nhưng File Journal BẮT BUỘC phải tồn tại trên đĩa flash và chứa sessionToken
-        assertTrue("Durable journal file must exist on flash storage", journalFile.exists())
-        assertTrue("Durable journal file must not be empty", journalFile.length() > 0)
-        val journalContent = journalFile.readText()
-        assertTrue("Journal must contain session token", journalContent.contains(token))
-        assertTrue("Journal must contain package name", journalContent.contains(pkg))
-
-        val journalArray = org.json.JSONArray(journalContent)
-        assertEquals(1, journalArray.length())
-        assertEquals(pkg, journalArray.getJSONObject(0).getString("pkg"))
-        assertEquals(durationMs, journalArray.getJSONObject(0).getLong("duration"))
-        assertEquals(token, journalArray.getJSONObject(0).getString("token"))
+        // Nhưng File WAL BẮT BUỘC phải tồn tại trên đĩa flash và chứa sessionToken
+        assertTrue("Durable WAL file must exist on flash storage", walFile.exists())
+        assertTrue("Durable WAL file must not be empty", walFile.length() > 0L)
+        val (recordsInWal, hasCorrupt) = UsageTrackerService.readWalRecords(walFile)
+        assertFalse("WAL file must have zero corrupt lines", hasCorrupt)
+        assertEquals(1, recordsInWal.size)
+        assertEquals(pkg, recordsInWal[0].packageName)
+        assertEquals(durationMs, recordsInWal[0].durationMs)
+        assertEquals(token, recordsInWal[0].sessionToken)
 
         // 2. MÔ PHỎNG TIẾN TRÌNH BỊ KILL HOÀN TOÀN (Process Death / Low Memory Killer / Reboot)
         // Xóa sạch toàn bộ RAM của tiến trình
@@ -4945,15 +4944,109 @@ class HardwareInvariantTest {
         // 4. Kích hoạt flushPendingSessions (tương tự khi SCREEN_ON hoặc Service restart)
         UsageTrackerService.flushPendingSessions(context)
 
-        // 5. Xác minh phiên đã được phục hồi thành công từ File Journal vào SharedPreferences chính
+        // 5. Xác minh phiên đã được phục hồi thành công từ WAL Journal vào SharedPreferences chính
         val todayStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US).format(java.util.Date())
         val appKey = "session_${todayStr}_com.study.math"
-        assertTrue("Session recovered from journal must be recorded in SharedPreferences", fakePrefs.contains(appKey))
+        assertTrue("Session recovered from WAL must be recorded in SharedPreferences", fakePrefs.contains(appKey))
         assertEquals(6000L, fakePrefs.getLong(appKey, 0L))
 
-        // File journal đã được xả và dọn sạch (xóa file hoặc rỗng)
-        assertFalse("Journal file must be deleted after successful flush", journalFile.exists())
+        // File WAL đã được xả và dọn sạch
+        assertFalse("WAL file must be deleted after successful flush", walFile.exists())
         assertEquals("RAM queue must remain empty after flush", 0, UsageTrackerService.inMemoryPendingSessions.size)
+    }
+
+    @Test
+    fun testWalJournalRecoversValidSessionsWhenFileIsTruncatedOrCorruptAndPreservesSessionAWhenAddingSessionB() {
+        // Adversarial Falsification Test (Karl Popper Mandate by Codex Reviewer):
+        // Kịch bản:
+        // 1. Phiên A được ghi hợp lệ vào WAL với CRC32 chuẩn.
+        // 2. Tiến trình bị crash / ngắt nguồn giữa chừng, khiến đuôi file WAL bị cắt dở (truncated JSON).
+        // 3. Tiến trình khởi động lại, enqueuePendingSession ghi thêm phiên B.
+        // Bất biến:
+        // - Phiên A KHÔNG ĐƯỢC PHÉP bị mất hay bị ghi đè!
+        // - Dòng bị cắt dở được loại bỏ / sao lưu an toàn sang .corrupt.
+        // - Cả phiên A và phiên B đều tồn tại trong WAL và được flush đầy đủ vào SharedPreferences!
+        val fakePrefs = FakeSharedPreferences(commitReturnsSuccess = false)
+        val context = FakeTestContext(fakePrefs)
+        val filesDir = context.filesDir
+        val walFile = java.io.File(filesDir, UsageTrackerService.PENDING_SESSIONS_WAL_FILE)
+        if (walFile.exists()) walFile.delete()
+        UsageTrackerService.inMemoryPendingSessions.clear()
+        UsageTrackerService.recordedSessionTokens.clear()
+
+        val pkgA = "com.study.math"
+        val durationA = 7000L
+        val tokenA = "token_session_A_valid"
+
+        // 1. Enqueue phiên A thành công vào WAL
+        val enqueuedA = UsageTrackerService.enqueuePendingSession(context, pkgA, durationA, tokenA)
+        assertTrue("Session A must be enqueued into WAL", enqueuedA)
+        assertTrue(walFile.exists())
+
+        // 2. Giả lập sự cố ngắt nguồn giữa chừng: append dòng rác bị cắt dở (truncated JSON)
+        java.io.FileOutputStream(walFile, true).use { fos ->
+            fos.write("\nDEADBEEF:{\"pkg\":\"com.cut.off\",\"duration\":9999,\"token\":\"token_c".toByteArray(Charsets.UTF_8))
+            fos.flush()
+            fos.fd.sync()
+        }
+
+        // 3. Xóa sạch RAM để giả lập process restart hoàn toàn
+        UsageTrackerService.inMemoryPendingSessions.clear()
+        UsageTrackerService.recordedSessionTokens.clear()
+
+        // 4. Enqueue phiên B
+        val pkgB = "com.study.english"
+        val durationB = 4500L
+        val tokenB = "token_session_B_valid"
+        val enqueuedB = UsageTrackerService.enqueuePendingSession(context, pkgB, durationB, tokenB)
+        assertTrue("Session B must be enqueued into WAL despite prior corrupted line", enqueuedB)
+
+        // 5. Kiểm tra: CẢ PHIÊN A VÀ PHIÊN B đều có mặt trong WAL!
+        val (recordsInWal, _) = UsageTrackerService.readWalRecords(walFile)
+        val tokensInWal = recordsInWal.map { it.sessionToken }
+        assertTrue("Session A MUST NOT BE LOST after crash and enqueueing Session B", tokensInWal.contains(tokenA))
+        assertTrue("Session B must be present in WAL", tokensInWal.contains(tokenB))
+        assertEquals(2, recordsInWal.size)
+
+        // 6. Khôi phục SharedPreferences và Flush
+        fakePrefs.commitReturnsSuccess = true
+        UsageTrackerService.flushPendingSessions(context)
+
+        val todayStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US).format(java.util.Date())
+        val appKeyA = "session_${todayStr}_com.study.math"
+        val appKeyB = "session_${todayStr}_com.study.english"
+
+        assertTrue("Session A must be recorded in SharedPreferences", fakePrefs.contains(appKeyA))
+        assertEquals(7000L, fakePrefs.getLong(appKeyA, 0L))
+
+        assertTrue("Session B must be recorded in SharedPreferences", fakePrefs.contains(appKeyB))
+        assertEquals(4500L, fakePrefs.getLong(appKeyB, 0L))
+
+        // WAL đã được flush sạch và xóa file
+        assertFalse("WAL file must be deleted after 100% successful flush", walFile.exists())
+    }
+
+    @Test
+    fun testWalJournalRejectsMismatchedCrcAndDoesNotExecuteCorruptRecord() {
+        // Kiểm tra tính toàn vẹn CRC32:
+        // Dòng dữ liệu bị giả mạo payload hoặc sai CRC32 phải bị parseWalLine từ chối ngay lập tức
+        val fakeRecord = UsageTrackerService.PendingSessionRecord("com.spoof.app", 5000L, "token_spoof", 12345L)
+        val validLine = UsageTrackerService.formatWalLine(fakeRecord)
+
+        // Dòng hợp lệ phải parse thành công
+        val parsedValid = UsageTrackerService.parseWalLine(validLine)
+        assertNotNull("Valid WAL line must be parsed", parsedValid)
+        assertEquals("com.spoof.app", parsedValid?.packageName)
+
+        // Dòng bị sửa payload (CRC mismatch) phải bị từ chối
+        val tamperedPayload = validLine.replace("com.spoof.app", "com.hacked.app")
+        val parsedTampered = UsageTrackerService.parseWalLine(tamperedPayload)
+        assertNull("Tampered payload with mismatched CRC must be rejected (null)", parsedTampered)
+
+        // Dòng rác không đúng cấu trúc
+        val corruptLine = "NOT_A_HEX:corrupted_json_content"
+        val parsedCorrupt = UsageTrackerService.parseWalLine(corruptLine)
+        assertNull("Malformed line must be rejected (null)", parsedCorrupt)
     }
 
     private class FakeTestContext(
