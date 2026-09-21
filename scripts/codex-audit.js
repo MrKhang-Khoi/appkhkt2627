@@ -354,9 +354,11 @@ if (fs.existsSync(guardianAccessFile) && fs.existsSync(usageTrackerFile) && fs.e
     testCode.includes('testScreenOffInterleavedWithRapidScreenOnPreservesAppSessionDurablyWithoutLoss');
 
   const hasDurablePendingQueue = utCode.includes('PREF_PENDING_SESSIONS_JSON') &&
+    utCode.includes('PENDING_SESSIONS_JOURNAL_FILE') &&
     utCode.includes('fun flushPendingSessions(') &&
     utCode.includes('fun enqueuePendingSession(') &&
-    testCode.includes('testRecordAppSessionEnqueuesToPendingQueueOnCommitFailureAndFlushesSuccessfully');
+    testCode.includes('testRecordAppSessionEnqueuesToPendingQueueOnCommitFailureAndFlushesSuccessfully') &&
+    testCode.includes('testEnqueuePendingSessionSurvivesProcessKillViaDurableFileJournalWhenSharedPrefsFails');
 
   if (!hasVolatileScreen || !hasTelemetryEpoch || !hasSyncScreenOff || !hasConcurrentCallSet ||
       !hasUrgentOffline || !hasSingleEpochScreenOff || !hasSingleEpochScreenOn || !noEarlyRejection ||
@@ -913,7 +915,8 @@ try {
     'testOfflineCheckPausedBeforeDiskCommitAbortsWhenOnlineTransitionIntervenes',
     'testScreenOffTransitionsImmediatelyWithoutWaitingForScreenOnDiskIo',
     'testScreenOffInterleavedWithRapidScreenOnPreservesAppSessionDurablyWithoutLoss',
-    'testRecordAppSessionEnqueuesToPendingQueueOnCommitFailureAndFlushesSuccessfully'
+    'testRecordAppSessionEnqueuesToPendingQueueOnCommitFailureAndFlushesSuccessfully',
+    'testEnqueuePendingSessionSurvivesProcessKillViaDurableFileJournalWhenSharedPrefsFails'
   ];
 
   for (const testName of requiredProductionFeatureTests) {

@@ -54,6 +54,11 @@ class HardwareInvariantTest {
         UsageTrackerService.lastPolledForegroundStartTime = 0L
         UsageTrackerService.inMemoryPendingSessions.clear()
         AppUpdateManager.mainDispatcher = kotlinx.coroutines.Dispatchers.Unconfined
+        val tempDir = java.io.File(System.getProperty("java.io.tmpdir"), "test_guardian_ctx")
+        val journalFile = java.io.File(tempDir, UsageTrackerService.PENDING_SESSIONS_JOURNAL_FILE)
+        if (journalFile.exists()) {
+            journalFile.delete()
+        }
     }
 
     @Test
@@ -4878,6 +4883,77 @@ class HardwareInvariantTest {
         assertTrue("Session from RAM fallback must be flushed into main preferences", fakePrefs.contains(appKey2))
         assertEquals(3500L, fakePrefs.getLong(appKey2, 0L))
         assertEquals(0, UsageTrackerService.inMemoryPendingSessions.size)
+    }
+
+    @Test
+    fun testEnqueuePendingSessionSurvivesProcessKillViaDurableFileJournalWhenSharedPrefsFails() {
+        // Invariant (Codex Karl Popper Multi-Layer Durable Journal Mandate):
+        // Nếu commit SharedPreferences thất bại (commit() == false) hoặc bộ nhớ SharedPreferences bị chặn,
+        // enqueuePendingSession BẮT BUỘC phải chuyển hướng sang Atomic Durable File Journal trên flash storage
+        // (pending_sessions.journal với fsync và atomic rename) và thực hiện post-write verification.
+        // Khi toàn bộ tiến trình bị Terminate / Process Kill (RAM bị xóa sạch 100%),
+        // phiên snapshot vẫn phải sống sót nguyên vẹn trên đĩa flash.
+        // Khi hệ thống khởi động lại (hoặc SCREEN_ON) và điều kiện ghi SharedPreferences hồi phục,
+        // flushPendingSessions() BẮT BUỘC phải đọc journal file, ghi nhận chính xác phiên vào SharedPreferences,
+        // và dọn sạch file journal sau khi hoàn tất.
+
+        val fakePrefs = FakeSharedPreferences(commitReturnsSuccess = false)
+        val context = FakeTestContext(fakePrefs)
+
+        val filesDir = context.filesDir
+        val journalFile = java.io.File(filesDir, UsageTrackerService.PENDING_SESSIONS_JOURNAL_FILE)
+        if (journalFile.exists()) {
+            journalFile.delete()
+        }
+        UsageTrackerService.inMemoryPendingSessions.clear()
+        UsageTrackerService.recordedSessionTokens.clear()
+
+        val pkg = "com.study.math"
+        val durationMs = 6000L
+        val token = "session_com.study.math_adversarial_kill_test"
+
+        // 1. Enqueue khi SharedPreferences commit BỊ LỖI (commitReturnsSuccess = false)
+        val enqueued = UsageTrackerService.enqueuePendingSession(context, pkg, durationMs, token)
+        assertTrue("enqueuePendingSession must return true via Atomic File Journal fallback", enqueued)
+
+        // SharedPreferences KHÔNG chứa pending sessions vì commit thất bại
+        assertNull("SharedPreferences must NOT have pending sessions due to commit failure",
+            fakePrefs.getString(UsageTrackerService.PREF_PENDING_SESSIONS_JSON, null))
+
+        // Nhưng File Journal BẮT BUỘC phải tồn tại trên đĩa flash và chứa sessionToken
+        assertTrue("Durable journal file must exist on flash storage", journalFile.exists())
+        assertTrue("Durable journal file must not be empty", journalFile.length() > 0)
+        val journalContent = journalFile.readText()
+        assertTrue("Journal must contain session token", journalContent.contains(token))
+        assertTrue("Journal must contain package name", journalContent.contains(pkg))
+
+        val journalArray = org.json.JSONArray(journalContent)
+        assertEquals(1, journalArray.length())
+        assertEquals(pkg, journalArray.getJSONObject(0).getString("pkg"))
+        assertEquals(durationMs, journalArray.getJSONObject(0).getLong("duration"))
+        assertEquals(token, journalArray.getJSONObject(0).getString("token"))
+
+        // 2. MÔ PHỎNG TIẾN TRÌNH BỊ KILL HOÀN TOÀN (Process Death / Low Memory Killer / Reboot)
+        // Xóa sạch toàn bộ RAM của tiến trình
+        UsageTrackerService.inMemoryPendingSessions.clear()
+        UsageTrackerService.recordedSessionTokens.clear()
+        assertEquals("RAM queue must be completely wiped on process kill", 0, UsageTrackerService.inMemoryPendingSessions.size)
+
+        // 3. Khôi phục lưu trữ SharedPreferences (giả lập tiến trình khởi động lại và I/O bình thường)
+        fakePrefs.commitReturnsSuccess = true
+
+        // 4. Kích hoạt flushPendingSessions (tương tự khi SCREEN_ON hoặc Service restart)
+        UsageTrackerService.flushPendingSessions(context)
+
+        // 5. Xác minh phiên đã được phục hồi thành công từ File Journal vào SharedPreferences chính
+        val todayStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US).format(java.util.Date())
+        val appKey = "session_${todayStr}_com.study.math"
+        assertTrue("Session recovered from journal must be recorded in SharedPreferences", fakePrefs.contains(appKey))
+        assertEquals(6000L, fakePrefs.getLong(appKey, 0L))
+
+        // File journal đã được xả và dọn sạch (xóa file hoặc rỗng)
+        assertFalse("Journal file must be deleted after successful flush", journalFile.exists())
+        assertEquals("RAM queue must remain empty after flush", 0, UsageTrackerService.inMemoryPendingSessions.size)
     }
 
     private class FakeTestContext(

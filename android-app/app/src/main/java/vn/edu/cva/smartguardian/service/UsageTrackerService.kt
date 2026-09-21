@@ -201,6 +201,7 @@ class UsageTrackerService : Service() {
         const val ACTION_USAGE_UPDATED = "vn.edu.cva.smartguardian.ACTION_USAGE_UPDATED"
         const val PREFS_NAME = "cva_guardian_stats"
         const val PREF_PENDING_SESSIONS_JSON = "pending_sessions_json"
+        const val PENDING_SESSIONS_JOURNAL_FILE = "pending_sessions.journal"
         const val FIREBASE_RTDB_URL = "https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app"
 
         private val sharedHttpClient by lazy {
@@ -2363,8 +2364,8 @@ class UsageTrackerService : Service() {
             packageName: String,
             durationMs: Long,
             sessionToken: String
-        ) {
-            if (packageName.isEmpty() || durationMs < 1000L || sessionToken.isEmpty()) return
+        ): Boolean {
+            if (packageName.isEmpty() || durationMs < 1000L || sessionToken.isEmpty()) return false
             val record = PendingSessionRecord(packageName, durationMs, sessionToken, System.currentTimeMillis())
 
             // 1. Luôn lưu vào hàng đợi bộ nhớ (RAM fallback)
@@ -2373,8 +2374,10 @@ class UsageTrackerService : Service() {
                 inMemoryPendingSessions.add(record)
             }
 
-            // 2. Thử ghi bền vững vào SharedPreferences
             synchronized(statsLock) {
+                var persisted = false
+
+                // 2. Tầng 1: Thử lưu bền vững vào SharedPreferences với post-write verification
                 try {
                     val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                     val currentRaw = prefs.getString(PREF_PENDING_SESSIONS_JSON, "[]") ?: "[]"
@@ -2396,12 +2399,82 @@ class UsageTrackerService : Service() {
                             put("timestamp", record.timestamp)
                         }
                         array.put(obj)
-                        prefs.edit().putString(PREF_PENDING_SESSIONS_JSON, array.toString()).commit()
-                        Log.i("UsageTrackerService", "Đã lưu phiên $packageName ($sessionToken) vào hàng đợi pending bền vững")
+                    }
+                    val committed = prefs.edit().putString(PREF_PENDING_SESSIONS_JSON, array.toString()).commit()
+                    val verifiedInPrefs = committed && (prefs.getString(PREF_PENDING_SESSIONS_JSON, null)?.contains(sessionToken) == true)
+                    if (verifiedInPrefs) {
+                        persisted = true
+                        Log.i("UsageTrackerService", "Đã lưu phiên $packageName ($sessionToken) vào SharedPreferences pending thành công")
+                    } else {
+                        Log.w("UsageTrackerService", "commit SharedPreferences hoặc xác minh đĩa pending thất bại, chuyển sang Atomic File Journal")
                     }
                 } catch (e: Exception) {
-                    Log.w("UsageTrackerService", "enqueuePendingSession thất bại: ${e.message}")
+                    Log.w("UsageTrackerService", "enqueuePendingSession SharedPreferences thất bại: ${e.message}, chuyển sang Atomic File Journal")
                 }
+
+                // 3. Tầng 2: Atomic Durable File Journal Fallback nếu tầng 1 thất bại
+                if (!persisted) {
+                    try {
+                        val filesDir = context.filesDir ?: java.io.File(".")
+                        if (!filesDir.exists()) {
+                            filesDir.mkdirs()
+                        }
+                        val journalFile = java.io.File(filesDir, PENDING_SESSIONS_JOURNAL_FILE)
+                        val journalArray = if (journalFile.exists() && journalFile.length() > 0) {
+                            try {
+                                org.json.JSONArray(journalFile.readText())
+                            } catch (e: Exception) {
+                                org.json.JSONArray()
+                            }
+                        } else {
+                            org.json.JSONArray()
+                        }
+
+                        var alreadyInJournal = false
+                        for (i in 0 until journalArray.length()) {
+                            val item = journalArray.optJSONObject(i)
+                            if (item?.optString("token") == sessionToken) {
+                                alreadyInJournal = true
+                                break
+                            }
+                        }
+
+                        if (!alreadyInJournal) {
+                            val obj = org.json.JSONObject().apply {
+                                put("pkg", packageName)
+                                put("duration", durationMs)
+                                put("token", sessionToken)
+                                put("timestamp", record.timestamp)
+                            }
+                            journalArray.put(obj)
+                        }
+
+                        val tmpFile = java.io.File(filesDir, "$PENDING_SESSIONS_JOURNAL_FILE.tmp")
+                        java.io.FileOutputStream(tmpFile).use { fos ->
+                            fos.write(journalArray.toString().toByteArray(Charsets.UTF_8))
+                            fos.flush()
+                            fos.fd.sync()
+                        }
+                        val renamed = tmpFile.renameTo(journalFile)
+                        if (!renamed) {
+                            tmpFile.copyTo(journalFile, overwrite = true)
+                            tmpFile.delete()
+                        }
+
+                        val verifiedInJournal = journalFile.exists() && journalFile.length() > 0 &&
+                                journalFile.readText().contains(sessionToken)
+                        if (verifiedInJournal) {
+                            persisted = true
+                            Log.i("UsageTrackerService", "Đã lưu phiên $packageName ($sessionToken) vào Atomic Journal File thành công")
+                        } else {
+                            Log.e("UsageTrackerService", "Xác minh Atomic Journal File thất bại cho $sessionToken")
+                        }
+                    } catch (e: Exception) {
+                        Log.e("UsageTrackerService", "Ghi Atomic Journal File thất bại: ${e.message}")
+                    }
+                }
+
+                return persisted
             }
         }
 
@@ -2420,31 +2493,75 @@ class UsageTrackerService : Service() {
                 // 2. Xả các phiên trong SharedPreferences
                 try {
                     val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                    val currentRaw = prefs.getString(PREF_PENDING_SESSIONS_JSON, null) ?: return
-                    val array = try { org.json.JSONArray(currentRaw) } catch (e: Exception) { null } ?: return
-                    if (array.length() == 0) return
-
-                    val remainingArray = org.json.JSONArray()
-                    for (i in 0 until array.length()) {
-                        val item = array.optJSONObject(i) ?: continue
-                        val pkg = item.optString("pkg")
-                        val duration = item.optLong("duration", 0L)
-                        val token = item.optString("token")
-                        if (pkg.isNotEmpty() && duration >= 1000L && token.isNotEmpty()) {
-                            val recorded = recordAppSessionInternalLocked(context, pkg, duration, token)
-                            if (!recorded) {
-                                remainingArray.put(item)
+                    val currentRaw = prefs.getString(PREF_PENDING_SESSIONS_JSON, null)
+                    if (!currentRaw.isNullOrEmpty()) {
+                        val array = try { org.json.JSONArray(currentRaw) } catch (e: Exception) { null }
+                        if (array != null && array.length() > 0) {
+                            val remainingArray = org.json.JSONArray()
+                            for (i in 0 until array.length()) {
+                                val item = array.optJSONObject(i) ?: continue
+                                val pkg = item.optString("pkg")
+                                val duration = item.optLong("duration", 0L)
+                                val token = item.optString("token")
+                                if (pkg.isNotEmpty() && duration >= 1000L && token.isNotEmpty()) {
+                                    val recorded = recordAppSessionInternalLocked(context, pkg, duration, token)
+                                    if (!recorded) {
+                                        remainingArray.put(item)
+                                    }
+                                }
+                            }
+                            if (remainingArray.length() == 0) {
+                                prefs.edit().remove(PREF_PENDING_SESSIONS_JSON).commit()
+                                Log.i("UsageTrackerService", "Đã xả toàn bộ hàng đợi pending sessions trong SharedPreferences thành công")
+                            } else {
+                                prefs.edit().putString(PREF_PENDING_SESSIONS_JSON, remainingArray.toString()).commit()
                             }
                         }
                     }
-                    if (remainingArray.length() == 0) {
-                        prefs.edit().remove(PREF_PENDING_SESSIONS_JSON).commit()
-                        Log.i("UsageTrackerService", "Đã xả toàn bộ hàng đợi pending sessions vào SharedPreferences thành công")
-                    } else {
-                        prefs.edit().putString(PREF_PENDING_SESSIONS_JSON, remainingArray.toString()).commit()
+                } catch (e: Exception) {
+                    Log.w("UsageTrackerService", "flushPendingSessions SharedPreferences thất bại: ${e.message}")
+                }
+
+                // 3. Xả các phiên trong Atomic Durable File Journal
+                try {
+                    val filesDir = context.filesDir ?: java.io.File(".")
+                    val journalFile = java.io.File(filesDir, PENDING_SESSIONS_JOURNAL_FILE)
+                    if (journalFile.exists() && journalFile.length() > 0) {
+                        val journalContent = journalFile.readText()
+                        val journalArray = try { org.json.JSONArray(journalContent) } catch (e: Exception) { null }
+                        if (journalArray != null && journalArray.length() > 0) {
+                            val remainingJournal = org.json.JSONArray()
+                            for (i in 0 until journalArray.length()) {
+                                val item = journalArray.optJSONObject(i) ?: continue
+                                val pkg = item.optString("pkg")
+                                val duration = item.optLong("duration", 0L)
+                                val token = item.optString("token")
+                                if (pkg.isNotEmpty() && duration >= 1000L && token.isNotEmpty()) {
+                                    val recorded = recordAppSessionInternalLocked(context, pkg, duration, token)
+                                    if (!recorded) {
+                                        remainingJournal.put(item)
+                                    }
+                                }
+                            }
+                            if (remainingJournal.length() == 0) {
+                                journalFile.delete()
+                                Log.i("UsageTrackerService", "Đã xả toàn bộ Atomic Journal File và xóa file thành công")
+                            } else {
+                                val tmpFile = java.io.File(filesDir, "$PENDING_SESSIONS_JOURNAL_FILE.tmp")
+                                java.io.FileOutputStream(tmpFile).use { fos ->
+                                    fos.write(remainingJournal.toString().toByteArray(Charsets.UTF_8))
+                                    fos.flush()
+                                    fos.fd.sync()
+                                }
+                                if (!tmpFile.renameTo(journalFile)) {
+                                    tmpFile.copyTo(journalFile, overwrite = true)
+                                    tmpFile.delete()
+                                }
+                            }
+                        }
                     }
                 } catch (e: Exception) {
-                    Log.w("UsageTrackerService", "flushPendingSessions thất bại: ${e.message}")
+                    Log.w("UsageTrackerService", "flushPendingSessions Atomic Journal File thất bại: ${e.message}")
                 }
             }
         }
