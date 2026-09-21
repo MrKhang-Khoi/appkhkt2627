@@ -341,6 +341,7 @@ class GuardianAccessibilityService : AccessibilityService() {
 
         try {
             UsageTrackerService.restorePersistedSessionTokens(this)
+            UsageTrackerService.flushPendingSessions(this)
             UsageTrackerService.start(this)
         } catch (e: Exception) {
             Log.w("GuardianAccess", "Failed to start UsageTrackerService on connect: ${e.message}")
@@ -406,9 +407,10 @@ class GuardianAccessibilityService : AccessibilityService() {
         if (closedPkg.isNotEmpty() && closedStart > 0L && now - closedStart >= 1000L && sessionToken.isNotEmpty()) {
             val sessionDuration = now - closedStart
             serviceScope.launch(Dispatchers.IO) {
-                if (telemetryEpoch.get() == currentEpoch) {
-                    UsageTrackerService.recordAppSession(applicationContext, closedPkg, sessionDuration, sessionToken, currentEpoch)
-                }
+                // Tách fencing telemetry khỏi kế toán phiên (Codex Karl Popper Mandate):
+                // Phiên sử dụng đã thực sự diễn ra trong thế giới thực và đã snapshot nguyên tử.
+                // Phải ghi nhận vào SharedPreferences mà không phụ thuộc vào telemetryEpoch.
+                UsageTrackerService.recordAppSession(applicationContext, closedPkg, sessionDuration, sessionToken)
             }
         }
 
@@ -430,7 +432,6 @@ class GuardianAccessibilityService : AccessibilityService() {
             val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
             val km = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
             val isHardwareOnline = (pm?.isInteractive == true && km?.isKeyguardLocked != true)
-
             if (!isHardwareOnline) {
                 isScreenOnState = false
                 heartbeatJob?.cancel()
@@ -439,7 +440,7 @@ class GuardianAccessibilityService : AccessibilityService() {
             }
 
             // Bất biến chuyển trạng thái phần cứng (Hardware State Transition Invariant - Codex Mandate):
-            // Mọi lần chuyển phần cứng OFFLINE -> ONLINE bắt buộc phải incrementAndGet() dưới state transition nguyên tử!
+            // Thực hiện đột biến RAM và giải phóng lock tức thì (< 1ms). CẤM giữ lock khi I/O đĩa hoặc mạng.
             val currentEpoch = telemetryEpoch.incrementAndGet()
             isScreenOnState = true
             UsageTrackerService.lastDispatchedOfflineEpoch.set(-1L)
@@ -447,11 +448,8 @@ class GuardianAccessibilityService : AccessibilityService() {
             startPeriodicHeartbeat()
 
             val currentPkg = try {
-                val root = rootInActiveWindow
-                val p = root?.packageName?.toString()?.trim()
-                if (!p.isNullOrEmpty() && p != applicationContext.packageName) p else null
+                rootInActiveWindow?.packageName?.toString()
             } catch (e: Exception) {
-                Log.w("GuardianAccess", "Error inspecting rootInActiveWindow on screen on: ${e.message}")
                 null
             }
 
@@ -468,6 +466,7 @@ class GuardianAccessibilityService : AccessibilityService() {
         // Dispatch disk persistence sang Dispatchers.IO HOÀN TOÀN NGOÀI hardwareTransitionLock
         serviceScope.launch(Dispatchers.IO) {
             UsageTrackerService.persistDeviceOnlineState(applicationContext, currentEpoch)
+            UsageTrackerService.flushPendingSessions(applicationContext)
         }
 
         serviceScope.launch(Dispatchers.IO) {
@@ -717,9 +716,7 @@ class GuardianAccessibilityService : AccessibilityService() {
             if (transition.prevPkg.isNotEmpty() && transition.prevStart > 0L && now - transition.prevStart >= 1000L && transition.prevToken.isNotEmpty()) {
                 val sessionDuration = now - transition.prevStart
                 serviceScope.launch(Dispatchers.IO) {
-                    if (telemetryEpoch.get() == expectedEpoch) {
-                        UsageTrackerService.recordAppSession(applicationContext, transition.prevPkg, sessionDuration, transition.prevToken, expectedEpoch)
-                    }
+                    UsageTrackerService.recordAppSession(applicationContext, transition.prevPkg, sessionDuration, transition.prevToken)
                 }
             }
             UsageTrackerService.closePolledSession(applicationContext, "BANK_APP_OPENED")
@@ -756,9 +753,7 @@ class GuardianAccessibilityService : AccessibilityService() {
             if (transition.prevPkg.isNotEmpty() && transition.prevStart > 0L && now - transition.prevStart >= 1500L && transition.prevToken.isNotEmpty()) {
                 val sessionDuration = now - transition.prevStart
                 serviceScope.launch(Dispatchers.IO) {
-                    if (telemetryEpoch.get() == expectedEpoch) {
-                        UsageTrackerService.recordAppSession(applicationContext, transition.prevPkg, sessionDuration, transition.prevToken, expectedEpoch)
-                    }
+                    UsageTrackerService.recordAppSession(applicationContext, transition.prevPkg, sessionDuration, transition.prevToken)
                 }
             }
             serviceScope.launch(Dispatchers.IO) {
@@ -795,9 +790,7 @@ class GuardianAccessibilityService : AccessibilityService() {
             if (transition.prevPkg.isNotEmpty() && transition.prevStart > 0L && now - transition.prevStart >= 1500L && transition.prevToken.isNotEmpty()) {
                 val sessionDuration = now - transition.prevStart
                 serviceScope.launch(Dispatchers.IO) {
-                    if (telemetryEpoch.get() == expectedEpoch) {
-                        UsageTrackerService.recordAppSession(applicationContext, transition.prevPkg, sessionDuration, transition.prevToken, expectedEpoch)
-                    }
+                    UsageTrackerService.recordAppSession(applicationContext, transition.prevPkg, sessionDuration, transition.prevToken)
                 }
             }
             serviceScope.launch(Dispatchers.IO) {
@@ -845,9 +838,7 @@ class GuardianAccessibilityService : AccessibilityService() {
             if (appTransition.prevPkg.isNotEmpty() && appTransition.prevStart > 0L && now - appTransition.prevStart >= 1500L && appTransition.prevToken.isNotEmpty()) {
                 val sessionDuration = now - appTransition.prevStart
                 serviceScope.launch(Dispatchers.IO) {
-                    if (telemetryEpoch.get() == expectedEpoch) {
-                        UsageTrackerService.recordAppSession(applicationContext, appTransition.prevPkg, sessionDuration, appTransition.prevToken, expectedEpoch)
-                    }
+                    UsageTrackerService.recordAppSession(applicationContext, appTransition.prevPkg, sessionDuration, appTransition.prevToken)
                 }
             }
 

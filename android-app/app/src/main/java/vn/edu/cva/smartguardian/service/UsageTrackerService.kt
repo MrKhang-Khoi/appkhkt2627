@@ -200,6 +200,7 @@ class UsageTrackerService : Service() {
         private val lastNotifiedUpdateCode = java.util.concurrent.atomic.AtomicInteger(0)
         const val ACTION_USAGE_UPDATED = "vn.edu.cva.smartguardian.ACTION_USAGE_UPDATED"
         const val PREFS_NAME = "cva_guardian_stats"
+        const val PREF_PENDING_SESSIONS_JSON = "pending_sessions_json"
         const val FIREBASE_RTDB_URL = "https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app"
 
         private val sharedHttpClient by lazy {
@@ -2231,15 +2232,231 @@ class UsageTrackerService : Service() {
             }
         }
 
+        /**
+         * Ghi nhận phiên ứng dụng nguyên tử vào SharedPreferences dưới statsLock.
+         * Trả về true nếu commit thành công hoặc phiên đã được ghi nhận trước đó (idempotent duplicate).
+         * Trả về false nếu commit đĩa thất bại.
+         */
+        internal fun recordAppSessionInternalLocked(
+            context: Context,
+            packageName: String,
+            durationMs: Long,
+            sessionToken: String
+        ): Boolean {
+            if (durationMs < 1000L) return true
+            val isSystemOrSelf = packageName == context.packageName ||
+                    packageName == "com.android.systemui" ||
+                    packageName.contains("inputmethod") ||
+                    packageName.contains("keyboard") ||
+                    packageName.contains("launcher") ||
+                    packageName == "SCREEN_OFF" ||
+                    packageName == "HOME"
+            if (isSystemOrSelf) return true
+
+            if (sessionToken.isNotEmpty()) {
+                val duplicateBackupTokens = ArrayList<String>(recordedSessionTokens)
+                if (recordedSessionTokens.contains(sessionToken)) {
+                    // Persist refreshed LRU access-order to disk to guarantee 100% RAM-Disk consistency
+                    val persisted = persistSessionTokensLocked(context)
+                    if (!persisted) {
+                        (recordedSessionTokens as? LruSessionSet)?.restoreSnapshotRaw(duplicateBackupTokens)
+                            ?: run {
+                                recordedSessionTokens.clear()
+                                recordedSessionTokens.addAll(duplicateBackupTokens)
+                            }
+                        Log.w("UsageTrackerService", "Phát hiện session trùng lặp ($sessionToken) nhưng commit đĩa thất bại: Đã rollback LRU order trong RAM")
+                        return false
+                    }
+                    Log.d("UsageTrackerService", "Phát hiện session trùng lặp ($sessionToken): Đã cập nhật LRU order và bỏ qua tính giờ")
+                    return true
+                }
+            }
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val todayStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US).format(java.util.Date())
+            val appInfo = try {
+                context.packageManager.getApplicationInfo(packageName, 0)
+            } catch (e: Exception) {
+                null
+            }
+            val appLabel = appInfo?.let { context.packageManager.getApplicationLabel(it).toString() } ?: packageName
+            val metadata = AppClassifier.classify(packageName, appLabel, appInfo)
+
+            val backupTokens = ArrayList<String>(recordedSessionTokens)
+            val hadTokensJson = prefs.contains("persisted_session_tokens_json")
+            val prevTokensJson = if (hadTokensJson) prefs.getString("persisted_session_tokens_json", null) else null
+
+            val appKey = "session_${todayStr}_$packageName"
+            val hadCurMs = prefs.contains(appKey)
+            val prevCurMs = if (hadCurMs) prefs.getLong(appKey, 0L) else 0L
+
+            val nameKey = "app_name_$packageName"
+            val hadName = prefs.contains(nameKey)
+            val prevName = if (hadName) prefs.getString(nameKey, null) else null
+
+            val catKey = "app_cat_$packageName"
+            val hadCat = prefs.contains(catKey)
+            val prevCat = if (hadCat) prefs.getString(catKey, null) else null
+
+            val catLabelKey = "app_cat_label_$packageName"
+            val hadCatLabel = prefs.contains(catLabelKey)
+            val prevCatLabel = if (hadCatLabel) prefs.getString(catLabelKey, null) else null
+
+            val lastUsedKey = "app_last_used_$packageName"
+            val hadLastUsed = prefs.contains(lastUsedKey)
+            val prevLastUsed = if (hadLastUsed) prefs.getLong(lastUsedKey, 0L) else 0L
+
+            val editor = prefs.edit()
+            if (sessionToken.isNotEmpty()) {
+                recordedSessionTokens.add(sessionToken)
+                val jsonArray = org.json.JSONArray()
+                for (t in recordedSessionTokens) {
+                    jsonArray.put(t)
+                }
+                editor.putString("persisted_session_tokens_json", jsonArray.toString())
+            }
+
+            val newMs = prevCurMs + durationMs
+            editor.putLong(appKey, newMs)
+                .putString(nameKey, metadata.appName.ifEmpty { appLabel })
+                .putString(catKey, metadata.category.name)
+                .putString(catLabelKey, metadata.category.displayName)
+                .putLong(lastUsedKey, System.currentTimeMillis())
+
+            val committed = editor.commit()
+            if (!committed) {
+                // Phục hồi lại trạng thái in-memory cache của SharedPreferences để tránh dirty cache
+                val rollbackEditor = prefs.edit()
+                if (hadCurMs) rollbackEditor.putLong(appKey, prevCurMs) else rollbackEditor.remove(appKey)
+                if (hadName) rollbackEditor.putString(nameKey, prevName) else rollbackEditor.remove(nameKey)
+                if (hadCat) rollbackEditor.putString(catKey, prevCat) else rollbackEditor.remove(catKey)
+                if (hadCatLabel) rollbackEditor.putString(catLabelKey, prevCatLabel) else rollbackEditor.remove(catLabelKey)
+                if (hadLastUsed) rollbackEditor.putLong(lastUsedKey, prevLastUsed) else rollbackEditor.remove(lastUsedKey)
+                if (sessionToken.isNotEmpty()) {
+                    if (hadTokensJson) rollbackEditor.putString("persisted_session_tokens_json", prevTokensJson)
+                    else rollbackEditor.remove("persisted_session_tokens_json")
+                }
+                rollbackEditor.commit()
+
+                if (sessionToken.isNotEmpty()) {
+                    (recordedSessionTokens as? LruSessionSet)?.restoreSnapshotRaw(backupTokens)
+                        ?: run {
+                            recordedSessionTokens.clear()
+                            recordedSessionTokens.addAll(backupTokens)
+                        }
+                }
+                Log.w("UsageTrackerService", "recordAppSessionInternalLocked: commit() returned false, rollback RAM token")
+                return false
+            }
+            return true
+        }
+
+        internal data class PendingSessionRecord(
+            val packageName: String,
+            val durationMs: Long,
+            val sessionToken: String,
+            val timestamp: Long
+        )
+        internal val inMemoryPendingSessions = java.util.concurrent.ConcurrentLinkedQueue<PendingSessionRecord>()
+
+        fun enqueuePendingSession(
+            context: Context,
+            packageName: String,
+            durationMs: Long,
+            sessionToken: String
+        ) {
+            if (packageName.isEmpty() || durationMs < 1000L || sessionToken.isEmpty()) return
+            val record = PendingSessionRecord(packageName, durationMs, sessionToken, System.currentTimeMillis())
+
+            // 1. Luôn lưu vào hàng đợi bộ nhớ (RAM fallback)
+            val existsInRam = inMemoryPendingSessions.any { it.sessionToken == sessionToken }
+            if (!existsInRam) {
+                inMemoryPendingSessions.add(record)
+            }
+
+            // 2. Thử ghi bền vững vào SharedPreferences
+            synchronized(statsLock) {
+                try {
+                    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    val currentRaw = prefs.getString(PREF_PENDING_SESSIONS_JSON, "[]") ?: "[]"
+                    val array = try { org.json.JSONArray(currentRaw) } catch (e: Exception) { org.json.JSONArray() }
+
+                    var alreadyPresent = false
+                    for (i in 0 until array.length()) {
+                        val item = array.optJSONObject(i)
+                        if (item?.optString("token") == sessionToken) {
+                            alreadyPresent = true
+                            break
+                        }
+                    }
+                    if (!alreadyPresent) {
+                        val obj = org.json.JSONObject().apply {
+                            put("pkg", packageName)
+                            put("duration", durationMs)
+                            put("token", sessionToken)
+                            put("timestamp", record.timestamp)
+                        }
+                        array.put(obj)
+                        prefs.edit().putString(PREF_PENDING_SESSIONS_JSON, array.toString()).commit()
+                        Log.i("UsageTrackerService", "Đã lưu phiên $packageName ($sessionToken) vào hàng đợi pending bền vững")
+                    }
+                } catch (e: Exception) {
+                    Log.w("UsageTrackerService", "enqueuePendingSession thất bại: ${e.message}")
+                }
+            }
+        }
+
+        fun flushPendingSessions(context: Context) {
+            synchronized(statsLock) {
+                // 1. Xả các phiên trong inMemoryPendingSessions
+                val ramIterator = inMemoryPendingSessions.iterator()
+                while (ramIterator.hasNext()) {
+                    val item = ramIterator.next()
+                    val success = recordAppSessionInternalLocked(context, item.packageName, item.durationMs, item.sessionToken)
+                    if (success) {
+                        ramIterator.remove()
+                    }
+                }
+
+                // 2. Xả các phiên trong SharedPreferences
+                try {
+                    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    val currentRaw = prefs.getString(PREF_PENDING_SESSIONS_JSON, null) ?: return
+                    val array = try { org.json.JSONArray(currentRaw) } catch (e: Exception) { null } ?: return
+                    if (array.length() == 0) return
+
+                    val remainingArray = org.json.JSONArray()
+                    for (i in 0 until array.length()) {
+                        val item = array.optJSONObject(i) ?: continue
+                        val pkg = item.optString("pkg")
+                        val duration = item.optLong("duration", 0L)
+                        val token = item.optString("token")
+                        if (pkg.isNotEmpty() && duration >= 1000L && token.isNotEmpty()) {
+                            val recorded = recordAppSessionInternalLocked(context, pkg, duration, token)
+                            if (!recorded) {
+                                remainingArray.put(item)
+                            }
+                        }
+                    }
+                    if (remainingArray.length() == 0) {
+                        prefs.edit().remove(PREF_PENDING_SESSIONS_JSON).commit()
+                        Log.i("UsageTrackerService", "Đã xả toàn bộ hàng đợi pending sessions vào SharedPreferences thành công")
+                    } else {
+                        prefs.edit().putString(PREF_PENDING_SESSIONS_JSON, remainingArray.toString()).commit()
+                    }
+                } catch (e: Exception) {
+                    Log.w("UsageTrackerService", "flushPendingSessions thất bại: ${e.message}")
+                }
+            }
+        }
+
         fun recordAppSession(
             context: Context,
             packageName: String,
             durationMs: Long,
             sessionToken: String = "",
-            targetEpoch: Long = -1L
+            @Suppress("UNUSED_PARAMETER") targetEpoch: Long = -1L
         ) {
             if (durationMs < 1000L) return
-            if (targetEpoch != -1L && GuardianAccessibilityService.telemetryEpoch.get() != targetEpoch) return
             val isSystemOrSelf = packageName == context.packageName ||
                     packageName == "com.android.systemui" ||
                     packageName.contains("inputmethod") ||
@@ -2250,101 +2467,13 @@ class UsageTrackerService : Service() {
             if (isSystemOrSelf) return
 
             synchronized(statsLock) {
-                if (targetEpoch != -1L && GuardianAccessibilityService.telemetryEpoch.get() != targetEpoch) return
-                if (sessionToken.isNotEmpty()) {
-                    val duplicateBackupTokens = ArrayList<String>(recordedSessionTokens)
-                    if (recordedSessionTokens.contains(sessionToken)) {
-                        // Persist refreshed LRU access-order to disk to guarantee 100% RAM-Disk consistency
-                        val persisted = persistSessionTokensLocked(context)
-                        if (!persisted) {
-                            // Rollback 100% nguyên vẹn thứ tự LRU trong RAM khi commit() đĩa thất bại qua raw restore
-                            (recordedSessionTokens as? LruSessionSet)?.restoreSnapshotRaw(duplicateBackupTokens)
-                                ?: run {
-                                    recordedSessionTokens.clear()
-                                    recordedSessionTokens.addAll(duplicateBackupTokens)
-                                }
-                            Log.w("UsageTrackerService", "Phát hiện session trùng lặp ($sessionToken) nhưng commit đĩa thất bại: Đã rollback LRU order trong RAM")
-                            return
-                        }
-                        Log.w("UsageTrackerService", "Phát hiện session trùng lặp ($sessionToken): Đã cập nhật LRU order và bỏ qua tính giờ")
-                        return
-                    }
-                }
-                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                val todayStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US).format(java.util.Date())
-                val appInfo = try {
-                    context.packageManager.getApplicationInfo(packageName, 0)
-                } catch (e: Exception) {
-                    null
-                }
-                val appLabel = appInfo?.let { context.packageManager.getApplicationLabel(it).toString() } ?: packageName
-                val metadata = AppClassifier.classify(packageName, appLabel, appInfo)
+                // Tự động xả các phiên pending tồn đọng trước đó nếu có
+                flushPendingSessions(context)
 
-                val backupTokens = ArrayList<String>(recordedSessionTokens)
-                val hadTokensJson = prefs.contains("persisted_session_tokens_json")
-                val prevTokensJson = if (hadTokensJson) prefs.getString("persisted_session_tokens_json", null) else null
-
-                val appKey = "session_${todayStr}_$packageName"
-                val hadCurMs = prefs.contains(appKey)
-                val prevCurMs = if (hadCurMs) prefs.getLong(appKey, 0L) else 0L
-
-                val nameKey = "app_name_$packageName"
-                val hadName = prefs.contains(nameKey)
-                val prevName = if (hadName) prefs.getString(nameKey, null) else null
-
-                val catKey = "app_cat_$packageName"
-                val hadCat = prefs.contains(catKey)
-                val prevCat = if (hadCat) prefs.getString(catKey, null) else null
-
-                val catLabelKey = "app_cat_label_$packageName"
-                val hadCatLabel = prefs.contains(catLabelKey)
-                val prevCatLabel = if (hadCatLabel) prefs.getString(catLabelKey, null) else null
-
-                val lastUsedKey = "app_last_used_$packageName"
-                val hadLastUsed = prefs.contains(lastUsedKey)
-                val prevLastUsed = if (hadLastUsed) prefs.getLong(lastUsedKey, 0L) else 0L
-
-                val editor = prefs.edit()
-                if (sessionToken.isNotEmpty()) {
-                    recordedSessionTokens.add(sessionToken)
-                    val jsonArray = org.json.JSONArray()
-                    for (t in recordedSessionTokens) {
-                        jsonArray.put(t)
-                    }
-                    editor.putString("persisted_session_tokens_json", jsonArray.toString())
-                }
-
-                val newMs = prevCurMs + durationMs
-                editor.putLong(appKey, newMs)
-                    .putString(nameKey, metadata.appName.ifEmpty { appLabel })
-                    .putString(catKey, metadata.category.name)
-                    .putString(catLabelKey, metadata.category.displayName)
-                    .putLong(lastUsedKey, System.currentTimeMillis())
-
-                val committed = editor.commit()
-                if (!committed) {
-                    // Phục hồi lại trạng thái in-memory cache của SharedPreferences để tránh dirty cache
-                    val rollbackEditor = prefs.edit()
-                    if (hadCurMs) rollbackEditor.putLong(appKey, prevCurMs) else rollbackEditor.remove(appKey)
-                    if (hadName) rollbackEditor.putString(nameKey, prevName) else rollbackEditor.remove(nameKey)
-                    if (hadCat) rollbackEditor.putString(catKey, prevCat) else rollbackEditor.remove(catKey)
-                    if (hadCatLabel) rollbackEditor.putString(catLabelKey, prevCatLabel) else rollbackEditor.remove(catLabelKey)
-                    if (hadLastUsed) rollbackEditor.putLong(lastUsedKey, prevLastUsed) else rollbackEditor.remove(lastUsedKey)
-                    if (sessionToken.isNotEmpty()) {
-                        if (hadTokensJson) rollbackEditor.putString("persisted_session_tokens_json", prevTokensJson)
-                        else rollbackEditor.remove("persisted_session_tokens_json")
-                    }
-                    rollbackEditor.commit()
-
-                    if (sessionToken.isNotEmpty()) {
-                        // Rollback 100% nguyên vẹn cả phần tử và thứ tự LRU trong RAM khi commit() đĩa thất bại qua raw restore
-                        (recordedSessionTokens as? LruSessionSet)?.restoreSnapshotRaw(backupTokens)
-                            ?: run {
-                                recordedSessionTokens.clear()
-                                recordedSessionTokens.addAll(backupTokens)
-                            }
-                    }
-                    Log.w("UsageTrackerService", "recordAppSession: SharedPreferences.commit() returned false, rollback RAM token và preferences cache, hủy ghi nhận thời lượng")
+                val success = recordAppSessionInternalLocked(context, packageName, durationMs, sessionToken)
+                if (!success && sessionToken.isNotEmpty()) {
+                    // Nếu ghi đĩa thất bại, lập tức đưa vào hàng đợi bền vững để retry sau SCREEN_ON hoặc restart
+                    enqueuePendingSession(context, packageName, durationMs, sessionToken)
                     return
                 }
             }

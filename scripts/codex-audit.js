@@ -349,6 +349,15 @@ if (fs.existsSync(guardianAccessFile) && fs.existsSync(usageTrackerFile) && fs.e
     gaCode.includes('UsageTrackerService.persistDeviceOnlineState(applicationContext, currentEpoch)') &&
     testCode.includes('testOfflineCheckPausedBeforeDiskCommitAbortsWhenOnlineTransitionIntervenes');
 
+  const sessionAccountingDecoupled = !handleScreenOffCode.includes(`telemetryEpoch.get() ${EQ2} currentEpoch`) &&
+    utCode.includes('fun recordAppSessionInternalLocked(') &&
+    testCode.includes('testScreenOffInterleavedWithRapidScreenOnPreservesAppSessionDurablyWithoutLoss');
+
+  const hasDurablePendingQueue = utCode.includes('PREF_PENDING_SESSIONS_JSON') &&
+    utCode.includes('fun flushPendingSessions(') &&
+    utCode.includes('fun enqueuePendingSession(') &&
+    testCode.includes('testRecordAppSessionEnqueuesToPendingQueueOnCommitFailureAndFlushesSuccessfully');
+
   if (!hasVolatileScreen || !hasTelemetryEpoch || !hasSyncScreenOff || !hasConcurrentCallSet ||
       !hasUrgentOffline || !hasSingleEpochScreenOff || !hasSingleEpochScreenOn || !noEarlyRejection ||
       !hasSessionDeduplication || !hasZeroRawClose || !webActivityGuarded || !collectAndSaveGuarded ||
@@ -356,7 +365,8 @@ if (fs.existsSync(guardianAccessFile) && fs.existsSync(usageTrackerFile) && fs.e
       !hasHomeBeforeForegroundCheck || !hasNoRunBlockingInDestroy || !hasDoubleCheckInExecuteOnline ||
       !noUnsynchronizedPrefsWrite || !hasStaleScreenOffFencing || !hasKeyguardStrictLockCheck ||
       !hasStatsLock || !hasSessionLock || !hasForegroundGeneration || !testsLifecycleRace || !hasCasProtection ||
-      !hasHardwareTransitionLock || !urgentOfflineOutsideLock || !persistOnlineOutsideLock || !hasDiskStateLock) {
+      !hasHardwareTransitionLock || !urgentOfflineOutsideLock || !persistOnlineOutsideLock || !hasDiskStateLock ||
+      !sessionAccountingDecoupled || !hasDurablePendingQueue) {
     console.error('\x1b[31m%s\x1b[0m', '❌ LỖI BẤT BIẾN PHẦN CỨNG: Vi phạm một trong các tiêu chuẩn an toàn:');
     console.error({
       hasVolatileScreen, hasTelemetryEpoch, hasSyncScreenOff, hasConcurrentCallSet,
@@ -366,7 +376,7 @@ if (fs.existsSync(guardianAccessFile) && fs.existsSync(usageTrackerFile) && fs.e
       hasHomeBeforeForegroundCheck, hasNoRunBlockingInDestroy, hasDoubleCheckInExecuteOnline,
       noUnsynchronizedPrefsWrite, hasStaleScreenOffFencing, hasKeyguardStrictLockCheck,
       hasStatsLock, hasForegroundGeneration, testsLifecycleRace, hasCasProtection, hasHardwareTransitionLock,
-      urgentOfflineOutsideLock, persistOnlineOutsideLock, hasDiskStateLock
+      urgentOfflineOutsideLock, persistOnlineOutsideLock, hasDiskStateLock, sessionAccountingDecoupled, hasDurablePendingQueue
     });
     process.exit(1);
   }
@@ -901,7 +911,9 @@ try {
     'testScreenOffInterleavedWithScreenOnLifecycleRaceStrictlyPreventsStaleOfflineOverwrite',
     'testHardwareTransitionLockGuaranteesAtomicStateTransition',
     'testOfflineCheckPausedBeforeDiskCommitAbortsWhenOnlineTransitionIntervenes',
-    'testScreenOffTransitionsImmediatelyWithoutWaitingForScreenOnDiskIo'
+    'testScreenOffTransitionsImmediatelyWithoutWaitingForScreenOnDiskIo',
+    'testScreenOffInterleavedWithRapidScreenOnPreservesAppSessionDurablyWithoutLoss',
+    'testRecordAppSessionEnqueuesToPendingQueueOnCommitFailureAndFlushesSuccessfully'
   ];
 
   for (const testName of requiredProductionFeatureTests) {

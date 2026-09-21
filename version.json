@@ -8,15 +8,15 @@
   "fileSize": "5.87 MB",
   "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.3.8.apk",
   "apkFallbackUrl": "https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/CVA-SmartGuardian-v1.3.8.apk",
-  "sha256": "B5A002E27D5F5897FA423A696BF930C41FFBF535206925AF48FA57A0CEBB7505",
+  "sha256": "279BEDA77157766D529DF597418989FA3EB7CCB0C18C69604290BD240CAED207",
   "changelog": [
     "Di chuyển sendUrgentOfflineStatus ra ngoài hardwareTransitionLock để triệt tiêu hiện tượng giữ lock khi thực hiện I/O đĩa và mạng.",
     "Bổ sung diskStateLock và persistDeviceOfflineState / persistDeviceOnlineState với CAS logic nguyên tử kiểm soát last_written_epoch.",
-    "Bảo vệ epoch và generation tuyệt đối, tự động hủy bỏ các batch phát telemetry ngoại tuyến cũ khi xảy ra cạnh tranh vòng đời.",
-    "Tuần tự hóa activeAppLock và xử lý fail-closed trên HTTP 412 CAS concurrency."
+    "Tách biệt hoàn toàn kế toán phiên ứng dụng khỏi stale-epoch fencing của telemetry mạng, đảm bảo không mất phiên khi bật tắt màn hình nhanh.",
+    "Tích hợp hàng đợi pending_sessions_json bền vững kèm RAM fallback queue tự động lưu và retry sau SCREEN_ON hoặc restart."
   ],
-  "releaseNotes": "Bản phát hành v1.3.8: Non-blocking hardwareTransitionLock, khóa đĩa diskStateLock nguyên tử kiểm soát last_written_epoch, và triệt tiêu xung đột vòng đời màn hình.",
-  "updatedAt": 1789997334996,
-  "size": 6157178,
+  "releaseNotes": "Bản phát hành v1.3.8: Non-blocking hardwareTransitionLock, khóa đĩa diskStateLock nguyên tử kiểm soát last_written_epoch, tách biệt kế toán phiên và hàng đợi pending durable.",
+  "updatedAt": 1789997983672,
+  "size": 6158644,
   "releaseDate": "2026-09-21"
 }

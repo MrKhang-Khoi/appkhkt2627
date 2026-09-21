@@ -52,6 +52,7 @@ class HardwareInvariantTest {
         UsageTrackerService.lastGpsPromptTimestamp.set(0L)
         UsageTrackerService.lastPolledForegroundPkg = ""
         UsageTrackerService.lastPolledForegroundStartTime = 0L
+        UsageTrackerService.inMemoryPendingSessions.clear()
         AppUpdateManager.mainDispatcher = kotlinx.coroutines.Dispatchers.Unconfined
     }
 
@@ -4757,6 +4758,126 @@ class HardwareInvariantTest {
         assertEquals("Telemetry epoch must be 22", 22L, GuardianAccessibilityService.telemetryEpoch.get())
         assertEquals("Device online state on disk must remain FALSE", false, fakePrefs.data["is_device_online"])
         assertEquals("Last written epoch on disk must be 22", 22L, fakePrefs.data["last_written_epoch"])
+    }
+
+    @Test
+    fun testScreenOffInterleavedWithRapidScreenOnPreservesAppSessionDurablyWithoutLoss() {
+        // Invariant (Codex Karl Popper Falsification Mandate):
+        // Kế toán phiên ứng dụng (recordAppSession) là sổ cái thời gian thực tế đã diễn ra,
+        // PHẢI được tách biệt hoàn toàn khỏi stale-epoch fencing của telemetry mạng.
+        // Khi SCREEN_OFF diễn ra (epoch 10 -> 11), snapshot phiên được chốt nguyên tử dưới sessionLock.
+        // Dù coroutine ghi đĩa bị trễ (delayed I/O) và người dùng bật màn hình lại rất nhanh (SCREEN_ON: epoch 11 -> 12),
+        // phiên sử dụng ĐÃ CHỐT vẫn phải được ghi nhận thành công 100% vào SharedPreferences,
+        // không bao giờ bị loại bỏ vì epoch không khớp, và cơ chế sessionToken chống tính trùng lặp.
+        val fakePrefs = FakeSharedPreferences()
+        val context = FakeTestContext(fakePrefs)
+
+        GuardianAccessibilityService.telemetryEpoch.set(10L)
+        GuardianAccessibilityService.isScreenOnState = true
+
+        val pkg = "com.study.math"
+        val durationMs = 5000L
+        val token = "session_com.study.math_${System.currentTimeMillis() - 5000L}"
+
+        val screenOnTriggeredLatch = java.util.concurrent.CountDownLatch(1)
+        val sessionWriteCompleteLatch = java.util.concurrent.CountDownLatch(1)
+
+        // Thread 1: Giả lập coroutine recordAppSession bị trì hoãn sau SCREEN_OFF
+        val tDelayedSessionRecorder = Thread {
+            try {
+                // Đợi cho đến khi SCREEN_ON chạy và nâng epoch lên 12
+                screenOnTriggeredLatch.await(3, java.util.concurrent.TimeUnit.SECONDS)
+                // Thực hiện ghi nhận phiên với token và duration đã snapshot từ lúc SCREEN_OFF
+                UsageTrackerService.recordAppSession(context, pkg, durationMs, token)
+            } finally {
+                sessionWriteCompleteLatch.countDown()
+            }
+        }
+
+        // Thread 2: Người dùng bật màn hình lại nhanh chóng (SCREEN_ON)
+        val tRapidScreenOn = Thread {
+            // Epoch tăng lên 11 (SCREEN_OFF) rồi lên 12 (SCREEN_ON)
+            GuardianAccessibilityService.telemetryEpoch.incrementAndGet() // 11L (SCREEN_OFF)
+            GuardianAccessibilityService.telemetryEpoch.incrementAndGet() // 12L (SCREEN_ON)
+            GuardianAccessibilityService.isScreenOnState = true
+            screenOnTriggeredLatch.countDown()
+        }
+
+        tDelayedSessionRecorder.start()
+        tRapidScreenOn.start()
+
+        val completed = sessionWriteCompleteLatch.await(4, java.util.concurrent.TimeUnit.SECONDS)
+        assertTrue("Session write thread must complete", completed)
+
+        // Invariant Assertions:
+        val todayStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US).format(java.util.Date())
+        val appKey = "session_${todayStr}_com.study.math"
+        assertTrue("Session MUST be recorded despite epoch advancing to 12", fakePrefs.contains(appKey))
+        val recordedDuration = fakePrefs.getLong(appKey, 0L)
+        assertEquals("Recorded duration must match snapshot duration exactly", 5000L, recordedDuration)
+
+        // Idempotency check: Re-calling with same sessionToken must be rejected (no double accounting)
+        UsageTrackerService.recordAppSession(context, pkg, 3000L, token)
+        assertEquals("Duration must NOT increase on duplicate sessionToken", 5000L, fakePrefs.getLong(appKey, 0L))
+    }
+
+    @Test
+    fun testRecordAppSessionEnqueuesToPendingQueueOnCommitFailureAndFlushesSuccessfully() {
+        // Invariant (Codex Karl Popper Durable Queue Mandate):
+        // Nếu ghi đĩa SharedPreferences thất bại (commit() == false) hoặc hệ thống gặp lỗi I/O,
+        // phiên snapshot phải được đưa ngay vào hàng đợi bền vững pending_sessions_json và RAM fallback queue.
+        // Khi điều kiện lưu trữ hồi phục và flushPendingSessions() được gọi (SCREEN_ON hoặc service start),
+        // phiên tồn đọng phải được ghi nhận đầy đủ vào SharedPreferences và hàng đợi pending được dọn sạch.
+        val fakePrefs = FakeSharedPreferences()
+        val context = FakeTestContext(fakePrefs)
+
+        val pkg = "com.study.english"
+        val durationMs = 4000L
+        val token = "session_com.study.english_test_pending_1"
+
+        // 1. Enqueue khi đĩa hoạt động bình thường -> lưu cả RAM và SharedPreferences
+        UsageTrackerService.enqueuePendingSession(context, pkg, durationMs, token)
+
+        val pendingJsonRaw = fakePrefs.getString(UsageTrackerService.PREF_PENDING_SESSIONS_JSON, null)
+        assertNotNull("Pending sessions JSON must be stored on disk", pendingJsonRaw)
+        val jsonArray = org.json.JSONArray(pendingJsonRaw)
+        assertEquals(1, jsonArray.length())
+        assertEquals(pkg, jsonArray.getJSONObject(0).getString("pkg"))
+        assertEquals(token, jsonArray.getJSONObject(0).getString("token"))
+        assertEquals(1, UsageTrackerService.inMemoryPendingSessions.size)
+
+        // Gọi flushPendingSessions (tương tự khi SCREEN_ON hoặc service kết nối lại)
+        UsageTrackerService.flushPendingSessions(context)
+
+        // Xác nhận phiên đã được ghi nhận vào SharedPreferences chính
+        val todayStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US).format(java.util.Date())
+        val appKey = "session_${todayStr}_com.study.english"
+        assertTrue("Session must be flushed into main preferences", fakePrefs.contains(appKey))
+        assertEquals(4000L, fakePrefs.getLong(appKey, 0L))
+
+        // Hàng đợi pending đã được dọn sạch 100%
+        assertFalse("Pending queue must be removed after successful flush",
+            fakePrefs.contains(UsageTrackerService.PREF_PENDING_SESSIONS_JSON))
+        assertEquals(0, UsageTrackerService.inMemoryPendingSessions.size)
+
+        // 2. Thử nghiệm suy biến phần cứng: Giả lập commit đĩa thất bại hoàn toàn
+        fakePrefs.commitReturnsSuccess = false
+        val pkg2 = "com.study.history"
+        val duration2 = 3500L
+        val token2 = "session_com.study.history_test_pending_2"
+
+        UsageTrackerService.enqueuePendingSession(context, pkg2, duration2, token2)
+        // Dù commit đĩa thất bại, phiên vẫn được bảo vệ 100% nguyên vẹn trong hàng đợi RAM fallback
+        assertEquals(1, UsageTrackerService.inMemoryPendingSessions.size)
+
+        // Khi đĩa hồi phục và flush chạy:
+        fakePrefs.commitReturnsSuccess = true
+        UsageTrackerService.flushPendingSessions(context)
+
+        val appKey2 = "session_${todayStr}_com.study.history"
+        assertTrue("Session from RAM fallback must be flushed into main preferences", fakePrefs.contains(appKey2))
+        assertEquals(3500L, fakePrefs.getLong(appKey2, 0L))
+        assertEquals(0, UsageTrackerService.inMemoryPendingSessions.size)
     }
 
     private class FakeTestContext(
