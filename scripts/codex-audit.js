@@ -500,6 +500,9 @@ async function verifyLiveApkDownload() {
   if (vJson.apkFallbackUrl) candidateUrls.push(vJson.apkFallbackUrl);
   candidateUrls.push(`https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/CVA-SmartGuardian-v${vJson.versionName}.apk`);
   candidateUrls.push('https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/app-release.apk');
+  const nowTs = Date.now();
+  candidateUrls.push(`https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/CVA-SmartGuardian-v${vJson.versionName}.apk?t=${nowTs}`);
+  candidateUrls.push(`https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/app-release.apk?t=${nowTs}`);
   let headCommit = '';
   let shortCommit = '';
   try {
