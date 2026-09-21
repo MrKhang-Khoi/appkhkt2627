@@ -99,9 +99,9 @@ class GuardianAccessibilityService : AccessibilityService() {
             }
 
             // 2. UsageStatsManager: Chỉ chấp nhận khi activeRootPkg tạm thời là null (quá trình chuyển cảnh cửa sổ)
-            // VÀ event ACTIVITY_RESUMED khớp targetPkg trong khoảng thời gian hợp lệ (chống Stale Evidence)
+            // VÀ event ACTIVITY_RESUMED khớp targetPkg trong khoảng thời gian hợp lệ (Fail-Closed: bắt buộc lastEventTime > 0L)
             if (activeRootPkg.isNullOrEmpty() && (usageStatsLastResumedPkg == targetPkg || isPackageMatch(usageStatsLastResumedPkg))) {
-                if (lastEventTime <= 0L || (now >= lastEventTime && now - lastEventTime <= maxEventAgeMs)) {
+                if (lastEventTime > 0L && now >= lastEventTime && now - lastEventTime <= maxEventAgeMs) {
                     return true
                 }
             }
@@ -507,15 +507,24 @@ class GuardianAccessibilityService : AccessibilityService() {
                     false
                 }
             }
-            if (prevPkg.isNotEmpty() && prevStart > 0L && now - prevStart >= 1500L) {
-                UsageTrackerService.recordAppSession(applicationContext, prevPkg, now - prevStart, prevToken)
+            if (prevPkg.isNotEmpty() && prevStart > 0L && now - prevStart >= 1500L && prevToken.isNotEmpty()) {
+                val sessionDuration = now - prevStart
+                serviceScope.launch(Dispatchers.IO) {
+                    if (telemetryEpoch.get() == expectedEpoch) {
+                        UsageTrackerService.recordAppSession(applicationContext, prevPkg, sessionDuration, prevToken, expectedEpoch)
+                    }
+                }
             }
-            val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
-            prefs.edit()
-                .putString("last_foreground_pkg", "")
-                .putLong("last_foreground_start", 0L)
-                .putBoolean("is_device_online", false)
-                .apply()
+            serviceScope.launch(Dispatchers.IO) {
+                if (telemetryEpoch.get() == expectedEpoch) {
+                    val prefs = try { getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE) } catch (e: Exception) { null }
+                    prefs?.edit()
+                        ?.putString("last_foreground_pkg", "")
+                        ?.putLong("last_foreground_start", 0L)
+                        ?.putBoolean("is_device_online", false)
+                        ?.apply()
+                }
+            }
 
             if (shouldUploadOff) {
                 return UsageTrackerService.prepareActiveAppLocked(
@@ -543,11 +552,23 @@ class GuardianAccessibilityService : AccessibilityService() {
                     false
                 }
             }
-            if (prevPkg.isNotEmpty() && prevStart > 0L && now - prevStart >= 1500L) {
-                UsageTrackerService.recordAppSession(applicationContext, prevPkg, now - prevStart, prevToken)
+            if (prevPkg.isNotEmpty() && prevStart > 0L && now - prevStart >= 1500L && prevToken.isNotEmpty()) {
+                val sessionDuration = now - prevStart
+                serviceScope.launch(Dispatchers.IO) {
+                    if (telemetryEpoch.get() == expectedEpoch) {
+                        UsageTrackerService.recordAppSession(applicationContext, prevPkg, sessionDuration, prevToken, expectedEpoch)
+                    }
+                }
             }
-            val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
-            prefs.edit().putString("last_foreground_pkg", "").putLong("last_foreground_start", 0L).apply()
+            serviceScope.launch(Dispatchers.IO) {
+                if (telemetryEpoch.get() == expectedEpoch) {
+                    val prefs = try { getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE) } catch (e: Exception) { null }
+                    prefs?.edit()
+                        ?.putString("last_foreground_pkg", "")
+                        ?.putLong("last_foreground_start", 0L)
+                        ?.apply()
+                }
+            }
 
             if (shouldUploadHome) {
                 return UsageTrackerService.prepareActiveAppLocked(
@@ -570,16 +591,28 @@ class GuardianAccessibilityService : AccessibilityService() {
 
         // Ghi nhận ứng dụng tiền cảnh thông thường
         if (currentForegroundPackage != packageName) {
-            if (prevPkg.isNotEmpty() && prevStart > 0L && now - prevStart >= 1500L) {
-                UsageTrackerService.recordAppSession(applicationContext, prevPkg, now - prevStart, prevToken)
+            if (prevPkg.isNotEmpty() && prevStart > 0L && now - prevStart >= 1500L && prevToken.isNotEmpty()) {
+                val sessionDuration = now - prevStart
+                serviceScope.launch(Dispatchers.IO) {
+                    if (telemetryEpoch.get() == expectedEpoch) {
+                        UsageTrackerService.recordAppSession(applicationContext, prevPkg, sessionDuration, prevToken, expectedEpoch)
+                    }
+                }
             }
             synchronized(sessionLock) {
                 currentForegroundPackage = packageName
                 currentForegroundStartTime = now
             }
 
-            val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
-            prefs.edit().putString("last_foreground_pkg", packageName).putLong("last_foreground_start", now).apply()
+            serviceScope.launch(Dispatchers.IO) {
+                if (telemetryEpoch.get() == expectedEpoch) {
+                    val prefs = try { getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE) } catch (e: Exception) { null }
+                    prefs?.edit()
+                        ?.putString("last_foreground_pkg", packageName)
+                        ?.putLong("last_foreground_start", now)
+                        ?.apply()
+                }
+            }
         }
 
         val shouldDebounce = synchronized(sessionLock) {

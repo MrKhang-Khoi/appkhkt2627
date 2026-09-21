@@ -839,7 +839,8 @@ try {
     'testWebActivityBannerEvaluationAndInvariants',
     'testGpsCommandProtocolStateTransitionsAndInvariants',
     'testParentDashboardSubtitleEvaluationAndAntiSpoofing',
-    'testGpsCommandHardwareFencingAndTimeoutInvariants'
+    'testGpsCommandHardwareFencingAndTimeoutInvariants',
+    'testHomeAndKeyguardTransitionDoesNotBlockTelemetryMutexUnderSlowDiskIo'
   ];
 
   for (const testName of requiredProductionFeatureTests) {

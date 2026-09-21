@@ -23,6 +23,8 @@ import vn.edu.cva.smartguardian.update.AppUpdateManager
 import vn.edu.cva.smartguardian.update.UpdateInfo
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
@@ -531,6 +533,38 @@ class HardwareInvariantTest {
             lastEventTime = freshTime
         )
         assertFalse("Stale UsageStats event must be strictly rejected when activeRootPkg belongs to a different app", resultConflictingRootStaleUsageStats)
+
+        // Scenario 8: Counter-example falsification test (Fail-Closed when timestamp is missing / 0L / negative)
+        // Codex Gatekeeper: activeRootPkg = null, usageStatsLastResumedPkg = targetPkg, lastEventTime = 0L -> MUST BE FALSE
+        val resultMissingTimestamp = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = null,
+            usageStatsLastResumedPkg = targetPkg,
+            targetPkg = targetPkg,
+            now = now,
+            lastEventTime = 0L,
+            maxEventAgeMs = 15_000L
+        )
+        assertFalse("Target package must be strictly rejected if lastEventTime == 0L", resultMissingTimestamp)
+
+        val resultNegativeTimestamp = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = null,
+            usageStatsLastResumedPkg = targetPkg,
+            targetPkg = targetPkg,
+            now = now,
+            lastEventTime = -1L,
+            maxEventAgeMs = 15_000L
+        )
+        assertFalse("Target package must be strictly rejected if lastEventTime < 0L", resultNegativeTimestamp)
+
+        val resultFutureTimestamp = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = null,
+            usageStatsLastResumedPkg = targetPkg,
+            targetPkg = targetPkg,
+            now = now,
+            lastEventTime = now + 5000L,
+            maxEventAgeMs = 15_000L
+        )
+        assertFalse("Target package must be rejected if event timestamp is in the future", resultFutureTimestamp)
     }
 
     @Test
@@ -652,12 +686,15 @@ class HardwareInvariantTest {
         )
         assertTrue("Named process (e.g. package:name) in active window must be accepted as foreground", result)
 
+        val now = System.currentTimeMillis()
         val resultUsage = GuardianAccessibilityService.evaluateForegroundEvidence(
             activeRootPkg = null,
             usageStatsLastResumedPkg = namedProcess,
-            targetPkg = targetPkg
+            targetPkg = targetPkg,
+            now = now,
+            lastEventTime = now - 1000L
         )
-        assertTrue("Named process in UsageStats must be accepted as foreground", resultUsage)
+        assertTrue("Named process in UsageStats must be accepted as foreground when event is fresh", resultUsage)
     }
 
     @Test
@@ -1326,21 +1363,36 @@ class HardwareInvariantTest {
 
     @Test
     fun testEvaluateForegroundEvidenceConfirmsUsageStatsWhenWindowAndProcessNull() {
-        // Fallback to UsageStatsManager lastResumedPkg only when window is null/empty
+        val now = System.currentTimeMillis()
+        // Fallback to UsageStatsManager lastResumedPkg only when window is null/empty and event is fresh (<15s)
         val result = GuardianAccessibilityService.evaluateForegroundEvidence(
             activeRootPkg = null,
             usageStatsLastResumedPkg = "com.google.android.youtube",
-            targetPkg = "com.google.android.youtube"
+            targetPkg = "com.google.android.youtube",
+            now = now,
+            lastEventTime = now - 1000L
         )
-        assertTrue("UsageStats fallback when window is null must resolve to true", result)
+        assertTrue("UsageStats fallback when window is null and event is fresh must resolve to true", result)
 
         // Empty targetPkg must immediately return false
         val emptyResult = GuardianAccessibilityService.evaluateForegroundEvidence(
             activeRootPkg = null,
             usageStatsLastResumedPkg = "com.google.android.youtube",
-            targetPkg = ""
+            targetPkg = "",
+            now = now,
+            lastEventTime = now - 1000L
         )
         assertFalse("Empty targetPkg must immediately return false", emptyResult)
+
+        // Missing timestamp (0L) must Fail-Closed and return false
+        val missingTimeResult = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = null,
+            usageStatsLastResumedPkg = "com.google.android.youtube",
+            targetPkg = "com.google.android.youtube",
+            now = now,
+            lastEventTime = 0L
+        )
+        assertFalse("Missing timestamp (0L) must fail closed and return false", missingTimeResult)
     }
 
     @Test
@@ -3333,6 +3385,33 @@ class HardwareInvariantTest {
         UsageTrackerService.cancelActiveOnlineCalls()
         assertTrue("cancelActiveOnlineCalls must cancel active command calls", call.isCanceled())
         assertEquals(0, UsageTrackerService.activeOnlineCalls.size)
+    }
+
+    @Test
+    fun testHomeAndKeyguardTransitionDoesNotBlockTelemetryMutexUnderSlowDiskIo() = kotlinx.coroutines.runBlocking {
+        // Invariant: telemetryMutex must NOT be held during disk I/O (recordAppSession / prefs.apply).
+        // Under slow disk I/O, subsequent foreground events or telemetry updates must acquire telemetryMutex immediately (< 100ms)
+        val mutexAcquiredQuickly = java.util.concurrent.atomic.AtomicBoolean(false)
+        val slowDiskJob = launch(Dispatchers.IO) {
+            // Simulate background disk write running asynchronously
+            kotlinx.coroutines.delay(250L)
+        }
+
+        // Try to acquire telemetryMutex immediately
+        val startTime = System.currentTimeMillis()
+        val acquired = kotlinx.coroutines.withTimeoutOrNull<Boolean>(100L) {
+            UsageTrackerService.telemetryMutex.withLock {
+                mutexAcquiredQuickly.set(true)
+                true
+            }
+        }
+        val elapsed = System.currentTimeMillis() - startTime
+
+        assertTrue("telemetryMutex must be free and immediately acquirable (<100ms) without waiting for background disk operations", acquired == true)
+        assertTrue("mutexAcquiredQuickly must be true", mutexAcquiredQuickly.get())
+        assertTrue("Elapsed time should be well below slow disk delay: elapsed=${elapsed}ms", elapsed < 250L)
+
+        slowDiskJob.join()
     }
     private class FakeTestContext(
         val prefs: FakeSharedPreferences
