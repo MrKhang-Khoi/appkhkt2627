@@ -752,27 +752,28 @@ class UsageTrackerService : Service() {
         }
 
         fun cancelActiveOnlineCalls() {
-            synchronized(onlineCallLock) {
+            val callsToCancel = synchronized(onlineCallLock) {
                 try {
-                    val callsToCancel = java.util.ArrayList<okhttp3.Call>()
-                    callsToCancel.addAll(onlineCallRegistry.keys)
+                    val list = java.util.ArrayList<okhttp3.Call>(onlineCallRegistry.keys)
                     for (call in activeOnlineCalls) {
-                        if (!callsToCancel.contains(call)) {
-                            callsToCancel.add(call)
+                        if (!list.contains(call)) {
+                            list.add(call)
                         }
                     }
                     onlineCallRegistry.clear()
                     activeOnlineCalls.clear()
-
-                    for (call in callsToCancel) {
-                        try {
-                            call.cancel()
-                        } catch (e: Exception) {
-                            Log.w("UsageTrackerService", "online call.cancel error: ${e.message}")
-                        }
-                    }
+                    list
                 } catch (e: Exception) {
-                    Log.w("UsageTrackerService", "cancelActiveOnlineCalls error: ${e.message}")
+                    Log.w("UsageTrackerService", "cancelActiveOnlineCalls snapshot error: ${e.message}")
+                    java.util.ArrayList<okhttp3.Call>()
+                }
+            }
+
+            for (call in callsToCancel) {
+                try {
+                    call.cancel()
+                } catch (e: Exception) {
+                    Log.w("UsageTrackerService", "online call.cancel error: ${e.message}")
                 }
             }
         }
@@ -823,41 +824,44 @@ class UsageTrackerService : Service() {
         }
 
         fun cancelActiveOfflineCalls(targetGeneration: Long = -1L) {
-            synchronized(urgentOfflineLock) {
+            val callsToCancel = synchronized(urgentOfflineLock) {
                 if (targetGeneration != -1L && currentOfflineGeneration.get() != targetGeneration) {
                     // Đã có generation mới hơn đang quản lý, cấm hủy chéo của generation mới
-                    return
+                    return@synchronized java.util.ArrayList<okhttp3.Call>()
                 }
                 try {
                     if (targetGeneration == -1L) {
                         urgentOfflineJob?.cancel()
                         urgentOfflineJob = null
                     }
-                    val callsToCancel = java.util.ArrayList<okhttp3.Call>()
+                    val list = java.util.ArrayList<okhttp3.Call>()
                     val it = offlineCallRegistry.entries.iterator()
                     while (it.hasNext()) {
                         val entry = it.next()
                         if (targetGeneration == -1L || entry.value.generation == targetGeneration) {
-                            callsToCancel.add(entry.key)
+                            list.add(entry.key)
                             activeOfflineCalls.remove(entry.key)
                             it.remove()
                         }
                     }
                     for (call in activeOfflineCalls) {
-                        if (!callsToCancel.contains(call)) {
-                            callsToCancel.add(call)
+                        if (!list.contains(call)) {
+                            list.add(call)
                         }
                     }
                     activeOfflineCalls.clear()
-                    for (call in callsToCancel) {
-                        try {
-                            call.cancel()
-                        } catch (e: Exception) {
-                            Log.w("UsageTrackerService", "offline call.cancel error: ${e.message}")
-                        }
-                    }
+                    list
                 } catch (e: Exception) {
-                    Log.w("UsageTrackerService", "cancelActiveOfflineCalls error: ${e.message}")
+                    Log.w("UsageTrackerService", "cancelActiveOfflineCalls snapshot error: ${e.message}")
+                    java.util.ArrayList<okhttp3.Call>()
+                }
+            }
+
+            for (call in callsToCancel) {
+                try {
+                    call.cancel()
+                } catch (e: Exception) {
+                    Log.w("UsageTrackerService", "offline call.cancel error: ${e.message}")
                 }
             }
         }

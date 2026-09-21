@@ -386,7 +386,6 @@ class GuardianAccessibilityService : AccessibilityService() {
             heartbeatJob?.cancel()
             val currentEpoch = telemetryEpoch.incrementAndGet()
             UsageTrackerService.foregroundGeneration.incrementAndGet() // Triệt tiêu ngay lập tức mọi foreground telemetry in-flight
-            UsageTrackerService.cancelActiveOnlineCalls()
 
             // 2. Chụp snapshot và reset biến bộ nhớ RAM ngay lập tức dưới sessionLock TRƯỚC MỌI THAO TÁC I/O HOẶC SERVICE
             val now = System.currentTimeMillis()
@@ -413,6 +412,9 @@ class GuardianAccessibilityService : AccessibilityService() {
         val closedStart = transition.closedStart
         val sessionToken = transition.sessionToken
         val now = System.currentTimeMillis()
+
+        // Fast-path cancel: Hủy toàn bộ call online in-flight HOÀN TOÀN NGOÀI hardwareTransitionLock
+        UsageTrackerService.cancelActiveOnlineCalls()
 
         // 3. Chốt phiên polling độc lập (dispatches I/O to background coroutine)
         UsageTrackerService.closePolledSession(applicationContext, "SCREEN_OFF")
@@ -462,8 +464,6 @@ class GuardianAccessibilityService : AccessibilityService() {
             val currentGen = UsageTrackerService.foregroundGeneration.get()
             isScreenOnState = true
             UsageTrackerService.lastDispatchedOfflineEpoch.set(-1L)
-            UsageTrackerService.cancelActiveOfflineCalls()
-            startPeriodicHeartbeat()
 
             val currentPkg = try {
                 rootInActiveWindow?.packageName?.toString()
@@ -481,6 +481,10 @@ class GuardianAccessibilityService : AccessibilityService() {
         val currentEpoch = transition.currentEpoch
         val currentPkg = transition.currentPkg
         val currentGen = transition.currentGen
+
+        // Hủy các cuộc gọi offline đang dở dang và khởi động heartbeat (hoàn toàn ngoài hardwareTransitionLock)
+        UsageTrackerService.cancelActiveOfflineCalls()
+        startPeriodicHeartbeat()
 
         // Dispatch disk persistence sang Dispatchers.IO HOÀN TOÀN NGOÀI hardwareTransitionLock
         serviceScope.launch(Dispatchers.IO) {

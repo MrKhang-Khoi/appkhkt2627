@@ -311,6 +311,143 @@ class HardwareInvariantTest {
     }
 
     @Test
+    fun testAdversarialOfflineCallRegistryAtomicInterleaving() {
+        val client = OkHttpClient()
+        val request = Request.Builder().url("https://127.0.0.1:20128/adversarial_offline_call").build()
+
+        for (iter in 1..200) {
+            UsageTrackerService.activeOfflineCalls.clear()
+            UsageTrackerService.offlineCallRegistry.clear()
+
+            val call = client.newCall(request)
+            val barrier = java.util.concurrent.CyclicBarrier(2)
+            val registerDone = CountDownLatch(1)
+            val cancelDone = CountDownLatch(1)
+
+            val regThread = Thread {
+                barrier.await()
+                UsageTrackerService.registerOfflineCall(call, 100L, 1L)
+                registerDone.countDown()
+            }
+
+            val cancelThread = Thread {
+                barrier.await()
+                UsageTrackerService.cancelActiveOfflineCalls()
+                cancelDone.countDown()
+            }
+
+            regThread.start()
+            cancelThread.start()
+
+            assertTrue(registerDone.await(5, TimeUnit.SECONDS))
+            assertTrue(cancelDone.await(5, TimeUnit.SECONDS))
+
+            UsageTrackerService.cancelActiveOfflineCalls()
+            assertTrue("Call must be canceled", call.isCanceled())
+            assertEquals("activeOfflineCalls must be 0", 0, UsageTrackerService.activeOfflineCalls.size)
+            assertEquals("offlineCallRegistry must be 0", 0, UsageTrackerService.offlineCallRegistry.size)
+        }
+    }
+
+    @Test
+    fun testCancelDoesNotHoldOnlineOrOfflineLockDuringCancel() {
+        // Test 1: Verify onlineCallLock is released before call.cancel() is executed
+        val onlineCancelStarted = CountDownLatch(1)
+        val onlineTestRelease = CountDownLatch(1)
+        val acquiredOnlineLockDuringCancel = java.util.concurrent.atomic.AtomicBoolean(false)
+
+        val slowOnlineCall = java.lang.reflect.Proxy.newProxyInstance(
+            Call::class.java.classLoader,
+            arrayOf(Call::class.java)
+        ) { _, method, _ ->
+            when (method.name) {
+                "cancel" -> {
+                    onlineCancelStarted.countDown()
+                    onlineTestRelease.await(3, TimeUnit.SECONDS)
+                    null
+                }
+                "isCanceled" -> true
+                "hashCode" -> 101
+                "equals" -> false
+                else -> null
+            }
+        } as Call
+
+        UsageTrackerService.activeOnlineCalls.add(slowOnlineCall)
+
+        val onlineCancelThread = Thread {
+            UsageTrackerService.cancelActiveOnlineCalls()
+        }
+        onlineCancelThread.start()
+
+        assertTrue("online cancel must start", onlineCancelStarted.await(2, TimeUnit.SECONDS))
+
+        // Concurrently attempt to acquire onlineCallLock while call.cancel() is blocked inside slowOnlineCall
+        val lockAttemptThread = Thread {
+            synchronized(UsageTrackerService.onlineCallLock) {
+                acquiredOnlineLockDuringCancel.set(true)
+            }
+            onlineTestRelease.countDown()
+        }
+        lockAttemptThread.start()
+
+        lockAttemptThread.join(2000)
+        onlineCancelThread.join(2000)
+
+        assertTrue(
+            "Lock Convoy Elimination: onlineCallLock MUST be acquired concurrently while call.cancel() executes",
+            acquiredOnlineLockDuringCancel.get()
+        )
+
+        // Test 2: Verify urgentOfflineLock is released before call.cancel() is executed
+        val offlineCancelStarted = CountDownLatch(1)
+        val offlineTestRelease = CountDownLatch(1)
+        val acquiredOfflineLockDuringCancel = java.util.concurrent.atomic.AtomicBoolean(false)
+
+        val slowOfflineCall = java.lang.reflect.Proxy.newProxyInstance(
+            Call::class.java.classLoader,
+            arrayOf(Call::class.java)
+        ) { _, method, _ ->
+            when (method.name) {
+                "cancel" -> {
+                    offlineCancelStarted.countDown()
+                    offlineTestRelease.await(3, TimeUnit.SECONDS)
+                    null
+                }
+                "isCanceled" -> true
+                "hashCode" -> 102
+                "equals" -> false
+                else -> null
+            }
+        } as Call
+
+        UsageTrackerService.activeOfflineCalls.add(slowOfflineCall)
+
+        val offlineCancelThread = Thread {
+            UsageTrackerService.cancelActiveOfflineCalls()
+        }
+        offlineCancelThread.start()
+
+        assertTrue("offline cancel must start", offlineCancelStarted.await(2, TimeUnit.SECONDS))
+
+        val offlineLockAttemptThread = Thread {
+            synchronized(UsageTrackerService.urgentOfflineLock) {
+                acquiredOfflineLockDuringCancel.set(true)
+            }
+            offlineTestRelease.countDown()
+        }
+        offlineLockAttemptThread.start()
+
+        offlineLockAttemptThread.join(2000)
+        offlineCancelThread.join(2000)
+
+        assertTrue(
+            "Lock Convoy Elimination: urgentOfflineLock MUST be acquired concurrently while call.cancel() executes",
+            acquiredOfflineLockDuringCancel.get()
+        )
+    }
+
+    @Test
     fun testEpochFencingInvariant() {
         val currentEpoch = GuardianAccessibilityService.telemetryEpoch.incrementAndGet()
         val staleEpoch = currentEpoch - 1L
