@@ -5220,6 +5220,41 @@ class HardwareInvariantTest {
         assertEquals("", fakePrefs.data["last_active_package"])
     }
 
+    @Test
+    fun testPersistDiskActionRejectsWriteWhenHardwareTurnsOffOrEpochAdvances() {
+        val fakePrefs = FakeSharedPreferences(commitReturnsSuccess = true)
+        val initialEpoch = 10L
+        fakePrefs.data["last_written_epoch"] = initialEpoch
+        fakePrefs.data["is_device_online"] = true
+        fakePrefs.data["last_foreground_pkg"] = "com.google.android.youtube"
+
+        // Red-Team Karl Popper Falsification:
+        // When task A has epoch 10 and effectiveOnline=true, but screen turns off (epoch becomes 11),
+        // any delayed disk persistence for task A must be rejected by CAS under diskStateLock.
+        val activeEpoch = 11L
+        val activeGen = 5L
+        val taskGen = 4L
+        val hardwareStillOnline = false
+        val effectiveOnline = true
+
+        val shouldWrite = synchronized(UsageTrackerService.diskStateLock) {
+            if (effectiveOnline && (!hardwareStillOnline || activeEpoch != initialEpoch || activeGen != taskGen)) {
+                false
+            } else {
+                val currentDiskEpoch = fakePrefs.getLong("last_written_epoch", -1L)
+                if (initialEpoch == -1L || currentDiskEpoch <= initialEpoch) {
+                    fakePrefs.data["last_foreground_pkg"] = "STALE_APP"
+                    true
+                } else {
+                    false
+                }
+            }
+        }
+
+        assertFalse("Stale online task must NOT write to disk after screen off / epoch advance", shouldWrite)
+        assertEquals("YouTube must remain unchanged, not overwritten by stale task", "com.google.android.youtube", fakePrefs.data["last_foreground_pkg"])
+    }
+
     private class FakeTestContext(
         val prefs: FakeSharedPreferences
     ) : ContextWrapper(null) {

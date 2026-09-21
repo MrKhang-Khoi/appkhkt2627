@@ -1367,10 +1367,13 @@ Nếu [REJECTED]:
       }
 
       const data = await response.json();
-      reviewResult = (data.choices?.[0]?.message?.content || data.choices?.[0]?.message?.reasoning_content || '').trim();
+      reviewResult = (data.choices?.[0]?.message?.content || data.choices?.[0]?.message?.reasoning_content || data.choices?.[0]?.message?.reasoning || data.choices?.[0]?.text || '').trim();
       if (reviewResult) {
         lastError = null;
         break;
+      } else {
+        lastError = new Error(`Model ${model} trả về phản hồi rỗng: ${JSON.stringify(data)}`);
+        console.warn('\x1b[33m%s\x1b[0m', `[WARN] Model ${model} trả về phản hồi rỗng. Đang chuyển sang model tiếp theo trong danh sách candidate...`);
       }
     } catch (err) {
       lastError = err;

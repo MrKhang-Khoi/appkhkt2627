@@ -2142,28 +2142,7 @@ class UsageTrackerService : Service() {
                 val targetCat = if (effectiveOnline) category else "OFFLINE"
                 val targetLabel = if (effectiveOnline) categoryLabel else "Đã tắt màn hình"
 
-                val lastEpoch = prefs.getLong("last_written_epoch", -1L)
-                if (currentEpoch != -1L && lastEpoch > currentEpoch) {
-                    Log.w("UsageTrackerService", "Hủy bỏ prepareActiveAppLocked: SharedPreferences đã ghi bởi epoch mới hơn ($lastEpoch > $currentEpoch)")
-                    return null
-                }
-
-                synchronized(diskStateLock) {
-                    val currentDiskEpoch = prefs.getLong("last_written_epoch", -1L)
-                    if (currentEpoch != -1L && currentDiskEpoch > currentEpoch) {
-                        Log.w("UsageTrackerService", "Hủy bỏ prepareActiveAppLocked: SharedPreferences đã ghi bởi epoch mới hơn ($currentDiskEpoch > $currentEpoch)")
-                        return null
-                    }
-                    prefs.edit()
-                        .putLong("last_written_epoch", currentEpoch)
-                        .putBoolean("is_device_online", effectiveOnline)
-                        .putString("last_foreground_pkg", targetPkg)
-                        .putString("last_active_package", targetPkg)
-                        .putLong("last_foreground_start", System.currentTimeMillis())
-                        .putLong("last_active_timestamp", System.currentTimeMillis())
-                        .apply()
-                }
-
+                val now = System.currentTimeMillis()
                 val currentGen = foregroundGeneration.incrementAndGet()
                 lastKnownETags.clear()
                 // Active Cancellation: Hủy bỏ ngay các kết nối mạng in-flight của thế hệ cũ
@@ -2176,7 +2155,7 @@ class UsageTrackerService : Service() {
                     put("appName", targetApp)
                     put("category", targetCat)
                     put("categoryLabel", targetLabel)
-                    put("timestamp", System.currentTimeMillis())
+                    put("timestamp", now)
                     put("isForeground", effectiveOnline && isForeground)
                     put("generation", currentGen)
                     put("foregroundGeneration", currentGen)
@@ -2184,10 +2163,52 @@ class UsageTrackerService : Service() {
                 }
                 val body = activeJson.toString().toRequestBody(mediaType)
 
+                // Non-blocking Disk Persistence: Chuyển toàn bộ ghi đĩa sang Dispatchers.IO
+                // Triệt tiêu hoàn toàn nghẽn cổ chai I/O khi nắm giữ telemetryMutex
+                val persistDiskAction: suspend () -> Unit = {
+                    try {
+                        val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+                        val km = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+                        val hardwareStillOnline = GuardianAccessibilityService.isScreenOnState &&
+                                pm?.isInteractive == true &&
+                                km?.isKeyguardLocked != true
+
+                        synchronized(diskStateLock) {
+                            val activeEpoch = GuardianAccessibilityService.telemetryEpoch.get()
+                            val activeGen = foregroundGeneration.get()
+
+                            // Bất biến phần cứng & Generation CAS:
+                            // Nếu epoch đã thay đổi, hoặc generation đã cũ, hoặc máy đã offline nhưng tác vụ này là online,
+                            // thì TỪ CHỐI GHI NGAY LẬP TỨC để chống stale state ghi đè lên disk.
+                            if (effectiveOnline && (!hardwareStillOnline || activeEpoch != currentEpoch || activeGen != currentGen)) {
+                                Log.w("UsageTrackerService", "Hủy bỏ persistDiskAction: Hardware state / epoch đã thay đổi trước khi ghi đĩa (currentEpoch=$currentEpoch, activeEpoch=$activeEpoch, currentGen=$currentGen, activeGen=$activeGen, hardwareStillOnline=$hardwareStillOnline)")
+                                return@synchronized
+                            }
+
+                            val currentDiskEpoch = prefs.getLong("last_written_epoch", -1L)
+                            if (currentEpoch == -1L || currentDiskEpoch <= currentEpoch) {
+                                prefs.edit()
+                                    .putLong("last_written_epoch", currentEpoch)
+                                    .putBoolean("is_device_online", effectiveOnline)
+                                    .putString("last_foreground_pkg", targetPkg)
+                                    .putString("last_active_package", targetPkg)
+                                    .putLong("last_foreground_start", now)
+                                    .putLong("last_active_timestamp", now)
+                                    .apply()
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.w("UsageTrackerService", "persistDiskAction error: ${e.message}")
+                    }
+                }
+
                 if (!effectiveOnline) {
                     // Chuyển trực tiếp sang fast-path offline, không tạo cuộc gọi lặp
                     return {
-                        sendUrgentOfflineStatus(context, targetEpoch)
+                        coroutineScope {
+                            launch(Dispatchers.IO) { persistDiskAction() }
+                            launch(Dispatchers.IO) { sendUrgentOfflineStatus(context, targetEpoch) }
+                        }
                     }
                 } else {
                     val reqFam = okhttp3.Request.Builder()
@@ -2236,6 +2257,7 @@ class UsageTrackerService : Service() {
                             return@actionLambda
                         }
                         coroutineScope {
+                            launch(Dispatchers.IO) { persistDiskAction() }
                             val requests = listOf(reqFam, reqDev, reqFamHb, reqDevHb, reqLegacyDevHb, reqPairingHb)
                             val deferreds = requests.map { req ->
                                 async(Dispatchers.IO) {

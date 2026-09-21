@@ -472,6 +472,11 @@ class GuardianAccessibilityService : AccessibilityService() {
         }
 
         serviceScope.launch(Dispatchers.IO) {
+            val km = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+            val metadata = if (currentPkg != null) {
+                resolveAppMetadata(currentPkg, km?.isKeyguardLocked ?: false)
+            } else null
+
             val (uploadAction, actionGen) = UsageTrackerService.telemetryMutex.withLock {
                 if (!isScreenOnState || telemetryEpoch.get() != currentEpoch) {
                     return@withLock Pair(null, -1L)
@@ -482,8 +487,8 @@ class GuardianAccessibilityService : AccessibilityService() {
                     currentForegroundStartTime = 0L
                 }
 
-                val act = if (currentPkg != null) {
-                    handleWindowStateChangedLocked(currentPkg, currentEpoch)
+                val act = if (metadata != null && currentPkg != null) {
+                    applyAppTransitionLocked(metadata, currentPkg, currentEpoch, UsageTrackerService.foregroundGeneration.get())
                 } else {
                     null
                 }
@@ -569,12 +574,28 @@ class GuardianAccessibilityService : AccessibilityService() {
         val currentEpoch = telemetryEpoch.get()
         val startGen = UsageTrackerService.foregroundGeneration.get()
         serviceScope.launch(Dispatchers.IO) {
+            val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
+            val km = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+            val isInteractive = pm?.isInteractive ?: false
+            val isLocked = km?.isKeyguardLocked ?: false
+
+            if (!isScreenOnState || !isInteractive || telemetryEpoch.get() != currentEpoch || UsageTrackerService.foregroundGeneration.get() != startGen) {
+                return@launch
+            }
+
+            // IPC, window hierarchy & classification HOÀN TOÀN NGOÀI telemetryMutex
+            val metadata = resolveAppMetadata(packageName, isLocked) ?: return@launch
+
+            if (UsageTrackerService.foregroundGeneration.get() != startGen || telemetryEpoch.get() != currentEpoch || !isScreenOnState) {
+                return@launch
+            }
+
             val (uploadAction, actionGen) = UsageTrackerService.telemetryMutex.withLock {
                 // Kiểm tra nguyên tử: Nếu màn hình đã tắt hoặc epoch hoặc gen đã thay đổi, bỏ qua ngay
                 if (!isScreenOnState || telemetryEpoch.get() != currentEpoch || UsageTrackerService.foregroundGeneration.get() != startGen) {
                     return@withLock Pair(null, -1L)
                 }
-                val act = handleWindowStateChangedLocked(packageName, currentEpoch, startGen)
+                val act = applyAppTransitionLocked(metadata, packageName, currentEpoch, startGen)
                 Pair(act, UsageTrackerService.foregroundGeneration.get())
             }
             if (uploadAction != null && actionGen != -1L) {
@@ -691,6 +712,195 @@ class GuardianAccessibilityService : AccessibilityService() {
         )
     }
 
+    internal data class TargetAppMetadata(
+        val targetPkg: String,
+        val targetApp: String,
+        val targetCat: String,
+        val targetLabel: String,
+        val isForegroundTarget: Boolean,
+        val isBank: Boolean,
+        val isLock: Boolean,
+        val isHome: Boolean
+    )
+
+    private fun resolveAppMetadata(packageName: String, isLocked: Boolean): TargetAppMetadata? {
+        val isHome = isDefaultLauncher(packageName)
+        val isLock = packageName == "com.android.systemui" || packageName.contains("keyguard") || isLocked
+        val isBank = isBankPackage(packageName)
+
+        if (!isHome && !isLock && !isBank) {
+            // Dual-Engine Foreground Verification (IPC / Window Hierarchy / UsageStats) ngoài mọi lock
+            if (!isForegroundApp(packageName)) {
+                return null
+            }
+        }
+
+        return when {
+            isBank -> TargetAppMetadata(
+                targetPkg = "BANK_APP_PROTECTED",
+                targetApp = "Ứng dụng Ngân hàng / Ví điện tử (Được bảo vệ)",
+                targetCat = "OTHER",
+                targetLabel = "Bảo mật",
+                isForegroundTarget = true,
+                isBank = true,
+                isLock = false,
+                isHome = false
+            )
+            isLock -> TargetAppMetadata(
+                targetPkg = "SCREEN_OFF",
+                targetApp = "Màn hình khóa / Màn hình tắt",
+                targetCat = "OFFLINE",
+                targetLabel = "Đã tắt màn hình",
+                isForegroundTarget = false,
+                isBank = false,
+                isLock = true,
+                isHome = false
+            )
+            isHome -> TargetAppMetadata(
+                targetPkg = packageName,
+                targetApp = "Màn hình chính / Màn hình khóa",
+                targetCat = "HOME",
+                targetLabel = "Màn hình chính",
+                isForegroundTarget = false,
+                isBank = false,
+                isLock = false,
+                isHome = true
+            )
+            else -> {
+                val appInfo = try {
+                    packageManager.getApplicationInfo(packageName, 0)
+                } catch (e: Exception) {
+                    null
+                }
+                val appLabel = appInfo?.let { packageManager.getApplicationLabel(it).toString() } ?: packageName
+                val metadata = AppClassifier.classify(packageName, appLabel, appInfo)
+                TargetAppMetadata(
+                    targetPkg = packageName,
+                    targetApp = metadata.appName.ifEmpty { appLabel },
+                    targetCat = metadata.category.name,
+                    targetLabel = metadata.category.displayName,
+                    isForegroundTarget = true,
+                    isBank = false,
+                    isLock = false,
+                    isHome = false
+                )
+            }
+        }
+    }
+
+    private suspend fun applyAppTransitionLocked(
+        metadata: TargetAppMetadata,
+        packageName: String,
+        expectedEpoch: Long,
+        expectedGen: Long
+    ): (suspend () -> Unit)? {
+        val now = System.currentTimeMillis()
+        val shouldUpload: Boolean
+        val prevSessionToRecord: Pair<String, Long>?
+
+        when {
+            metadata.isBank -> {
+                val transition = transitionBankSessionAtomic(expectedEpoch, now) ?: return null
+                shouldUpload = transition.shouldUpload
+                prevSessionToRecord = if (transition.prevPkg.isNotEmpty() && transition.prevStart > 0L && now - transition.prevStart >= 1000L && transition.prevToken.isNotEmpty()) {
+                    Pair(transition.prevPkg, now - transition.prevStart)
+                } else null
+                UsageTrackerService.closePolledSession(applicationContext, "BANK_APP_OPENED")
+                serviceScope.launch(Dispatchers.IO) {
+                    if (telemetryEpoch.get() == expectedEpoch) {
+                        val prefs = try { getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE) } catch (e: Exception) { null }
+                        prefs?.edit()
+                            ?.putString("last_foreground_pkg", "")
+                            ?.putString("last_active_package", "")
+                            ?.putLong("last_foreground_start", 0L)
+                            ?.putLong("last_active_timestamp", 0L)
+                            ?.apply()
+                    }
+                }
+            }
+            metadata.isLock -> {
+                val transition = transitionOfflineSessionAtomic("SCREEN_OFF", expectedEpoch, now) ?: return null
+                shouldUpload = transition.shouldUpload
+                prevSessionToRecord = if (transition.prevPkg.isNotEmpty() && transition.prevStart > 0L && now - transition.prevStart >= 1500L && transition.prevToken.isNotEmpty()) {
+                    Pair(transition.prevPkg, now - transition.prevStart)
+                } else null
+                serviceScope.launch(Dispatchers.IO) {
+                    if (telemetryEpoch.get() == expectedEpoch) {
+                        val prefs = try { getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE) } catch (e: Exception) { null }
+                        prefs?.edit()
+                            ?.putString("last_foreground_pkg", "")
+                            ?.putString("last_active_package", "")
+                            ?.putLong("last_foreground_start", 0L)
+                            ?.putLong("last_active_timestamp", 0L)
+                            ?.putBoolean("is_device_online", false)
+                            ?.apply()
+                    }
+                }
+            }
+            metadata.isHome -> {
+                val transition = transitionOfflineSessionAtomic("HOME", expectedEpoch, now) ?: return null
+                shouldUpload = transition.shouldUpload
+                prevSessionToRecord = if (transition.prevPkg.isNotEmpty() && transition.prevStart > 0L && now - transition.prevStart >= 1500L && transition.prevToken.isNotEmpty()) {
+                    Pair(transition.prevPkg, now - transition.prevStart)
+                } else null
+                serviceScope.launch(Dispatchers.IO) {
+                    if (telemetryEpoch.get() == expectedEpoch) {
+                        val prefs = try { getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE) } catch (e: Exception) { null }
+                        prefs?.edit()
+                            ?.putString("last_foreground_pkg", "")
+                            ?.putString("last_active_package", "")
+                            ?.putLong("last_foreground_start", 0L)
+                            ?.putLong("last_active_timestamp", 0L)
+                            ?.apply()
+                    }
+                }
+            }
+            else -> {
+                val transition = transitionAppSessionAtomic(packageName, expectedEpoch, now) ?: return null
+                shouldUpload = transition.shouldUpload
+                prevSessionToRecord = if (transition.isDifferent && transition.prevPkg.isNotEmpty() && transition.prevStart > 0L && now - transition.prevStart >= 1500L && transition.prevToken.isNotEmpty()) {
+                    Pair(transition.prevPkg, now - transition.prevStart)
+                } else null
+                if (transition.isDifferent) {
+                    serviceScope.launch(Dispatchers.IO) {
+                        if (telemetryEpoch.get() == expectedEpoch) {
+                            val prefs = try { getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE) } catch (e: Exception) { null }
+                            prefs?.edit()
+                                ?.putString("last_foreground_pkg", packageName)
+                                ?.putString("last_active_package", packageName)
+                                ?.putLong("last_foreground_start", now)
+                                ?.putLong("last_active_timestamp", now)
+                                ?.apply()
+                        }
+                    }
+                }
+            }
+        }
+
+        if (prevSessionToRecord != null) {
+            val (pkg, dur) = prevSessionToRecord
+            serviceScope.launch(Dispatchers.IO) {
+                UsageTrackerService.recordAppSession(applicationContext, pkg, dur, "${pkg}_${now - dur}")
+            }
+        }
+
+        if (!shouldUpload) return null
+
+        if (UsageTrackerService.foregroundGeneration.get() != expectedGen || telemetryEpoch.get() != expectedEpoch || !isScreenOnState) {
+            return null
+        }
+
+        return UsageTrackerService.prepareActiveAppLocked(
+            context = this@GuardianAccessibilityService,
+            packageName = metadata.targetPkg,
+            appName = metadata.targetApp,
+            category = metadata.targetCat,
+            categoryLabel = metadata.targetLabel,
+            isForeground = metadata.isForegroundTarget,
+            expectedEpoch = expectedEpoch
+        )
+    }
+
     internal suspend fun handleWindowStateChangedLocked(
         packageName: String,
         expectedEpoch: Long,
@@ -702,192 +912,11 @@ class GuardianAccessibilityService : AccessibilityService() {
         val isLocked = km?.isKeyguardLocked ?: false
 
         if (!isScreenOnState || !isInteractive || telemetryEpoch.get() != expectedEpoch || UsageTrackerService.foregroundGeneration.get() != expectedGen) {
-            // Bất biến phần cứng: Màn hình đang tắt, epoch hoặc generation đã thay đổi -> Bỏ qua ngay lập tức mọi sự kiện đổi cửa sổ đến muộn
             return null
         }
 
-        val now = System.currentTimeMillis()
-        val isHome = isDefaultLauncher(packageName)
-        val isLock = packageName == "com.android.systemui" || packageName.contains("keyguard")
-        val isBank = isBankPackage(packageName)
-
-        // Ứng dụng ngân hàng / Ví điện tử (Chuẩn RASP): Chốt phiên an toàn và chuyển trạng thái bảo vệ nguyên tử
-        if (isBank) {
-            val transition = transitionBankSessionAtomic(expectedEpoch, now) ?: return null
-
-            if (transition.prevPkg.isNotEmpty() && transition.prevStart > 0L && now - transition.prevStart >= 1000L && transition.prevToken.isNotEmpty()) {
-                val sessionDuration = now - transition.prevStart
-                serviceScope.launch(Dispatchers.IO) {
-                    UsageTrackerService.recordAppSession(applicationContext, transition.prevPkg, sessionDuration, transition.prevToken)
-                }
-            }
-            UsageTrackerService.closePolledSession(applicationContext, "BANK_APP_OPENED")
-            serviceScope.launch(Dispatchers.IO) {
-                if (telemetryEpoch.get() == expectedEpoch) {
-                    val prefs = try { getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE) } catch (e: Exception) { null }
-                    prefs?.edit()
-                        ?.putString("last_foreground_pkg", "")
-                        ?.putString("last_active_package", "")
-                        ?.putLong("last_foreground_start", 0L)
-                        ?.putLong("last_active_timestamp", 0L)
-                        ?.apply()
-                }
-            }
-            if (transition.shouldUpload) {
-                if (UsageTrackerService.foregroundGeneration.get() != expectedGen || telemetryEpoch.get() != expectedEpoch || !isScreenOnState) {
-                    return null
-                }
-                return UsageTrackerService.prepareActiveAppLocked(
-                    context = this@GuardianAccessibilityService,
-                    packageName = "BANK_APP_PROTECTED",
-                    appName = "Ứng dụng Ngân hàng / Ví điện tử (Được bảo vệ)",
-                    category = "OTHER",
-                    categoryLabel = "Bảo mật",
-                    isForeground = true,
-                    expectedEpoch = expectedEpoch
-                )
-            }
-            return null
-        }
-
-        // Màn hình khóa (Keyguard/Lockscreen) hoặc KeyguardManager báo đang khóa
-        if (isLock || isLocked) {
-            val transition = transitionOfflineSessionAtomic("SCREEN_OFF", expectedEpoch, now) ?: return null
-
-            if (transition.prevPkg.isNotEmpty() && transition.prevStart > 0L && now - transition.prevStart >= 1500L && transition.prevToken.isNotEmpty()) {
-                val sessionDuration = now - transition.prevStart
-                serviceScope.launch(Dispatchers.IO) {
-                    UsageTrackerService.recordAppSession(applicationContext, transition.prevPkg, sessionDuration, transition.prevToken)
-                }
-            }
-            serviceScope.launch(Dispatchers.IO) {
-                if (telemetryEpoch.get() == expectedEpoch) {
-                    val prefs = try { getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE) } catch (e: Exception) { null }
-                    prefs?.edit()
-                        ?.putString("last_foreground_pkg", "")
-                        ?.putString("last_active_package", "")
-                        ?.putLong("last_foreground_start", 0L)
-                        ?.putLong("last_active_timestamp", 0L)
-                        ?.putBoolean("is_device_online", false)
-                        ?.apply()
-                }
-            }
-
-            if (transition.shouldUpload) {
-                if (UsageTrackerService.foregroundGeneration.get() != expectedGen || telemetryEpoch.get() != expectedEpoch || !isScreenOnState) {
-                    return null
-                }
-                return UsageTrackerService.prepareActiveAppLocked(
-                    context = this@GuardianAccessibilityService,
-                    packageName = "SCREEN_OFF",
-                    appName = "Màn hình khóa / Màn hình tắt",
-                    category = "OFFLINE",
-                    categoryLabel = "Đã tắt màn hình",
-                    isForeground = false,
-                    expectedEpoch = expectedEpoch
-                )
-            }
-            return null
-        }
-
-        if (isHome) {
-            val transition = transitionOfflineSessionAtomic("HOME", expectedEpoch, now) ?: return null
-
-            if (transition.prevPkg.isNotEmpty() && transition.prevStart > 0L && now - transition.prevStart >= 1500L && transition.prevToken.isNotEmpty()) {
-                val sessionDuration = now - transition.prevStart
-                serviceScope.launch(Dispatchers.IO) {
-                    UsageTrackerService.recordAppSession(applicationContext, transition.prevPkg, sessionDuration, transition.prevToken)
-                }
-            }
-            serviceScope.launch(Dispatchers.IO) {
-                if (telemetryEpoch.get() == expectedEpoch) {
-                    val prefs = try { getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE) } catch (e: Exception) { null }
-                    prefs?.edit()
-                        ?.putString("last_foreground_pkg", "")
-                        ?.putString("last_active_package", "")
-                        ?.putLong("last_foreground_start", 0L)
-                        ?.putLong("last_active_timestamp", 0L)
-                        ?.apply()
-                }
-            }
-
-            if (transition.shouldUpload) {
-                if (UsageTrackerService.foregroundGeneration.get() != expectedGen || telemetryEpoch.get() != expectedEpoch || !isScreenOnState) {
-                    return null
-                }
-                return UsageTrackerService.prepareActiveAppLocked(
-                    context = this@GuardianAccessibilityService,
-                    packageName = packageName,
-                    appName = "Màn hình chính / Màn hình khóa",
-                    category = "HOME",
-                    categoryLabel = "Màn hình chính",
-                    isForeground = false,
-                    expectedEpoch = expectedEpoch
-                )
-            }
-            return null
-        }
-
-        // Kiểm tra xác thực cửa sổ tiền cảnh (Dual-Engine Foreground Verification) CHỈ áp dụng cho ứng dụng người dùng
-        if (!isForegroundApp(packageName)) {
-            return null
-        }
-
-        // Chốt chặn generation fencing sau khi isForegroundApp hoàn tất truy vấn IPC/IO
-        if (UsageTrackerService.foregroundGeneration.get() != expectedGen || telemetryEpoch.get() != expectedEpoch || !isScreenOnState) {
-            return null
-        }
-
-        // Bất biến nguyên tử dưới sessionLock:
-        // Chặn đứng hoàn toàn race-condition khi màn hình đã tắt (SCREEN_OFF) hoặc epoch thay đổi trong lúc isForegroundApp đang truy vấn IPC/IO
-        val appTransition = transitionAppSessionAtomic(packageName, expectedEpoch, now) ?: return null
-
-        if (appTransition.isDifferent) {
-            if (appTransition.prevPkg.isNotEmpty() && appTransition.prevStart > 0L && now - appTransition.prevStart >= 1500L && appTransition.prevToken.isNotEmpty()) {
-                val sessionDuration = now - appTransition.prevStart
-                serviceScope.launch(Dispatchers.IO) {
-                    UsageTrackerService.recordAppSession(applicationContext, appTransition.prevPkg, sessionDuration, appTransition.prevToken)
-                }
-            }
-
-            serviceScope.launch(Dispatchers.IO) {
-                if (telemetryEpoch.get() == expectedEpoch) {
-                    val prefs = try { getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE) } catch (e: Exception) { null }
-                    prefs?.edit()
-                        ?.putString("last_foreground_pkg", packageName)
-                        ?.putString("last_active_package", packageName)
-                        ?.putLong("last_foreground_start", now)
-                        ?.putLong("last_active_timestamp", now)
-                        ?.apply()
-                }
-            }
-        }
-
-        if (!appTransition.shouldUpload) {
-            return null
-        }
-
-        if (UsageTrackerService.foregroundGeneration.get() != expectedGen || telemetryEpoch.get() != expectedEpoch || !isScreenOnState) {
-            return null
-        }
-
-        val appInfo = try {
-            packageManager.getApplicationInfo(packageName, 0)
-        } catch (e: Exception) {
-            null
-        }
-        val appLabel = appInfo?.let { packageManager.getApplicationLabel(it).toString() } ?: packageName
-        val metadata = AppClassifier.classify(packageName, appLabel, appInfo)
-
-        return UsageTrackerService.prepareActiveAppLocked(
-            context = this@GuardianAccessibilityService,
-            packageName = packageName,
-            appName = metadata.appName.ifEmpty { appLabel },
-            category = metadata.category.name,
-            categoryLabel = metadata.category.displayName,
-            isForeground = true,
-            expectedEpoch = expectedEpoch
-        )
+        val metadata = resolveAppMetadata(packageName, isLocked) ?: return null
+        return applyAppTransitionLocked(metadata, packageName, expectedEpoch, expectedGen)
     }
 
     private fun isDefaultLauncher(packageName: String): Boolean {
