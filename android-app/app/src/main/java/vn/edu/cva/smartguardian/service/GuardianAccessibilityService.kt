@@ -643,6 +643,7 @@ class GuardianAccessibilityService : AccessibilityService() {
         if (packageName.isEmpty()) return false
 
         // 1. Accessibility Window Hierarchy check: Cửa sổ tiền cảnh đang active
+        var windowEvidenceReadComplete = false
         var directRootPkg: String? = null
         var secondaryMatchingPkg: String? = null
         var conflictingWindowPkg: String? = null
@@ -680,8 +681,19 @@ class GuardianAccessibilityService : AccessibilityService() {
             if (matchingWindow != null) {
                 secondaryMatchingPkg = matchingWindow.root?.packageName?.toString()?.trim() ?: packageName
             }
+            windowEvidenceReadComplete = true
         } catch (e: Exception) {
             Log.w("GuardianAccess", "Window hierarchy check failed: ${e.message}")
+            directRootPkg = null
+            secondaryMatchingPkg = null
+            conflictingWindowPkg = null
+            windowEvidenceReadComplete = false
+        }
+
+        // Bất biến Fail-Closed khi Binder Accessibility bị gián đoạn hoặc ném Exception:
+        // CẤM sử dụng dữ liệu một phần thu được trước exception làm bằng chứng đủ.
+        if (!windowEvidenceReadComplete) {
+            return false
         }
 
         // Bất biến xung đột cửa sổ & Split-Screen: Nếu phát hiện bất kỳ cửa sổ nào thuộc về ứng dụng khác,

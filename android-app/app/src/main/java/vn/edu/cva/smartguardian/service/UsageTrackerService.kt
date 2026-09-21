@@ -249,25 +249,31 @@ class UsageTrackerService : Service() {
             generation: Long = -1L,
             context: Context? = null
         ): TrackedCallRecord? {
-            synchronized(onlineCallLock) {
-                if (context != null) {
-                    if (!isHardwareOnlineValid(context, epoch) ||
-                        (generation != -1L && foregroundGeneration.get() != generation) ||
-                        !GuardianAccessibilityService.isScreenOnState
-                    ) {
-                        try {
-                            call.cancel()
-                        } catch (e: Exception) {
-                            Log.w("UsageTrackerService", "registerOnlineCall cancel error: ${e.message}")
-                        }
-                        return null
-                    }
+            val shouldCancel = synchronized(onlineCallLock) {
+                val hardwareValid = if (context != null) isHardwareOnlineValid(context, epoch) else GuardianAccessibilityService.isScreenOnState
+                val epochValid = (epoch == -1L || GuardianAccessibilityService.telemetryEpoch.get() == epoch)
+                val genValid = (generation == -1L || foregroundGeneration.get() == generation)
+                val screenOn = GuardianAccessibilityService.isScreenOnState
+
+                if (!hardwareValid || !epochValid || !genValid || !screenOn) {
+                    true
+                } else {
+                    val record = TrackedCallRecord(call, epoch, generation)
+                    onlineCallRegistry[call] = record
+                    activeOnlineCalls.add(call)
+                    false
                 }
-                val record = TrackedCallRecord(call, epoch, generation)
-                onlineCallRegistry[call] = record
-                activeOnlineCalls.add(call)
-                return record
             }
+
+            if (shouldCancel) {
+                try {
+                    call.cancel()
+                } catch (e: Exception) {
+                    Log.w("UsageTrackerService", "registerOnlineCall cancel error: ${e.message}")
+                }
+                return null
+            }
+            return TrackedCallRecord(call, epoch, generation)
         }
 
         internal fun unregisterOnlineCall(call: okhttp3.Call, record: TrackedCallRecord? = null) {
@@ -287,25 +293,31 @@ class UsageTrackerService : Service() {
             generation: Long = -1L,
             context: Context? = null
         ): TrackedCallRecord? {
-            synchronized(urgentOfflineLock) {
-                if (context != null) {
-                    if (!isHardwareOfflineValid(context, epoch, generation) ||
-                        GuardianAccessibilityService.telemetryEpoch.get() != epoch ||
-                        GuardianAccessibilityService.isScreenOnState
-                    ) {
-                        try {
-                            call.cancel()
-                        } catch (e: Exception) {
-                            Log.w("UsageTrackerService", "registerOfflineCall cancel error: ${e.message}")
-                        }
-                        return null
-                    }
+            val shouldCancel = synchronized(urgentOfflineLock) {
+                val hardwareValid = if (context != null) isHardwareOfflineValid(context, epoch, generation) else !GuardianAccessibilityService.isScreenOnState
+                val epochValid = (epoch == -1L || GuardianAccessibilityService.telemetryEpoch.get() == epoch)
+                val genValid = (generation == -1L || currentOfflineGeneration.get() == generation)
+                val screenOff = !GuardianAccessibilityService.isScreenOnState
+
+                if (!hardwareValid || !epochValid || !genValid || !screenOff) {
+                    true
+                } else {
+                    val record = TrackedCallRecord(call, epoch, generation)
+                    offlineCallRegistry[call] = record
+                    activeOfflineCalls.add(call)
+                    false
                 }
-                val record = TrackedCallRecord(call, epoch, generation)
-                offlineCallRegistry[call] = record
-                activeOfflineCalls.add(call)
-                return record
             }
+
+            if (shouldCancel) {
+                try {
+                    call.cancel()
+                } catch (e: Exception) {
+                    Log.w("UsageTrackerService", "registerOfflineCall cancel error: ${e.message}")
+                }
+                return null
+            }
+            return TrackedCallRecord(call, epoch, generation)
         }
 
         internal fun unregisterOfflineCall(call: okhttp3.Call, record: TrackedCallRecord? = null) {

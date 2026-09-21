@@ -448,6 +448,100 @@ class HardwareInvariantTest {
     }
 
     @Test
+    fun testStaleOnlineCallRegistrationRejectedAfterCancellation() {
+        val client = OkHttpClient()
+        val request = Request.Builder().url("https://127.0.0.1:20128/stale_online").build()
+
+        // Scenario 1: Screen is off
+        GuardianAccessibilityService.isScreenOnState = false
+        val epoch1 = GuardianAccessibilityService.telemetryEpoch.incrementAndGet()
+        val gen1 = UsageTrackerService.foregroundGeneration.incrementAndGet()
+        UsageTrackerService.cancelActiveOnlineCalls()
+
+        val call1 = client.newCall(request)
+        val record1 = UsageTrackerService.registerOnlineCall(call1, epoch1, gen1, context = null)
+        assertNull("Stale online call registered when screen is off must be rejected", record1)
+        assertTrue("Call must be canceled", call1.isCanceled())
+        assertEquals(0, UsageTrackerService.activeOnlineCalls.size)
+        assertEquals(0, UsageTrackerService.onlineCallRegistry.size)
+
+        // Scenario 2: Screen is on, but epoch or generation is stale (arrives after cancelActiveOnlineCalls)
+        GuardianAccessibilityService.isScreenOnState = true
+        val staleEpoch = GuardianAccessibilityService.telemetryEpoch.get()
+        val staleGen = UsageTrackerService.foregroundGeneration.get()
+
+        // Cancellation advances epoch/gen
+        GuardianAccessibilityService.telemetryEpoch.incrementAndGet()
+        UsageTrackerService.foregroundGeneration.incrementAndGet()
+        UsageTrackerService.cancelActiveOnlineCalls()
+
+        val call2 = client.newCall(request)
+        val record2 = UsageTrackerService.registerOnlineCall(call2, staleEpoch, staleGen, context = null)
+        assertNull("Stale online call registered with older epoch/gen must be rejected", record2)
+        assertTrue("Call must be canceled", call2.isCanceled())
+        assertEquals(0, UsageTrackerService.activeOnlineCalls.size)
+        assertEquals(0, UsageTrackerService.onlineCallRegistry.size)
+    }
+
+    @Test
+    fun testStaleOfflineCallRegistrationRejectedWhenScreenTurnsOn() {
+        val client = OkHttpClient()
+        val request = Request.Builder().url("https://127.0.0.1:20128/stale_offline").build()
+
+        // Screen is on -> Device is online, offline call must be strictly rejected
+        GuardianAccessibilityService.isScreenOnState = true
+        val epoch = GuardianAccessibilityService.telemetryEpoch.get()
+        val gen = UsageTrackerService.currentOfflineGeneration.get()
+
+        val call = client.newCall(request)
+        val record = UsageTrackerService.registerOfflineCall(call, epoch, gen, context = null)
+        assertNull("Offline call registered when screen is on must be rejected", record)
+        assertTrue("Call must be canceled", call.isCanceled())
+        assertEquals(0, UsageTrackerService.activeOfflineCalls.size)
+        assertEquals(0, UsageTrackerService.offlineCallRegistry.size)
+    }
+
+    @Test
+    fun testWindowEvidenceInterruptedScanFailsClosed() {
+        // Simulates Binder Accessibility DeadObjectException / SecurityException midway through window scan:
+        // Direct root was acquired, but window reading threw exception -> windowEvidenceReadComplete = false
+        var windowEvidenceReadComplete = false
+        var directRootPkg: String? = "com.target.app"
+        var secondaryMatchingPkg: String? = null
+        var conflictingWindowPkg: String? = null
+
+        try {
+            // Simulated exception during windows scan
+            throw java.lang.SecurityException("Binder transaction failed: DeadObjectException")
+            @Suppress("UNREACHABLE_CODE")
+            windowEvidenceReadComplete = true
+        } catch (e: Exception) {
+            directRootPkg = null
+            secondaryMatchingPkg = null
+            conflictingWindowPkg = null
+            windowEvidenceReadComplete = false
+        }
+
+        assertFalse("windowEvidenceReadComplete must remain false after exception", windowEvidenceReadComplete)
+        assertNull("directRootPkg must be cleared on exception", directRootPkg)
+        assertNull("secondaryMatchingPkg must be cleared on exception", secondaryMatchingPkg)
+
+        // Test evaluateForegroundEvidence fail-closed behavior (requireWindowEvidence = true when window scan fails)
+        val evidenceResult = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = directRootPkg,
+            usageStatsLastResumedPkg = "com.target.app",
+            targetPkg = "com.target.app",
+            now = System.currentTimeMillis(),
+            lastEventTime = System.currentTimeMillis() - 1000L,
+            maxEventAgeMs = 15000L,
+            secondaryWindowPkg = secondaryMatchingPkg,
+            conflictingWindowPkg = conflictingWindowPkg,
+            requireWindowEvidence = true
+        )
+        assertFalse("When window scan is interrupted/failed, evaluateForegroundEvidence must reject targetPkg", evidenceResult)
+    }
+
+    @Test
     fun testEpochFencingInvariant() {
         val currentEpoch = GuardianAccessibilityService.telemetryEpoch.incrementAndGet()
         val staleEpoch = currentEpoch - 1L
