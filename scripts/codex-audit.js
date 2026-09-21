@@ -1297,50 +1297,69 @@ Nếu [REJECTED]:
 - YÊU CẦU SỬA: [Hành động bắt buộc Agent phải thực hiện]
 `;
 
-  console.log('\x1b[33m%s\x1b[0m', `⏳ Đang chuyển tiếp dữ liệu sang OpenAI Codex Auditor qua Gateway (${ROUTER_ENDPOINT})...`);
+  const candidateModels = [CODEX_MODEL];
+  if (!candidateModels.includes('oc/mimo-v2.5-free')) {
+    candidateModels.push('oc/mimo-v2.5-free');
+  }
 
-  try {
-    const response = await fetch(`${ROUTER_ENDPOINT}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${ROUTER_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: CODEX_MODEL,
-        messages: [
-          { role: 'system', content: 'Bạn là chuyên gia Code Reviewer và Auditor độc lập cho dự án CVA-SmartGuardian.' },
-          { role: 'user', content: auditPrompt }
-        ],
-        temperature: 0.1
-      }),
-      signal: AbortSignal.timeout(120000)
-    });
+  let reviewResult = '';
+  let lastError = null;
 
-    if (!response.ok) {
-      throw new Error(`9Router Gateway phản hồi HTTP ${response.status}: ${await response.text()}`);
+  for (const model of candidateModels) {
+    try {
+      console.log('\x1b[33m%s\x1b[0m', `⏳ Đang chuyển tiếp dữ liệu sang OpenAI Codex Auditor qua Gateway (${ROUTER_ENDPOINT}) [Model: ${model}]...`);
+      const response = await fetch(`${ROUTER_ENDPOINT}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${ROUTER_API_KEY}`
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: 'Bạn là chuyên gia Code Reviewer và Auditor độc lập cho dự án CVA-SmartGuardian.' },
+            { role: 'user', content: auditPrompt }
+          ],
+          temperature: 0.1
+        }),
+        signal: AbortSignal.timeout(180000)
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`9Router Gateway phản hồi HTTP ${response.status}: ${errText}`);
+      }
+
+      const data = await response.json();
+      reviewResult = data.choices?.[0]?.message?.content?.trim() || '';
+      if (reviewResult) {
+        lastError = null;
+        break;
+      }
+    } catch (err) {
+      lastError = err;
+      console.warn('\x1b[33m%s\x1b[0m', `[WARN] Model ${model} gặp sự cố (${err.message}). Đang chuyển sang model tiếp theo trong danh sách candidate...`);
     }
+  }
 
-    const data = await response.json();
-    const reviewResult = data.choices?.[0]?.message?.content?.trim() || '';
-
-    console.log('\n\x1b[35m%s\x1b[0m', '📋 KẾT QUẢ ĐÁNH GIÁ TỪ CODEX AUDITOR:');
-    console.log('───────────────────────────────────────────────────────────────');
-    console.log(reviewResult);
-    console.log('───────────────────────────────────────────────────────────────\n');
-
-    if (reviewResult.startsWith('[APPROVED]')) {
-      console.log('\x1b[32m%s\x1b[0m', '🎉 XÁC NHẬN: MÃ NGUỒN ĐÃ ĐƯỢC CODEX AUDITOR PHÊ DUYỆT HOÀN TOÀN!');
-      process.exit(0);
-    } else {
-      console.error('\x1b[31m%s\x1b[0m', '⛔ TỪ CHỐI: CODEX AUDITOR PHÁT HIỆN LỖI/SAI LỆCH YÊU CẦU!');
-      console.error('\x1b[33m%s\x1b[0m', '👉 VÒNG LẶP TỰ VÁ LỖI: Bắt buộc Antigravity phải đọc danh sách lỗi trên và viết lại mã nguồn.');
-      process.exit(1);
-    }
-  } catch (err) {
-    console.error('\x1b[31m%s\x1b[0m', `\n❌ LỖI KẾT NỐI 9ROUTER GATEWAY (${err.message})`);
+  if (!reviewResult) {
+    console.error('\x1b[31m%s\x1b[0m', `\n❌ LỖI KẾT NỐI 9ROUTER GATEWAY (${lastError ? lastError.message : 'Phản hồi rỗng'})`);
     console.error('\x1b[31m%s\x1b[0m', '⛔ TỪ CHỐI [REJECTED]: Không thể kết nối tới OpenAI Codex Auditor để xác minh 100% SPEC.md.');
     console.error('\x1b[33m%s\x1b[0m', '👉 Vui lòng đảm bảo 9Router đang chạy (http://127.0.0.1:20128) với OAuth token hợp lệ.');
+    process.exit(1);
+  }
+
+  console.log('\n\x1b[35m%s\x1b[0m', '📋 KẾT QUẢ ĐÁNH GIÁ TỪ CODEX AUDITOR:');
+  console.log('───────────────────────────────────────────────────────────────');
+  console.log(reviewResult);
+  console.log('───────────────────────────────────────────────────────────────\n');
+
+  if (reviewResult.startsWith('[APPROVED]')) {
+    console.log('\x1b[32m%s\x1b[0m', '🎉 XÁC NHẬN: MÃ NGUỒN ĐÃ ĐƯỢC CODEX AUDITOR PHÊ DUYỆT HOÀN TOÀN!');
+    process.exit(0);
+  } else {
+    console.error('\x1b[31m%s\x1b[0m', '⛔ TỪ CHỐI: CODEX AUDITOR PHÁT HIỆN LỖI/SAI LỆCH YÊU CẦU!');
+    console.error('\x1b[33m%s\x1b[0m', '👉 VÒNG LẶP TỰ VÁ LỖI: Bắt buộc Antigravity phải đọc danh sách lỗi trên và viết lại mã nguồn.');
     process.exit(1);
   }
 }
