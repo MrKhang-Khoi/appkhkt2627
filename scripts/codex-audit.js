@@ -1322,7 +1322,7 @@ Nếu [REJECTED]:
           ],
           temperature: 0.1
         }),
-        signal: AbortSignal.timeout(180000)
+        signal: AbortSignal.timeout(360000)
       });
 
       if (!response.ok) {
