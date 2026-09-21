@@ -27,32 +27,35 @@ function performHttpRequest(options, bodyData = null) {
   });
 }
 
-async function atomicMultiLocationPatch() {
-  console.log('🔄 [Firebase RTDB] Executing atomic multi-location update (PATCH /)...');
-  const multiLocationPayload = JSON.stringify({
-    version: versionObj,
-    app_release: versionObj
-  });
-
-  const options = {
+async function updateBothEndpoints() {
+  console.log('🔄 [Firebase RTDB] Executing atomic dual-endpoint update (PUT /version.json and PUT /app_release.json)...');
+  const payload = JSON.stringify(versionObj);
+  const putOptions = (nodePath) => ({
     hostname: 'cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app',
-    path: '/.json',
-    method: 'PATCH',
+    path: nodePath,
+    method: 'PUT',
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
-      'Content-Length': Buffer.byteLength(multiLocationPayload)
+      'Content-Length': Buffer.byteLength(payload)
     }
-  };
+  });
 
-  const res = await performHttpRequest(options, multiLocationPayload);
-  if (res.statusCode < 200 || res.statusCode >= 300) {
-    throw new Error(`Firebase RTDB atomic PATCH failed with HTTP ${res.statusCode}: ${res.body}`);
+  const [resVersion, resRelease] = await Promise.all([
+    performHttpRequest(putOptions('/version.json'), payload),
+    performHttpRequest(putOptions('/app_release.json'), payload)
+  ]);
+
+  if (resVersion.statusCode !== 200) {
+    throw new Error(`PUT /version.json failed with HTTP ${resVersion.statusCode}: ${resVersion.body}`);
   }
-  console.log(`✅ [Firebase RTDB] Atomic multi-location PATCH succeeded (HTTP ${res.statusCode}).`);
+  if (resRelease.statusCode !== 200) {
+    throw new Error(`PUT /app_release.json failed with HTTP ${resRelease.statusCode}: ${resRelease.body}`);
+  }
+  console.log('✅ [Firebase RTDB] Dual endpoint PUT succeeded (HTTP 200).');
 }
 
 async function readBackAndVerify() {
-  console.log('🔍 [Firebase RTDB] Verifying read-back parity across both nodes...');
+  console.log('🔍 [Firebase RTDB] Verifying read-back parity across both nodes (/version.json and /app_release.json)...');
   
   const getOptions = (nodePath) => ({
     hostname: 'cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app',
@@ -78,26 +81,43 @@ async function readBackAndVerify() {
   const vData = JSON.parse(versionRes.body);
   const rData = JSON.parse(releaseRes.body);
 
-  if (vData.sha256 !== versionObj.sha256 || rData.sha256 !== versionObj.sha256) {
-    throw new Error(`SHA256 mismatch after atomic update: /version=${vData.sha256}, /app_release=${rData.sha256}, expected=${versionObj.sha256}`);
+  const requiredFields = [
+    'versionCode',
+    'versionName',
+    'sha256',
+    'sizeBytes',
+    'apkUrl',
+    'apkFallbackUrl',
+    'changelog'
+  ];
+
+  for (const field of requiredFields) {
+    if (vData[field] === undefined) {
+      throw new Error(`Missing required field '${field}' in /version.json response`);
+    }
+    if (rData[field] === undefined) {
+      throw new Error(`Missing required field '${field}' in /app_release.json response`);
+    }
+    const expectedVal = JSON.stringify(versionObj[field]);
+    const vVal = JSON.stringify(vData[field]);
+    const rVal = JSON.stringify(rData[field]);
+
+    if (vVal !== expectedVal) {
+      throw new Error(`Field '${field}' in /version.json (${vVal}) mismatch with local version.json (${expectedVal})`);
+    }
+    if (rVal !== expectedVal) {
+      throw new Error(`Field '${field}' in /app_release.json (${rVal}) mismatch with local version.json (${expectedVal})`);
+    }
   }
 
-  if (vData.versionCode !== versionObj.versionCode || rData.versionCode !== versionObj.versionCode) {
-    throw new Error(`VersionCode mismatch: /version=${vData.versionCode}, /app_release=${rData.versionCode}, expected=${versionObj.versionCode}`);
-  }
-
-  if (vData.sizeBytes !== versionObj.sizeBytes || rData.sizeBytes !== versionObj.sizeBytes) {
-    throw new Error(`sizeBytes mismatch: /version=${vData.sizeBytes}, /app_release=${rData.sizeBytes}, expected=${versionObj.sizeBytes}`);
-  }
-
-  console.log('✅ [Firebase RTDB] 100% field parity verified between /version.json and /app_release.json.');
+  console.log('✅ [Firebase RTDB] 100% field parity verified across all required fields (versionCode, versionName, sha256, sizeBytes, apkUrl, apkFallbackUrl, changelog).');
 }
 
 async function main() {
   try {
-    await atomicMultiLocationPatch();
+    await updateBothEndpoints();
     await readBackAndVerify();
-    console.log('🎉 Atomic release update and dual-node verification complete.');
+    console.log('🎉 Dual-node release update and full-field parity verification complete.');
     process.exit(0);
   } catch (err) {
     console.error('❌ [Firebase RTDB ERROR]', err.message);

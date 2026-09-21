@@ -4251,6 +4251,41 @@ class HardwareInvariantTest {
     }
 
     @Test
+    fun testSplitScreenActiveWindowWithUsageStatsAgreementIsAccepted() {
+        val target = "com.google.android.youtube"
+        val now = System.currentTimeMillis()
+
+        // Trong split-screen: target là active window (secondaryWindowPkg),
+        // và UsageStats đồng thuận với target trong vòng 15s -> Được công nhận foreground
+        val acceptedResult = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = null,
+            usageStatsLastResumedPkg = target,
+            targetPkg = target,
+            now = now,
+            lastEventTime = now - 2000L,
+            maxEventAgeMs = 15_000L,
+            secondaryWindowPkg = target,
+            conflictingWindowPkg = null,
+            requireWindowEvidence = true
+        )
+        assertTrue("Split-screen active window with UsageStats consensus must be accepted", acceptedResult)
+
+        // Nếu UsageStats chỉ tới app khác -> Fail-closed
+        val rejectedResult = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = null,
+            usageStatsLastResumedPkg = "com.other.app",
+            targetPkg = target,
+            now = now,
+            lastEventTime = now - 2000L,
+            maxEventAgeMs = 15_000L,
+            secondaryWindowPkg = target,
+            conflictingWindowPkg = "com.other.app",
+            requireWindowEvidence = true
+        )
+        assertFalse("Split-screen active window conflicting with other focused/UsageStats app must be rejected", rejectedResult)
+    }
+
+    @Test
     fun testCasPreconditionFailed412FetchesFreshNodeStateAndAbortsOnNewerGeneration() {
         // Red-Team Verification: Proves that when an HTTP 412 is encountered,
         // executeOnlineGuarded GETs the fresh server node state with X-Firebase-ETag: true,

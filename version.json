@@ -8,7 +8,7 @@
   "fileSize": "5.88 MB",
   "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.3.8.apk",
   "apkFallbackUrl": "https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/CVA-SmartGuardian-v1.3.8.apk",
-  "sha256": "90A8ECD41BE0FEAC9CB4BC9DDAE2538EA8839626DACD66BB8553D10B662711FD",
+  "sha256": "35F27EB44A74E1E1534F8E87EBCEC46E525EE8322C7259EFA84922177E9155D5",
   "changelog": [
     "Di chuyển sendUrgentOfflineStatus ra ngoài hardwareTransitionLock để triệt tiêu hiện tượng giữ lock khi thực hiện I/O đĩa và mạng.",
     "Bổ sung diskStateLock và persistDeviceOfflineState / persistDeviceOnlineState với CAS logic nguyên tử kiểm soát last_written_epoch.",
@@ -20,7 +20,7 @@
   ],
   "releaseNotes": "Bản phát hành v1.3.8: Non-blocking hardwareTransitionLock, khóa đĩa diskStateLock nguyên tử, CRC32 WAL, và giới hạn cứng an toàn bộ nhớ LruSessionSet kèm retry exponential backoff và apply fallback chống infinite retry loop.",
   "updatedAt": 1790019900000,
-  "size": 6173130,
+  "size": 6173483,
   "releaseDate": "2026-09-21",
-  "sizeBytes": 6173130
+  "sizeBytes": 6173483
 }
