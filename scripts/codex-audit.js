@@ -247,7 +247,7 @@ if (fs.existsSync(guardianAccessFile) && fs.existsSync(usageTrackerFile) && fs.e
     gaCode.includes(`val currentEpoch = if (passedEpoch ${NEQ} -1L) passedEpoch else telemetryEpoch.incrementAndGet()`);
 
   // Kiểm tra isForegroundApp ủy quyền cho evaluateForegroundEvidence xác minh danh tính và importance
-  const isForegroundFn = gaCode.substring(gaCode.indexOf('private fun isForegroundApp('), gaCode.indexOf('private suspend fun handleWindowStateChangedLocked('));
+  const isForegroundFn = gaCode.substring(gaCode.indexOf('private fun isForegroundApp('), gaCode.indexOf('suspend fun handleWindowStateChangedLocked('));
   const evalFgFn = gaCode.substring(gaCode.indexOf('fun evaluateForegroundEvidence('), gaCode.indexOf('private val BROWSER_PACKAGES'));
   const noEarlyRejection = isForegroundFn.includes('evaluateForegroundEvidence(') &&
     isForegroundFn.includes('usm?.queryEvents(') &&
@@ -862,7 +862,8 @@ try {
     'testIsForegroundAppRejectsSplitScreenInactiveWindowAndRequiresFocusOrUsageStatsFallback',
     'testCasPreconditionFailed412FetchesFreshNodeStateAndAbortsOnNewerGeneration',
     'testCasColdStartWithEmptyETagCachePerformsPreGetAndPreventsStaleOverwrite',
-    'testScreenOffRaceDuringWindowStateChangeStrictlyAbortsWithoutReinfectingForeground'
+    'testScreenOffRaceDuringWindowStateChangeStrictlyAbortsWithoutReinfectingForeground',
+    'testForegroundProcessAndSubprocessResolutionInvariants'
   ];
 
   for (const testName of requiredProductionFeatureTests) {

@@ -71,6 +71,14 @@ class GuardianAccessibilityService : AccessibilityService() {
         }
 
         @JvmStatic
+        fun isPackageProcessOf(actual: String?, target: String): Boolean {
+            if (actual.isNullOrEmpty() || target.isEmpty()) return false
+            return actual == target ||
+                actual.startsWith("$target:") ||
+                (actual.contains(':') && actual.substringBefore(':') == target)
+        }
+
+        @JvmStatic
         fun evaluateForegroundEvidence(
             activeRootPkg: String?,
             usageStatsLastResumedPkg: String?,
@@ -81,26 +89,19 @@ class GuardianAccessibilityService : AccessibilityService() {
         ): Boolean {
             if (targetPkg.isEmpty()) return false
 
-            fun isPackageMatch(pkg: String?): Boolean {
-                if (pkg.isNullOrEmpty()) return false
-                return pkg == targetPkg ||
-                    pkg.startsWith("$targetPkg:") ||
-                    (pkg.contains(":") && pkg.substringBefore(":") == targetPkg)
-            }
-
             // Xung đột cửa sổ: Nếu activeRootPkg thuộc về ứng dụng KHÁC, tuyệt đối không được nhận diện là targetPkg
-            if (!activeRootPkg.isNullOrEmpty() && !isPackageMatch(activeRootPkg)) {
+            if (!activeRootPkg.isNullOrEmpty() && !isPackageProcessOf(activeRootPkg, targetPkg)) {
                 return false
             }
 
             // 1. Accessibility Window Hierarchy (Cửa sổ tiền cảnh đang hiển thị khớp chính xác hoặc là tiến trình con)
-            if (!activeRootPkg.isNullOrEmpty() && (activeRootPkg == targetPkg || isPackageMatch(activeRootPkg))) {
+            if (!activeRootPkg.isNullOrEmpty() && (activeRootPkg == targetPkg || isPackageProcessOf(activeRootPkg, targetPkg))) {
                 return true
             }
 
             // 2. UsageStatsManager: Chỉ chấp nhận khi activeRootPkg tạm thời là null (quá trình chuyển cảnh cửa sổ)
             // VÀ event ACTIVITY_RESUMED khớp targetPkg trong khoảng thời gian hợp lệ (Fail-Closed: bắt buộc lastEventTime > 0L)
-            if (activeRootPkg.isNullOrEmpty() && (usageStatsLastResumedPkg == targetPkg || isPackageMatch(usageStatsLastResumedPkg))) {
+            if (activeRootPkg.isNullOrEmpty() && (usageStatsLastResumedPkg == targetPkg || isPackageProcessOf(usageStatsLastResumedPkg, targetPkg))) {
                 if (lastEventTime > 0L && now >= lastEventTime && now - lastEventTime <= maxEventAgeMs) {
                     return true
                 }
@@ -515,19 +516,24 @@ class GuardianAccessibilityService : AccessibilityService() {
         val rawActivePkg = try {
             val root = rootInActiveWindow
             val rootPkg = root?.packageName?.toString()?.trim()
-            if (rootPkg == packageName) {
-                packageName
+            if (isPackageProcessOf(rootPkg, packageName)) {
+                rootPkg
             } else {
-                // Kiểm tra danh sách windows tương tác: Chỉ chấp nhận cửa sổ có isActive hoặc isFocused
+                // Kiểm tra danh sách windows tương tác: Chỉ chấp nhận cửa sổ TYPE_APPLICATION có isActive hoặc isFocused
                 val appWindows = windows?.filter { win ->
                     win.type == AccessibilityWindowInfo.TYPE_APPLICATION && (win.isActive || win.isFocused)
                 }
-                // Nếu có đúng 1 cửa sổ active/focused và root của nó là packageName -> chấp nhận
-                if (appWindows?.size == 1 && appWindows[0].root?.packageName?.toString()?.trim() == packageName) {
-                    packageName
+                // Tìm cửa sổ active/focused khớp target package (kể cả process con)
+                val matchingWindow = appWindows?.firstOrNull { win ->
+                    val winPkg = win.root?.packageName?.toString()?.trim()
+                    isPackageProcessOf(winPkg, packageName)
+                }
+                if (matchingWindow != null) {
+                    matchingWindow.root?.packageName?.toString()?.trim() ?: packageName
                 } else {
-                    // Khi có nhiều cửa sổ hoặc trạng thái focus không xác định: fail-closed (đối soát bằng UsageStatsManager)
-                    null
+                    // Nếu không có cửa sổ khớp targetPkg, lấy cửa sổ active/focused bất kỳ để phát hiện xung đột
+                    val activeWindow = appWindows?.firstOrNull { it.isActive || it.isFocused }
+                    activeWindow?.root?.packageName?.toString()?.trim() ?: rootPkg
                 }
             }
         } catch (e: Exception) {
@@ -537,14 +543,14 @@ class GuardianAccessibilityService : AccessibilityService() {
 
         val activePkg = rawActivePkg
 
-        // Nếu root window hoặc cửa sổ tương tác đã xác nhận chính xác packageName -> 100% Foreground
-        if (activePkg == packageName) {
+        // Nếu root window hoặc cửa sổ tương tác đã xác nhận chính xác packageName hoặc process con -> 100% Foreground
+        if (isPackageProcessOf(activePkg, packageName)) {
             return true
         }
 
         // Bất biến xung đột cửa sổ: Nếu active root window thuộc về ứng dụng khác (kể cả Launcher/SystemUI),
         // tuyệt đối từ chối targetPkg để chống stale UsageStats khi bấm Home hoặc đổi app.
-        if (!activePkg.isNullOrEmpty() && activePkg != packageName) {
+        if (!activePkg.isNullOrEmpty() && !isPackageProcessOf(activePkg, packageName)) {
             return false
         }
 

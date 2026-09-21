@@ -4049,6 +4049,92 @@ class HardwareInvariantTest {
         assertEquals("SCREEN_OFF", GuardianAccessibilityService.lastActivePackage)
     }
 
+    @Test
+    fun testForegroundProcessAndSubprocessResolutionInvariants() {
+        // Red-Team Karl Popper Falsification Test Mandated by OpenAI Codex:
+        // Proves that GuardianAccessibilityService correctly resolves main processes and sub-processes
+        // (package:processName, package:renderer, package:webview) under all real-world Android multi-process conditions.
+        val target = "com.example.browser"
+        val now = System.currentTimeMillis()
+
+        // 1. Direct and sub-process resolution via isPackageProcessOf
+        assertTrue("Exact package must match", GuardianAccessibilityService.isPackageProcessOf(target, target))
+        assertTrue("Renderer process must match target", GuardianAccessibilityService.isPackageProcessOf("com.example.browser:renderer", target))
+        assertTrue("WebView process must match target", GuardianAccessibilityService.isPackageProcessOf("com.example.browser:webview", target))
+        assertTrue("Sandboxed process must match target", GuardianAccessibilityService.isPackageProcessOf("com.example.browser:sandboxed_process0", target))
+
+        // Negative cases:
+        assertFalse("Subprocess of different package must NOT match target", GuardianAccessibilityService.isPackageProcessOf("com.other.app:renderer", target))
+        assertFalse("Prefix collision without colon must NOT match target", GuardianAccessibilityService.isPackageProcessOf("com.example.browserfake", target))
+        assertFalse("Prefix collision with underscore must NOT match target", GuardianAccessibilityService.isPackageProcessOf("com.example.browser_extra", target))
+        assertFalse("Null package must NOT match target", GuardianAccessibilityService.isPackageProcessOf(null, target))
+        assertFalse("Empty package must NOT match target", GuardianAccessibilityService.isPackageProcessOf("", target))
+
+        // 2. Active Window Hierarchy with Sub-process:
+        // evaluateForegroundEvidence must return true when activeRootPkg is a sub-process of target
+        val rendererResult = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = "com.example.browser:renderer",
+            usageStatsLastResumedPkg = null,
+            targetPkg = target,
+            now = now,
+            lastEventTime = 0L
+        )
+        assertTrue("Subprocess renderer in activeRootPkg must be accepted as foreground", rendererResult)
+
+        val webviewResult = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = "com.example.browser:webview",
+            usageStatsLastResumedPkg = null,
+            targetPkg = target,
+            now = now,
+            lastEventTime = 0L
+        )
+        assertTrue("Subprocess webview in activeRootPkg must be accepted as foreground", webviewResult)
+
+        // 3. Sub-process of another package: Must be strictly REJECTED as window conflict
+        val otherSubprocessResult = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = "com.other.app:service",
+            usageStatsLastResumedPkg = target,
+            targetPkg = target,
+            now = now,
+            lastEventTime = now - 1000L
+        )
+        assertFalse("Active window of different app sub-process must strictly conflict and reject target", otherSubprocessResult)
+
+        // 4. Sub-process not active / not focused (activeRootPkg is null during window transition,
+        // and UsageStats has stale event): Fail-closed when event is too old
+        val staleSubprocessFallback = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = null,
+            usageStatsLastResumedPkg = "com.example.browser:renderer",
+            targetPkg = target,
+            now = now,
+            lastEventTime = now - 30_000L,
+            maxEventAgeMs = 15_000L
+        )
+        assertFalse("Unfocused/stale sub-process event older than maxEventAge must be rejected", staleSubprocessFallback)
+
+        // Fresh usage stats event with sub-process must be accepted when activeRootPkg is null
+        val freshSubprocessFallback = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = null,
+            usageStatsLastResumedPkg = "com.example.browser:renderer",
+            targetPkg = target,
+            now = now,
+            lastEventTime = now - 2000L,
+            maxEventAgeMs = 15_000L
+        )
+        assertTrue("Fresh sub-process event during window transition must be accepted", freshSubprocessFallback)
+
+        // 5. Rapid switch: Sub-process A (com.example.browser:renderer) -> Package B (com.google.android.youtube)
+        // Active window now belongs to Package B; checking target A must immediately return false (conflict invariant)
+        val rapidSwitchConflict = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = "com.google.android.youtube",
+            usageStatsLastResumedPkg = "com.example.browser:renderer",
+            targetPkg = target,
+            now = now,
+            lastEventTime = now - 500L
+        )
+        assertFalse("Active window belonging to Package B must immediately reject Package A even if UsageStats was for A", rapidSwitchConflict)
+    }
+
     private class FakeTestContext(
         val prefs: FakeSharedPreferences
     ) : ContextWrapper(null) {
