@@ -467,6 +467,8 @@ class GuardianAccessibilityService : AccessibilityService() {
         serviceScope.launch(Dispatchers.IO) {
             UsageTrackerService.persistDeviceOnlineState(applicationContext, currentEpoch)
             UsageTrackerService.flushPendingSessions(applicationContext)
+            // Phát nhịp tim khẩn cấp tức thời (< 500ms) lên Firebase để máy phụ huynh & Web nhận ngay trạng thái trực tuyến
+            UsageTrackerService.sendHeartbeatPing(applicationContext, force = true)
         }
 
         serviceScope.launch(Dispatchers.IO) {
@@ -501,7 +503,7 @@ class GuardianAccessibilityService : AccessibilityService() {
         heartbeatJob = serviceScope.launch {
             val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
             while (isActive) {
-                delay(60_000L) // Nhịp tim nền 60s theo chuẩn tiết kiệm pin (event-driven đồng bộ tức thì khi đổi app)
+                delay(60_000L) // Nhịp tim nền 60s theo chuẩn tiết kiệm pin (event-driven khi mở màn hình phát ngay lập tức)
                 try {
                     val isInteractive = pm?.isInteractive ?: false
                     if (isInteractive && isScreenOnState) {

@@ -1982,7 +1982,14 @@
 
       const diffSeconds = Math.max(0, Math.floor((now - lastContact) / 1000));
       const isExplicitOffline = deviceData?.online === false || pairingData?.online === false;
-      const isScreenOff = deviceData?.active_app?.packageName === 'SCREEN_OFF';
+      const activeAppTime = Number(deviceData?.active_app?.timestamp) || 0;
+      const latestHeartbeat = Math.max(Number(deviceData?.lastHeartbeat) || 0, Number(pairingData?.lastHeartbeat) || 0);
+      const latestSync = Math.max(Number(deviceData?.lastSync) || 0, Number(pairingData?.lastSync) || 0);
+      const freshestPing = Math.max(latestHeartbeat, latestSync);
+      // Stale SCREEN_OFF Guard: Chỉ xác định là màn hình tắt nếu active_app mới hơn hoặc bằng (freshestPing - 15000ms)
+      // Nếu có nhịp tim mới hơn sự kiện tắt màn hình > 15s với online !== false, thì SCREEN_OFF là tàn dư cũ từ phiên trước
+      const isScreenOff = deviceData?.active_app?.packageName === 'SCREEN_OFF' &&
+        (activeAppTime === 0 || freshestPing === 0 || activeAppTime >= (freshestPing - 15000));
 
       // Bất biến phần cứng (Hardware Invariant): Nếu màn hình tắt hoặc cờ online=false, lập tức xác định Ngoại tuyến (isOnline: false)
       if (isExplicitOffline || isScreenOff) {

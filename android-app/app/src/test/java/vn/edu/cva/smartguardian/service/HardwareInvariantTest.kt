@@ -2522,15 +2522,15 @@ class HardwareInvariantTest {
         }
         assertTrue("Thiết bị đồng bộ 10s trước phải trực tuyến", MainActivity.computeDeviceOnlineStatus(devOnline, now))
 
-        // 2. Mất mạng quá 45s -> ngoại tuyến
+        // 2. Mất mạng quá 90s -> ngoại tuyến
         val devStale = JSONObject().apply {
             put("isPaired", true)
             put("online", true)
-            put("lastSync", now - 46000L)
+            put("lastSync", now - 91000L)
         }
-        assertFalse("Thiết bị quá 45s không liên lạc phải ngoại tuyến", MainActivity.computeDeviceOnlineStatus(devStale, now))
+        assertFalse("Thiết bị quá 90s không liên lạc phải ngoại tuyến", MainActivity.computeDeviceOnlineStatus(devStale, now))
 
-        // 3. Màn hình tắt (SCREEN_OFF) -> ngoại tuyến (Zero Phantom Time)
+        // 3. Màn hình tắt (SCREEN_OFF không có timestamp) -> ngoại tuyến (Zero Phantom Time)
         val devScreenOff = JSONObject().apply {
             put("isPaired", true)
             put("online", true)
@@ -2540,6 +2540,34 @@ class HardwareInvariantTest {
             })
         }
         assertFalse("Thiết bị ở trạng thái SCREEN_OFF phải ngoại tuyến", MainActivity.computeDeviceOnlineStatus(devScreenOff, now))
+
+        // 3b. Thoát khỏi bẫy Stale SCREEN_OFF khi thiết bị gửi heartbeat mới hơn sự kiện tắt màn hình
+        val devStaleScreenOffWithFreshHeartbeat = JSONObject().apply {
+            put("isPaired", true)
+            put("status", "paired")
+            put("online", true)
+            put("lastSync", now - 5000L)
+            put("lastHeartbeat", now - 5000L)
+            put("active_app", JSONObject().apply {
+                put("packageName", "SCREEN_OFF")
+                put("timestamp", now - 300000L) // Tắt màn hình từ 5 phút trước, nhưng vừa gửi heartbeat 5s trước
+            })
+        }
+        assertTrue("Thiết bị có heartbeat mới 5s trước dù active_app lưu SCREEN_OFF cũ từ 5m trước phải trực tuyến", MainActivity.computeDeviceOnlineStatus(devStaleScreenOffWithFreshHeartbeat, now))
+
+        // 3c. Màn hình tắt thực sự với timestamp mới (đồng bộ cùng nhịp tim) -> ngoại tuyến
+        val devFreshScreenOff = JSONObject().apply {
+            put("isPaired", true)
+            put("status", "paired")
+            put("online", true)
+            put("lastSync", now - 5000L)
+            put("lastHeartbeat", now - 5000L)
+            put("active_app", JSONObject().apply {
+                put("packageName", "SCREEN_OFF")
+                put("timestamp", now - 5000L)
+            })
+        }
+        assertFalse("Thiết bị vừa gửi trạng thái SCREEN_OFF cùng nhịp tim phải ngoại tuyến", MainActivity.computeDeviceOnlineStatus(devFreshScreenOff, now))
 
         // 4. Trạng thái bị thu hồi (REVOKED) -> ngoại tuyến
         val devRevoked = JSONObject().apply {

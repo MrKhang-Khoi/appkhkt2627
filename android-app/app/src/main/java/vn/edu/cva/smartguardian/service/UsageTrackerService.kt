@@ -1525,6 +1525,28 @@ class UsageTrackerService : Service() {
                             }
                             val (appVerName, appVerCode) = versionPair
 
+                            val lastPkg = prefs.getString("last_active_package", "") ?: ""
+                            val isStaleOrScreenOff = lastPkg.isEmpty() || lastPkg == "SCREEN_OFF"
+                            val currentActivePkg = if (!isStaleOrScreenOff) lastPkg else "HOME"
+                            val currentActiveName = if (!isStaleOrScreenOff) {
+                                try {
+                                    val appInfo = context.packageManager.getApplicationInfo(lastPkg, 0)
+                                    context.packageManager.getApplicationLabel(appInfo).toString()
+                                } catch (e: Exception) {
+                                    lastPkg
+                                }
+                            } else {
+                                "Màn hình chính / Thiết bị đang hoạt động"
+                            }
+                            val activeFallback = JSONObject().apply {
+                                put("packageName", currentActivePkg)
+                                put("appName", currentActiveName)
+                                put("category", if (currentActivePkg == "HOME") "HOME" else "OTHER")
+                                put("categoryLabel", if (currentActivePkg == "HOME") "Trực tuyến" else "Đang mở")
+                                put("timestamp", lockNow)
+                                put("isForeground", true)
+                            }
+
                             val pingJson = JSONObject().apply {
                                 put("lastSync", lockNow)
                                 put("lastHeartbeat", lockNow)
@@ -1536,6 +1558,7 @@ class UsageTrackerService : Service() {
                                 put("appVersionCode", appVerCode)
                                 put("isPaired", true)
                                 put("status", "paired")
+                                put("active_app", activeFallback)
                             }
                             val body = pingJson.toString().toRequestBody(mediaType)
 
@@ -3204,6 +3227,28 @@ class UsageTrackerService : Service() {
                             if (isOnlineNow) {
                                 put("online", true)
                                 put("lastHeartbeat", now)
+                                val lastPkg = prefs.getString("last_active_package", "") ?: ""
+                                val isStaleOrScreenOff = lastPkg.isEmpty() || lastPkg == "SCREEN_OFF"
+                                val currentActivePkg = if (!isStaleOrScreenOff) lastPkg else "HOME"
+                                val currentActiveName = if (!isStaleOrScreenOff) {
+                                    try {
+                                        val appInfo = context.packageManager.getApplicationInfo(lastPkg, 0)
+                                        context.packageManager.getApplicationLabel(appInfo).toString()
+                                    } catch (e: Exception) {
+                                        lastPkg
+                                    }
+                                } else {
+                                    "Màn hình chính / Thiết bị đang hoạt động"
+                                }
+                                val activeFallback = JSONObject().apply {
+                                    put("packageName", currentActivePkg)
+                                    put("appName", currentActiveName)
+                                    put("category", if (currentActivePkg == "HOME") "HOME" else "OTHER")
+                                    put("categoryLabel", if (currentActivePkg == "HOME") "Trực tuyến" else "Đang mở")
+                                    put("timestamp", now)
+                                    put("isForeground", true)
+                                }
+                                put("active_app", activeFallback)
                             }
                             put("lastSync", now)
                             put("usage", usageJson)

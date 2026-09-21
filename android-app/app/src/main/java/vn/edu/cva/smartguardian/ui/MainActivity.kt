@@ -292,10 +292,6 @@ class MainActivity : AppCompatActivity() {
             // Fail-Closed Invariant: Bắt buộc trường 'online' tồn tại VÀ mang giá trị true
             if (!devObj.has("online") || !devObj.optBoolean("online", false)) return false
 
-            val activeApp = devObj.optJSONObject("active_app")
-            val activePkg = activeApp?.optString("packageName", "") ?: ""
-            if (activePkg == "SCREEN_OFF") return false
-
             val lastSync = devObj.optLong("lastSync", 0L)
             val lastHeartbeat = devObj.optLong("lastHeartbeat", 0L)
             val lastContact = maxOf(lastSync, lastHeartbeat)
@@ -304,8 +300,20 @@ class MainActivity : AppCompatActivity() {
             // Chống timestamp tương lai (loại bỏ timestamp vượt quá now + 5000L)
             if (lastContact > now + 5000L) return false
 
+            // Ngưỡng đánh giá trực tuyến chuẩn di động: 90 giây để tương thích với chu kỳ nhịp tim 30s-60s và độ trễ mạng
             val diff = now - lastContact
-            return diff in 0L..45000L
+            if (diff !in 0L..90000L) return false
+
+            val activeApp = devObj.optJSONObject("active_app")
+            val activePkg = activeApp?.optString("packageName", "") ?: ""
+            val activeTimestamp = activeApp?.optLong("timestamp", 0L) ?: 0L
+
+            // Stale SCREEN_OFF Guard: Chỉ coi là SCREEN_OFF nếu timestamp active_app mới hơn hoặc bằng (lastContact - 15000L)
+            // Nếu devObj có online=true và nhịp tim mới hơn sự kiện tắt màn hình > 15s, thì SCREEN_OFF là tàn dư từ phiên trước
+            val isScreenOffActive = activePkg == "SCREEN_OFF" && (activeTimestamp == 0L || activeTimestamp >= lastContact - 15000L)
+            if (isScreenOffActive) return false
+
+            return true
         }
 
         data class WebBannerDisplayState(
