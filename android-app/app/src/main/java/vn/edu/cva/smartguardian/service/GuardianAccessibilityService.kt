@@ -44,6 +44,7 @@ class GuardianAccessibilityService : AccessibilityService() {
         val telemetryEpoch = java.util.concurrent.atomic.AtomicLong(0L)
         internal val sessionLock = Any()
         internal val hardwareTransitionLock = Any()
+        const val PREF_LAST_WRITTEN_EPOCH = "last_written_epoch"
 
         val BANK_PACKAGES = setOf(
             "com.vcb",                    // Vietcombank
