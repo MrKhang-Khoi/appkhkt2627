@@ -70,7 +70,7 @@
 
 ### 2.3. Tính Toàn Vẹn Bản Phát Hành & Phạm Vi Kiểm Thử (Verification Scope):
 - **Phạm vi kiểm thử tự động của Repository (Automated CI/Local Verification Scope)**:
-  - Repository áp dụng bộ kiểm thử tự động `HardwareInvariantTest.kt` chạy trên JVM với Android Studio JBR với tổng cộng **99 bài kiểm thử** (bao gồm 51 bài kiểm thử cốt lõi của SPEC và 48 bài kiểm thử tính năng & đối kháng Karl Popper mới).
+  - Repository áp dụng bộ kiểm thử tự động `HardwareInvariantTest.kt` chạy trên JVM với Android Studio JBR với tổng cộng **100 bài kiểm thử** (bao gồm 51 bài kiểm thử cốt lõi của SPEC và 49 bài kiểm thử tính năng & đối kháng Karl Popper mới).
   - Bộ kiểm thử này trực tiếp thực thi mã nguồn production và kiểm chứng toán học/luồng:
     1. Trạng thái tăng đơn điệu của `telemetryEpoch`.
     2. Hành vi hủy kết nối in-flight của `cancelActiveOnlineCalls()` và `cancelActiveOfflineCalls()`.
@@ -88,6 +88,7 @@
     14. Chuyển đổi trạng thái nguyên tử bảo vệ ứng dụng ngân hàng dưới `sessionLock` (`testBankPackageAtomicallyTransitionsStateUnderSessionLock`).
     15. Từ chối ứng dụng chia đôi màn hình không active/focus và fallback an toàn sang UsageStats (`testIsForegroundAppRejectsSplitScreenInactiveWindowAndRequiresFocusOrUsageStatsFallback`).
     16. Cơ chế CAS HTTP 412 bắt buộc GET refetch trạng thái node mới và hủy ghi đè an toàn (`testCasPreconditionFailed412FetchesFreshNodeStateAndAbortsOnNewerGeneration`).
+    17. Cơ chế Cold Start CAS bắt buộc Pre-GET node ETag và từ chối ghi đè thế hệ mới (`testCasColdStartWithEmptyETagCachePerformsPreGetAndPreventsStaleOverwrite`).
   - *Đặc tả phần cứng thực tế*: Việc kiểm thử các lifecycle thực tế phụ thuộc hệ điều hành Android (`ACTION_SCREEN_OFF`, `ACTION_USER_PRESENT`, tối ưu hóa pin OEM) khi chạy trong môi trường CI không có thiết bị thật/emulator kết nối được bảo vệ bằng thiết kế phòng thủ theo chuẩn tài liệu Android Developers (defensive bounded timeouts 3000ms, non-blocking coroutine dispatch, 1-shot retry, và unregister receiver an toàn).
 - **Kiến trúc Phân quyền Một Thiết Bị - Một Vai Trò (One-Device One-Role Architecture - Chuẩn Google Family Link & Apple Screen Time)**:
   - Một thiết bị đã ghép đôi bảo vệ con (Student Companion) TUYỆT ĐỐI không hiển thị đồng thời giao diện Phụ huynh để con tự ý can thiệp. Mặc định ẩn hoàn toàn thanh chuyển tab `[Phụ Huynh | Học Sinh]`.

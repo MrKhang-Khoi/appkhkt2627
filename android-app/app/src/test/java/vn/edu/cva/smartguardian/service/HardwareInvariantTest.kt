@@ -3812,6 +3812,92 @@ class HardwareInvariantTest {
         }
     }
 
+    @Test
+    fun testCasColdStartWithEmptyETagCachePerformsPreGetAndPreventsStaleOverwrite() {
+        // Red-Team Karl Popper Falsification Test Mandated by OpenAI Codex:
+        // Proves that when lastKnownETags is strictly EMPTY (cold start, cache evicted or process restart),
+        // executeOnlineGuarded and executeOnlineHttpGuarded FORBID sending unconditional PUT.
+        // Instead, they perform a preliminary GET with X-Firebase-ETag: true, detect if server holds a newer generation,
+        // and abort fail-closed without overwriting the server state.
+        val server = CasTestServer()
+        val port = server.port
+        val activeAppUrl = "http://127.0.0.1:$port/active_app.json"
+
+        try {
+            val fakePrefs = FakeSharedPreferences()
+            fakePrefs.data["paired_code"] = "CVA-TEST"
+            fakePrefs.data["device_id"] = "TEST_DEV_03"
+            val context = FakeTestContext(fakePrefs)
+
+            // Step 1: Server holds Generation 20, App_Z
+            server.currentServerState = JSONObject().apply {
+                put("appName", "App_Z")
+                put("foregroundGeneration", 20L)
+            }
+            server.currentServerETag = "etag_gen20"
+
+            // Step 2: Ensure client cache is strictly EMPTY (no cached ETag!)
+            UsageTrackerService.lastKnownETags.remove(activeAppUrl)
+            assertNull("Client ETag cache must be empty before test", UsageTrackerService.lastKnownETags[activeAppUrl])
+
+            // Step 3: Client generates stale request (Generation 15, App_Y)
+            val bodyY = JSONObject().apply {
+                put("appName", "App_Y")
+                put("foregroundGeneration", 15L)
+            }.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+
+            val reqY = okhttp3.Request.Builder()
+                .url(activeAppUrl)
+                .put(bodyY)
+                .build()
+
+            GuardianAccessibilityService.isScreenOnState = true
+            UsageTrackerService.foregroundGeneration.set(15L)
+
+            // Step 4: Dispatch executeOnlineGuarded with cold start empty cache
+            val result = UsageTrackerService.executeOnlineGuarded(
+                reqY, context, expectedEpoch = -1L, expectedGen = 15L
+            )
+
+            // Step 5: Verification - must abort, server must NOT be overwritten
+            assertFalse("executeOnlineGuarded must abort on cold start when pre-GET shows server is newer (20 >= 15)", result)
+            assertEquals("Server state must remain App_Z, NOT overwritten with App_Y", "App_Z", server.currentServerState.getString("appName"))
+            assertEquals("Server generation must remain 20", 20L, server.currentServerState.getLong("foregroundGeneration"))
+            assertEquals("lastKnownETags must now contain fresh ETag from pre-GET", "etag_gen20", UsageTrackerService.lastKnownETags[activeAppUrl])
+
+            // Step 6: Verify executeOnlineHttpGuarded also rejects cold-start stale overwrite
+            UsageTrackerService.lastKnownETags.remove(activeAppUrl)
+            val httpResult = UsageTrackerService.executeOnlineHttpGuarded(
+                reqY, context, expectedEpoch = -1L, expectedGen = 15L
+            )
+            assertNull("executeOnlineHttpGuarded must return null fail-closed on cold-start stale overwrite", httpResult)
+            assertEquals("Server state must still remain App_Z", "App_Z", server.currentServerState.getString("appName"))
+
+            // Step 7: Verify success path with empty cache when client IS newer (Gen 25 > Gen 20)
+            UsageTrackerService.lastKnownETags.remove(activeAppUrl)
+            val bodyW = JSONObject().apply {
+                put("appName", "App_W")
+                put("foregroundGeneration", 25L)
+            }.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+
+            val reqW = okhttp3.Request.Builder()
+                .url(activeAppUrl)
+                .put(bodyW)
+                .build()
+
+            UsageTrackerService.foregroundGeneration.set(25L)
+            val successW = UsageTrackerService.executeOnlineGuarded(
+                reqW, context, expectedEpoch = -1L, expectedGen = 25L
+            )
+            assertTrue("executeOnlineGuarded must succeed on cold start when client generation is newer (25 > 20)", successW)
+            assertEquals("Server state must now be App_W", "App_W", server.currentServerState.getString("appName"))
+            assertEquals("Server generation must be 25", 25L, server.currentServerState.getLong("foregroundGeneration"))
+        } finally {
+            server.close()
+            UsageTrackerService.lastKnownETags.remove(activeAppUrl)
+        }
+    }
+
     private class FakeTestContext(
         val prefs: FakeSharedPreferences
     ) : ContextWrapper(null) {

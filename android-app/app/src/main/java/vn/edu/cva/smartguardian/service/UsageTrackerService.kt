@@ -684,6 +684,73 @@ class UsageTrackerService : Service() {
             }
         }
 
+        internal fun ensureFreshActiveAppETag(
+            requestUrl: okhttp3.HttpUrl,
+            expectedEpoch: Long,
+            expectedGen: Long,
+            context: Context
+        ): Pair<String?, Boolean> {
+            val urlStr = requestUrl.toString()
+            val cachedETag = lastKnownETags[urlStr]
+            if (!cachedETag.isNullOrEmpty()) {
+                return Pair(cachedETag, true)
+            }
+
+            // Mandatory Preliminary GET before first active_app mutation (Cold Start / Cleared Cache Protection)
+            val preGetReq = okhttp3.Request.Builder()
+                .url(requestUrl)
+                .get()
+                .header("X-Firebase-ETag", "true")
+                .build()
+            val preGetCall = sharedHttpClient.newCall(preGetReq)
+            activeOnlineCalls.add(preGetCall)
+            val (serverGen, freshEtag) = try {
+                val preGetResp = preGetCall.execute()
+                preGetResp.use { gResp ->
+                    val gEtag = gResp.header("ETag")
+                    val gBody = gResp.body?.string() ?: ""
+                    val gJson = try {
+                        JSONObject(gBody)
+                    } catch (e: Exception) {
+                        Log.w("UsageTrackerService", "JSON parse on Pre-GET: ${e.message}")
+                        null
+                    }
+                    val gGen = gJson?.optLong("foregroundGeneration", -1L) ?: -1L
+                    Pair(gGen, gEtag)
+                }
+            } catch (e: Exception) {
+                Log.w("UsageTrackerService", "CAS Pre-GET node failed: ${e.message}")
+                Pair(-1L, null)
+            } finally {
+                activeOnlineCalls.remove(preGetCall)
+            }
+
+            if (freshEtag != null) {
+                lastKnownETags[urlStr] = freshEtag
+            }
+
+            if (serverGen >= expectedGen && expectedGen != -1L) {
+                Log.w("UsageTrackerService", "CAS Pre-GET Aborted: Server already holds newer/equal generation ($serverGen >= $expectedGen) at $urlStr. Stale overwrite safely prevented!")
+                return Pair(null, false)
+            }
+
+            if (!isHardwareOnlineValid(context, expectedEpoch)) {
+                Log.w("UsageTrackerService", "Phần cứng không online sau Pre-GET")
+                return Pair(null, false)
+            }
+            if (expectedGen != -1L && foregroundGeneration.get() != expectedGen) {
+                Log.w("UsageTrackerService", "Generation thay đổi sau Pre-GET ($expectedGen != ${foregroundGeneration.get()})")
+                return Pair(null, false)
+            }
+
+            if (freshEtag.isNullOrEmpty()) {
+                Log.w("UsageTrackerService", "Cấm gửi PUT active_app khi không lấy được ETag hợp lệ từ server. Fail-closed!")
+                return Pair(null, false)
+            }
+
+            return Pair(freshEtag, true)
+        }
+
         fun executeOnlineGuarded(
             request: okhttp3.Request,
             context: Context,
@@ -701,16 +768,17 @@ class UsageTrackerService : Service() {
             }
 
             // Server-Side CAS Header Enrichment for active_app mutations:
-            // Embeds X-Firebase-ETag to track server state, and if-match to enforce server-side CAS ordering
+            // Bắt buộc phải có ETag hợp lệ trước khi gửi PUT active_app (chuẩn CAS tuyệt đối)
             val isPutActiveApp = request.method == "PUT" && request.url.toString().contains("active_app")
             val effectiveRequest = if (isPutActiveApp) {
-                val reqBuilder = request.newBuilder()
-                    .header("X-Firebase-ETag", "true")
-                val cachedETag = lastKnownETags[request.url.toString()]
-                if (!cachedETag.isNullOrEmpty()) {
-                    reqBuilder.header("if-match", cachedETag)
+                val (etag, shouldProceed) = ensureFreshActiveAppETag(request.url, expectedEpoch, expectedGen, context)
+                if (!shouldProceed || etag.isNullOrEmpty()) {
+                    return false
                 }
-                reqBuilder.build()
+                request.newBuilder()
+                    .header("X-Firebase-ETag", "true")
+                    .header("if-match", etag)
+                    .build()
             } else {
                 request
             }
@@ -830,13 +898,14 @@ class UsageTrackerService : Service() {
 
             val isPutActiveApp = request.method == "PUT" && request.url.toString().contains("active_app")
             val effectiveRequest = if (isPutActiveApp) {
-                val reqBuilder = request.newBuilder()
-                    .header("X-Firebase-ETag", "true")
-                val cachedETag = lastKnownETags[request.url.toString()]
-                if (!cachedETag.isNullOrEmpty()) {
-                    reqBuilder.header("if-match", cachedETag)
+                val (etag, shouldProceed) = ensureFreshActiveAppETag(request.url, expectedEpoch, expectedGen, context)
+                if (!shouldProceed || etag.isNullOrEmpty()) {
+                    return null
                 }
-                reqBuilder.build()
+                request.newBuilder()
+                    .header("X-Firebase-ETag", "true")
+                    .header("if-match", etag)
+                    .build()
             } else {
                 request
             }

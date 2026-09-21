@@ -854,7 +854,8 @@ try {
     'testCompanionBottomSheetUiStatesAreStrictlyMutuallyExclusive',
     'testBankPackageAtomicallyTransitionsStateUnderSessionLock',
     'testIsForegroundAppRejectsSplitScreenInactiveWindowAndRequiresFocusOrUsageStatsFallback',
-    'testCasPreconditionFailed412FetchesFreshNodeStateAndAbortsOnNewerGeneration'
+    'testCasPreconditionFailed412FetchesFreshNodeStateAndAbortsOnNewerGeneration',
+    'testCasColdStartWithEmptyETagCachePerformsPreGetAndPreventsStaleOverwrite'
   ];
 
   for (const testName of requiredProductionFeatureTests) {
