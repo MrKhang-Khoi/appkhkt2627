@@ -74,9 +74,10 @@ try {
   diff = (binaryArtifactsHeader + stagedDiff + '\n' + unstagedDiff + '\n' + untrackedDiff).trim();
   diffTarget = 'Thay đổi mã nguồn văn bản (Uncommitted text source changes)';
 
-  // Nếu không có uncommitted diff, audit commit gần nhất
   if (!diff) {
-    diff = execSync('git diff HEAD~1 HEAD -- ":!*.apk" ":!*.png" ":!*.jpg" ":!*.jpeg"', { encoding: 'utf8' }).trim();
+    const commitBinaryStatus = execSync('git diff --name-status HEAD~1 HEAD', { encoding: 'utf8' }).trim();
+    const commitTextDiff = execSync('git diff HEAD~1 HEAD -- ":!*.apk" ":!*.png" ":!*.jpg" ":!*.jpeg"', { encoding: 'utf8' }).trim();
+    diff = `[COMMITTED REPOSITORY ARTIFACTS IN THIS RELEASE]:\n${commitBinaryStatus}\n\n${commitTextDiff}`.trim();
     diffTarget = 'Commit gần nhất (HEAD~1 -> HEAD: ' + execSync('git log -1 --pretty=%h', { encoding: 'utf8' }).trim() + ')';
   }
 } catch (e) {
