@@ -512,9 +512,31 @@ class UsageTrackerService : Service() {
                         // 1. Chống bẫy DoS/OOM: Giới hạn kích thước thô tối đa 64 KB
                         if (rawJson.length > 64 * 1024) {
                             Log.w("UsageTrackerService", "persisted_session_tokens_json vượt giới hạn 64KB (${rawJson.length} bytes), loại bỏ để chống OOM")
-                            val removed = prefs.edit().remove("persisted_session_tokens_json").commit()
-                            if (!removed) {
-                                Log.w("UsageTrackerService", "commit() xóa key độc hại thất bại, áp dụng fallback ghi đè rỗng [] qua apply() để giải phóng in-memory cache")
+                            var purged = false
+                            val backoffs = longArrayOf(100L, 200L, 400L)
+                            for (attempt in 0 until 3) {
+                                val removed = prefs.edit().remove("persisted_session_tokens_json").commit()
+                                if (removed) {
+                                    purged = true
+                                    break
+                                }
+                                val overwritten = prefs.edit().putString("persisted_session_tokens_json", "[]").commit()
+                                if (overwritten) {
+                                    purged = true
+                                    break
+                                }
+                                if (attempt < backoffs.size - 1) {
+                                    try {
+                                        Thread.sleep(backoffs[attempt])
+                                    } catch (e: InterruptedException) {
+                                        Log.w("UsageTrackerService", "Thread sleep interrupted: ${e.message}")
+                                        Thread.currentThread().interrupt()
+                                        break
+                                    }
+                                }
+                            }
+                            if (!purged) {
+                                Log.e("UsageTrackerService", "LỖI AN TOÀN: Đã thử commit() 3 lần xóa/ghi đè key độc hại nhưng đều thất bại do I/O đĩa. Áp dụng fallback apply([])")
                                 prefs.edit().putString("persisted_session_tokens_json", "[]").apply()
                             }
                             recordedSessionTokens.clear()
