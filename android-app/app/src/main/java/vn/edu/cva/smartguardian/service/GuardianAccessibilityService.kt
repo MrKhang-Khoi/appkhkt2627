@@ -92,14 +92,15 @@ class GuardianAccessibilityService : AccessibilityService() {
         ): Boolean {
             if (targetPkg.isEmpty()) return false
 
-            // Xung đột cửa sổ tiền cảnh chính: Nếu activeRootPkg thuộc về ứng dụng KHÁC, tuyệt đối không được nhận diện là targetPkg
-            if (!activeRootPkg.isNullOrEmpty() && !isPackageProcessOf(activeRootPkg, targetPkg)) {
+            // Bất biến Đa cửa sổ / Split-Screen (Codex Strict Invariant):
+            // Nếu phát hiện bất kỳ cửa sổ nào của ứng dụng khác đang active/focused (kể cả khi activeRootPkg khớp target),
+            // tuyệt đối từ chối (Fail-Closed) ngay lập tức, bất kể có matching window hay UsageStats target mới đến đâu.
+            if (!conflictingWindowPkg.isNullOrEmpty() && !isPackageProcessOf(conflictingWindowPkg, targetPkg)) {
                 return false
             }
 
-            // Bất biến Đa cửa sổ / Split-Screen: Nếu phát hiện bất kỳ cửa sổ nào của ứng dụng khác đang active/focused,
-            // tuyệt đối từ chối (Fail-Closed) ngay lập tức, bất kể có matching window hay UsageStats target mới đến đâu.
-            if (!conflictingWindowPkg.isNullOrEmpty() && !isPackageProcessOf(conflictingWindowPkg, targetPkg)) {
+            // Xung đột cửa sổ tiền cảnh chính: Nếu activeRootPkg thuộc về ứng dụng KHÁC, tuyệt đối không được nhận diện là targetPkg
+            if (!activeRootPkg.isNullOrEmpty() && !isPackageProcessOf(activeRootPkg, targetPkg)) {
                 return false
             }
 
@@ -558,30 +559,31 @@ class GuardianAccessibilityService : AccessibilityService() {
                 directRootPkg = rootPkg
             } else if (!rootPkg.isNullOrEmpty()) {
                 conflictingWindowPkg = rootPkg
-            } else {
-                // Kiểm tra danh sách windows tương tác: Chỉ chấp nhận cửa sổ TYPE_APPLICATION có isActive hoặc isFocused
-                val appWindows = windows?.filter { win ->
-                    win.type == AccessibilityWindowInfo.TYPE_APPLICATION && (win.isActive || win.isFocused)
-                }
+            }
 
-                // Chốt chặn Split-Screen / Multi-Window:
-                // Quét TOÀN BỘ danh sách appWindows. Nếu có bất kỳ cửa sổ nào thuộc về package khác packageName,
-                // đó là xung đột đa cửa sổ / split-screen -> Bắt buộc fail-closed!
-                val conflictingOther = appWindows?.firstOrNull { win ->
-                    val winPkg = win.root?.packageName?.toString()?.trim()
-                    !winPkg.isNullOrEmpty() && !isPackageProcessOf(winPkg, packageName)
-                }
-                if (conflictingOther != null) {
-                    conflictingWindowPkg = conflictingOther.root?.packageName?.toString()?.trim()
-                }
+            // Chốt chặn Split-Screen / Multi-Window (Codex Decoupled Invariant):
+            // Luôn quét TOÀN BỘ danh sách windows tương tác (TYPE_APPLICATION và isActive || isFocused),
+            // bất kể rootInActiveWindow có khớp hay không.
+            // Nếu có bất kỳ cửa sổ nào thuộc về package khác packageName, đó là xung đột đa cửa sổ / split-screen -> Bắt buộc fail-closed!
+            val appWindows = windows?.filter { win ->
+                win.type == AccessibilityWindowInfo.TYPE_APPLICATION && (win.isActive || win.isFocused)
+            }
 
-                val matchingWindow = appWindows?.firstOrNull { win ->
-                    val winPkg = win.root?.packageName?.toString()?.trim()
-                    isPackageProcessOf(winPkg, packageName)
-                }
-                if (matchingWindow != null) {
-                    secondaryMatchingPkg = matchingWindow.root?.packageName?.toString()?.trim() ?: packageName
-                }
+            val conflictingOther = appWindows?.firstOrNull { win ->
+                val winPkg = win.root?.packageName?.toString()?.trim()
+                !winPkg.isNullOrEmpty() && !isPackageProcessOf(winPkg, packageName)
+            }
+            if (conflictingOther != null) {
+                val winPkg = conflictingOther.root?.packageName?.toString()?.trim()
+                conflictingWindowPkg = if (!winPkg.isNullOrEmpty()) winPkg else "conflict.window.detected"
+            }
+
+            val matchingWindow = appWindows?.firstOrNull { win ->
+                val winPkg = win.root?.packageName?.toString()?.trim()
+                isPackageProcessOf(winPkg, packageName)
+            }
+            if (matchingWindow != null) {
+                secondaryMatchingPkg = matchingWindow.root?.packageName?.toString()?.trim() ?: packageName
             }
         } catch (e: Exception) {
             Log.w("GuardianAccess", "Window hierarchy check failed: ${e.message}")

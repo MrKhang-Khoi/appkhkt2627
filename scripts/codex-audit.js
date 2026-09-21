@@ -866,7 +866,8 @@ try {
     'testForegroundProcessAndSubprocessResolutionInvariants',
     'testSecondaryWindowFallbackRequiresUsageStatsAgreementAndRejectsStaleWindow',
     'testSplitScreenConcurrentTargetAndOtherWindowStrictlyFailsClosed',
-    'testZeroWindowEvidenceWithStaleOrRecentUsageStatsStrictlyFailsClosed'
+    'testZeroWindowEvidenceWithStaleOrRecentUsageStatsStrictlyFailsClosed',
+    'testSplitScreenWithMatchingRootAndConflictingActiveWindowStrictlyFailsClosed'
   ];
 
   for (const testName of requiredProductionFeatureTests) {

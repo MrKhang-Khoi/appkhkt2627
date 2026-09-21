@@ -4286,6 +4286,32 @@ class HardwareInvariantTest {
         assertFalse("Zero window evidence must strictly fail closed against Home transition ghosting", zeroWindowResult)
     }
 
+    @Test
+    fun testSplitScreenWithMatchingRootAndConflictingActiveWindowStrictlyFailsClosed() {
+        val target = "com.example.browser"
+        val other = "com.other.app"
+        val now = 400_000L
+
+        // Falsification Case (Codex Split-Screen Invariant - Decoupled Hierarchy):
+        // activeRootPkg khớp target (ví dụ Pane 1 split-screen trả về target),
+        // nhưng có một cửa sổ active/focused khác (Pane 2) thuộc về ứng dụng khác (other),
+        // và UsageStats của target vừa được ghi nhận 200ms trước.
+        // Bất biến: evaluateForegroundEvidence BẮT BUỘC từ chối (Fail-closed -> false),
+        // không được phép ngộ nhận target là ứng dụng tiền cảnh độc quyền khi màn hình đang bị chia sẻ!
+        val splitScreenWithRootResult = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = target,
+            usageStatsLastResumedPkg = target,
+            targetPkg = target,
+            now = now,
+            lastEventTime = now - 200L,
+            maxEventAgeMs = 15_000L,
+            secondaryWindowPkg = null,
+            conflictingWindowPkg = other,
+            requireWindowEvidence = true
+        )
+        assertFalse("Split-screen with matching activeRootPkg but conflicting active window must strictly fail closed", splitScreenWithRootResult)
+    }
+
     private class FakeTestContext(
         val prefs: FakeSharedPreferences
     ) : ContextWrapper(null) {
