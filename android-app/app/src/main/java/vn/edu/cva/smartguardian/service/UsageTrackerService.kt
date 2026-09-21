@@ -568,12 +568,30 @@ class UsageTrackerService : Service() {
                     val rollbackEditor = prefs.edit()
                     if (hadTokensJson) rollbackEditor.putString("persisted_session_tokens_json", prevTokensJson)
                     else rollbackEditor.remove("persisted_session_tokens_json")
-                    rollbackEditor.commit()
+                    val rollbackSuccess = rollbackEditor.commit()
+                    if (!rollbackSuccess) {
+                        Log.e("UsageTrackerService", "LỖI NGUY HIỂM: Rollback commit() thất bại! Reset isSessionTokensRestored để ép đồng bộ lại.")
+                        isSessionTokensRestored.set(false)
+                    } else {
+                        val currentDiskJson = if (prefs.contains("persisted_session_tokens_json")) prefs.getString("persisted_session_tokens_json", null) else null
+                        if (currentDiskJson != prevTokensJson) {
+                            Log.e("UsageTrackerService", "Rollback read-back không khớp dữ liệu cũ! Reset isSessionTokensRestored.")
+                            isSessionTokensRestored.set(false)
+                        }
+                    }
                     Log.w("UsageTrackerService", "persistSessionTokensLocked: SharedPreferences.commit() returned false")
+                    return false
                 }
-                committed
+                val verifiedDiskJson = prefs.getString("persisted_session_tokens_json", null)
+                if (verifiedDiskJson != jsonArray.toString()) {
+                    Log.e("UsageTrackerService", "Read-back verification sau commit() thất bại! Reset isSessionTokensRestored.")
+                    isSessionTokensRestored.set(false)
+                    return false
+                }
+                true
             } catch (e: Exception) {
                 Log.w("UsageTrackerService", "persistSessionTokensLocked error: ${e.message}")
+                isSessionTokensRestored.set(false)
                 false
             }
         }
@@ -622,13 +640,19 @@ class UsageTrackerService : Service() {
                             for (attempt in 0 until 3) {
                                 val removed = prefs.edit().remove("persisted_session_tokens_json").commit()
                                 if (removed) {
-                                    purged = true
-                                    break
+                                    val readBack = prefs.getString("persisted_session_tokens_json", null)
+                                    if (readBack == null) {
+                                        purged = true
+                                        break
+                                    }
                                 }
                                 val overwritten = prefs.edit().putString("persisted_session_tokens_json", "[]").commit()
                                 if (overwritten) {
-                                    purged = true
-                                    break
+                                    val readBack = prefs.getString("persisted_session_tokens_json", null)
+                                    if (readBack == "[]") {
+                                        purged = true
+                                        break
+                                    }
                                 }
                                 if (attempt < backoffs.size - 1) {
                                     try {
@@ -641,8 +665,9 @@ class UsageTrackerService : Service() {
                                 }
                             }
                             if (!purged) {
-                                Log.e("UsageTrackerService", "LỖI AN TOÀN: Đã thử commit() 3 lần xóa/ghi đè key độc hại nhưng đều thất bại do I/O đĩa. Áp dụng fallback apply([])")
-                                prefs.edit().putString("persisted_session_tokens_json", "[]").apply()
+                                Log.e("UsageTrackerService", "LỖI AN TOÀN: Đã thử commit() 3 lần xóa/ghi đè key độc hại nhưng đều thất bại do I/O đĩa. Fail-Closed: Không đánh dấu restore!")
+                                isSessionTokensRestored.set(false)
+                                return false
                             }
                             recordedSessionTokens.clear()
                             isSessionTokensRestored.set(true)
@@ -2665,7 +2690,11 @@ class UsageTrackerService : Service() {
                     if (hadTokensJson) rollbackEditor.putString("persisted_session_tokens_json", prevTokensJson)
                     else rollbackEditor.remove("persisted_session_tokens_json")
                 }
-                rollbackEditor.commit()
+                val rollbackSuccess = rollbackEditor.commit()
+                if (!rollbackSuccess && sessionToken.isNotEmpty()) {
+                    Log.e("UsageTrackerService", "Rollback commit in recordAppUsageLocked failed! Resetting isSessionTokensRestored.")
+                    isSessionTokensRestored.set(false)
+                }
 
                 if (sessionToken.isNotEmpty()) {
                     (recordedSessionTokens as? LruSessionSet)?.restoreSnapshotRaw(backupTokens)

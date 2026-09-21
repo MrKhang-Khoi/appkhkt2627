@@ -1626,13 +1626,13 @@ class HardwareInvariantTest {
         assertEquals("token_3", list[2])
     }
 
-    private class FakeSharedPreferences(
+    private open class FakeSharedPreferences(
         val data: MutableMap<String, Any?> = mutableMapOf(),
         var commitReturnsSuccess: Boolean = true,
         var throwOnRead: Boolean = false
     ) : SharedPreferences {
         override fun getAll(): MutableMap<String, *> = synchronized(data) { HashMap(data) }
-        override fun getString(key: String?, defValue: String?): String? = synchronized(data) {
+        open override fun getString(key: String?, defValue: String?): String? = synchronized(data) {
             if (throwOnRead) throw IllegalStateException("Storage read failure simulation")
             (data[key] as? String) ?: defValue
         }
@@ -5578,7 +5578,8 @@ class HardwareInvariantTest {
         assertNull("Oversized poison key must be removed from SharedPreferences", fakePrefs.data["persisted_session_tokens_json"])
         assertEquals("recordedSessionTokens must remain empty after dropping oversized payload", 0, UsageTrackerService.recordedSessionTokens.size)
 
-        // 3. Test payload > 64KB when commit fails (Disk I/O failure): Fallback purges memory to [] and marks restored
+        // 3. Test payload > 64KB when commit fails (Disk I/O failure): Fail-Closed Invariant
+        // When all commit() attempts fail, must return false and NEVER mark isSessionTokensRestored = true!
         UsageTrackerService.recordedSessionTokens.clear()
         UsageTrackerService.isSessionTokensRestored.set(false)
         val failingPrefs = FakeSharedPreferences(commitReturnsSuccess = false)
@@ -5586,10 +5587,32 @@ class HardwareInvariantTest {
         failingPrefs.data["persisted_session_tokens_json"] = oversizedJson
 
         val resultFailingCommit = UsageTrackerService.restorePersistedSessionTokens(failingContext)
-        assertTrue("Must safely handle oversized payload even when initial commit fails", resultFailingCommit)
-        assertTrue("Restore flag must be set to true to prevent infinite retry loop", UsageTrackerService.isSessionTokensRestored.get())
-        assertEquals("recordedSessionTokens must be empty", 0, UsageTrackerService.recordedSessionTokens.size)
-        assertEquals("In-memory cache must be overridden to empty JSON []", "[]", failingPrefs.data["persisted_session_tokens_json"])
+        assertFalse("Fail-Closed: Must return false when all commit() attempts fail", resultFailingCommit)
+        assertFalse("Fail-Closed: isSessionTokensRestored must remain false when disk commit fails", UsageTrackerService.isSessionTokensRestored.get())
+        assertEquals("recordedSessionTokens must remain empty", 0, UsageTrackerService.recordedSessionTokens.size)
+
+        // 4. Test persistSessionTokensLocked verified rollback when commit fails:
+        UsageTrackerService.recordedSessionTokens.clear()
+        UsageTrackerService.recordedSessionTokens.add("valid_token_1")
+        val failingPersistPrefs = FakeSharedPreferences(commitReturnsSuccess = false)
+        val failingPersistContext = FakeTestContext(failingPersistPrefs)
+        failingPersistPrefs.data["persisted_session_tokens_json"] = "[\"prior_token\"]"
+        val persistResult = UsageTrackerService.persistSessionTokensLocked(failingPersistContext)
+        assertFalse("persistSessionTokensLocked must fail when commit returns false", persistResult)
+        assertFalse("isSessionTokensRestored must be reset when commit fails", UsageTrackerService.isSessionTokensRestored.get())
+
+        // 5. Test read-back mismatch detection on persistSessionTokensLocked:
+        UsageTrackerService.isSessionTokensRestored.set(true)
+        val mismatchPrefs = object : FakeSharedPreferences(commitReturnsSuccess = true) {
+            override fun getString(key: String?, defValue: String?): String? {
+                if (key == "persisted_session_tokens_json") return "[\"corrupted_tampered_state\"]"
+                return super.getString(key, defValue)
+            }
+        }
+        val mismatchContext = FakeTestContext(mismatchPrefs)
+        val mismatchResult = UsageTrackerService.persistSessionTokensLocked(mismatchContext)
+        assertFalse("persistSessionTokensLocked must detect read-back mismatch and return false", mismatchResult)
+        assertFalse("isSessionTokensRestored must be reset on read-back mismatch", UsageTrackerService.isSessionTokensRestored.get())
     }
 
     @Test
