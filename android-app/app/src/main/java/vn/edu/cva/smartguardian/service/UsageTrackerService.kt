@@ -255,7 +255,11 @@ class UsageTrackerService : Service() {
                         (generation != -1L && foregroundGeneration.get() != generation) ||
                         !GuardianAccessibilityService.isScreenOnState
                     ) {
-                        try { call.cancel() } catch (e: Exception) {}
+                        try {
+                            call.cancel()
+                        } catch (e: Exception) {
+                            Log.w("UsageTrackerService", "registerOnlineCall cancel error: ${e.message}")
+                        }
                         return null
                     }
                 }
@@ -289,7 +293,11 @@ class UsageTrackerService : Service() {
                         GuardianAccessibilityService.telemetryEpoch.get() != epoch ||
                         GuardianAccessibilityService.isScreenOnState
                     ) {
-                        try { call.cancel() } catch (e: Exception) {}
+                        try {
+                            call.cancel()
+                        } catch (e: Exception) {
+                            Log.w("UsageTrackerService", "registerOfflineCall cancel error: ${e.message}")
+                        }
                         return null
                     }
                 }
