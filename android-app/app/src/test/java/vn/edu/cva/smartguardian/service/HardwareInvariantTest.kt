@@ -5198,6 +5198,28 @@ class HardwareInvariantTest {
         assertEquals("", resolved)
     }
 
+    @Test
+    fun testResolveCurrentForegroundPackageRejectsBankAppAndMasksAsProtected() {
+        val fakePrefs = FakeSharedPreferences(commitReturnsSuccess = true)
+        val fakeContext = FakeTestContext(fakePrefs)
+
+        // 1. When last_foreground_pkg is a bank app (e.g., com.vcb)
+        fakePrefs.data["last_foreground_pkg"] = "com.vcb"
+        fakePrefs.data["last_active_package"] = "com.vcb"
+        val resolvedBank1 = UsageTrackerService.resolveCurrentForegroundPackage(fakeContext, fakePrefs)
+        assertEquals("BANK_APP_PROTECTED", resolvedBank1)
+        assertEquals("", fakePrefs.data["last_foreground_pkg"])
+        assertEquals("", fakePrefs.data["last_active_package"])
+
+        // 2. When last_active_package is a bank app (e.g., com.mbmobile)
+        fakePrefs.data["last_foreground_pkg"] = ""
+        fakePrefs.data["last_active_package"] = "com.mbmobile"
+        val resolvedBank2 = UsageTrackerService.resolveCurrentForegroundPackage(fakeContext, fakePrefs)
+        assertEquals("BANK_APP_PROTECTED", resolvedBank2)
+        assertEquals("", fakePrefs.data["last_foreground_pkg"])
+        assertEquals("", fakePrefs.data["last_active_package"])
+    }
+
     private class FakeTestContext(
         val prefs: FakeSharedPreferences
     ) : ContextWrapper(null) {
