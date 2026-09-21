@@ -491,6 +491,16 @@ async function verifyLiveApkDownload() {
   if (vJson.apkFallbackUrl) candidateUrls.push(vJson.apkFallbackUrl);
   candidateUrls.push(`https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/CVA-SmartGuardian-v${vJson.versionName}.apk`);
   candidateUrls.push('https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/app-release.apk');
+  let headCommit = '';
+  try {
+    headCommit = execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim();
+  } catch (e) {
+    console.warn(`[WARN] Không thể lấy commit hash: ${e.message}`);
+  }
+  if (headCommit) {
+    candidateUrls.push(`https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/${headCommit}/apk/CVA-SmartGuardian-v${vJson.versionName}.apk`);
+    candidateUrls.push(`https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/${headCommit}/apk/app-release.apk`);
+  }
 
   function downloadUrl(targetUrl, maxRedirects = 5) {
     return new Promise((resolve, reject) => {
