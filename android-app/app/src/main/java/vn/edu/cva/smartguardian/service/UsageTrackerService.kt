@@ -10,6 +10,7 @@ import android.app.Service
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
@@ -778,7 +779,9 @@ class UsageTrackerService : Service() {
                     .putLong("last_written_epoch", targetEpoch)
                     .putBoolean("is_device_online", false)
                     .putString("last_foreground_pkg", "")
+                    .putString("last_active_package", "")
                     .putLong("last_foreground_start", 0L)
+                    .putLong("last_active_timestamp", 0L)
                     .commit()
 
                 if (GuardianAccessibilityService.telemetryEpoch.get() != targetEpoch || !isHardwareOfflineValid(context, targetEpoch)) {
@@ -1460,6 +1463,53 @@ class UsageTrackerService : Service() {
             }
         }
 
+        internal fun resolveCurrentForegroundPackage(context: Context, prefs: SharedPreferences): String {
+            val storedForeground = prefs.getString("last_foreground_pkg", "") ?: ""
+            if (storedForeground.isNotEmpty() && storedForeground != "SCREEN_OFF") {
+                return storedForeground
+            }
+            val storedActive = prefs.getString("last_active_package", "") ?: ""
+            if (storedActive.isNotEmpty() && storedActive != "SCREEN_OFF") {
+                return storedActive
+            }
+            // Fallback: Quét sự kiện UsageStatsManager 30 giây gần nhất để lấy đúng app tiền cảnh
+            return try {
+                val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
+                if (usm != null) {
+                    val now = System.currentTimeMillis()
+                    val events = usm.queryEvents(now - 30_000L, now)
+                    val event = android.app.usage.UsageEvents.Event()
+                    var latestPkg = ""
+                    var latestTime = 0L
+                    while (events.hasNextEvent()) {
+                        events.getNextEvent(event)
+                        if (event.eventType == android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED ||
+                            event.eventType == android.app.usage.UsageEvents.Event.MOVE_TO_FOREGROUND
+                        ) {
+                            if (event.timeStamp >= latestTime) {
+                                latestTime = event.timeStamp
+                                latestPkg = event.packageName ?: ""
+                            }
+                        }
+                    }
+                    if (latestPkg.isNotEmpty() && latestPkg != "SCREEN_OFF") {
+                        prefs.edit()
+                            .putString("last_foreground_pkg", latestPkg)
+                            .putString("last_active_package", latestPkg)
+                            .apply()
+                        latestPkg
+                    } else {
+                        ""
+                    }
+                } else {
+                    ""
+                }
+            } catch (e: Exception) {
+                Log.w("UsageTrackerService", "resolveCurrentForegroundPackage usm error: ${e.message}")
+                ""
+            }
+        }
+
         fun sendHeartbeatPing(context: Context, force: Boolean = false) {
             val powerManager = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
             val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
@@ -1525,7 +1575,7 @@ class UsageTrackerService : Service() {
                             }
                             val (appVerName, appVerCode) = versionPair
 
-                            val lastPkg = prefs.getString("last_active_package", "") ?: ""
+                            val lastPkg = resolveCurrentForegroundPackage(context, prefs)
                             val isStaleOrScreenOff = lastPkg.isEmpty() || lastPkg == "SCREEN_OFF"
                             val currentActivePkg = if (!isStaleOrScreenOff) lastPkg else "HOME"
                             val currentActiveName = if (!isStaleOrScreenOff) {
@@ -1533,16 +1583,26 @@ class UsageTrackerService : Service() {
                                     val appInfo = context.packageManager.getApplicationInfo(lastPkg, 0)
                                     context.packageManager.getApplicationLabel(appInfo).toString()
                                 } catch (e: Exception) {
-                                    lastPkg
+                                    prefs.getString("app_name_$lastPkg", lastPkg) ?: lastPkg
                                 }
                             } else {
                                 "Màn hình chính / Thiết bị đang hoạt động"
                             }
+                            val currentCategory = if (currentActivePkg == "HOME") {
+                                "HOME"
+                            } else {
+                                prefs.getString("app_cat_$currentActivePkg", "OTHER") ?: "OTHER"
+                            }
+                            val currentCategoryLabel = if (currentActivePkg == "HOME") {
+                                "Trực tuyến"
+                            } else {
+                                prefs.getString("app_cat_label_$currentActivePkg", "Đang mở") ?: "Đang mở"
+                            }
                             val activeFallback = JSONObject().apply {
                                 put("packageName", currentActivePkg)
                                 put("appName", currentActiveName)
-                                put("category", if (currentActivePkg == "HOME") "HOME" else "OTHER")
-                                put("categoryLabel", if (currentActivePkg == "HOME") "Trực tuyến" else "Đang mở")
+                                put("category", currentCategory)
+                                put("categoryLabel", currentCategoryLabel)
                                 put("timestamp", lockNow)
                                 put("isForeground", true)
                             }
@@ -2077,7 +2137,9 @@ class UsageTrackerService : Service() {
                     prefs.edit()
                         .putLong("last_written_epoch", currentEpoch)
                         .putBoolean("is_device_online", effectiveOnline)
+                        .putString("last_foreground_pkg", targetPkg)
                         .putString("last_active_package", targetPkg)
+                        .putLong("last_foreground_start", System.currentTimeMillis())
                         .putLong("last_active_timestamp", System.currentTimeMillis())
                         .apply()
                 }
@@ -3227,7 +3289,7 @@ class UsageTrackerService : Service() {
                             if (isOnlineNow) {
                                 put("online", true)
                                 put("lastHeartbeat", now)
-                                val lastPkg = prefs.getString("last_active_package", "") ?: ""
+                                val lastPkg = resolveCurrentForegroundPackage(context, prefs)
                                 val isStaleOrScreenOff = lastPkg.isEmpty() || lastPkg == "SCREEN_OFF"
                                 val currentActivePkg = if (!isStaleOrScreenOff) lastPkg else "HOME"
                                 val currentActiveName = if (!isStaleOrScreenOff) {
@@ -3235,16 +3297,26 @@ class UsageTrackerService : Service() {
                                         val appInfo = context.packageManager.getApplicationInfo(lastPkg, 0)
                                         context.packageManager.getApplicationLabel(appInfo).toString()
                                     } catch (e: Exception) {
-                                        lastPkg
+                                        prefs.getString("app_name_$lastPkg", lastPkg) ?: lastPkg
                                     }
                                 } else {
                                     "Màn hình chính / Thiết bị đang hoạt động"
                                 }
+                                val currentCategory = if (currentActivePkg == "HOME") {
+                                    "HOME"
+                                } else {
+                                    prefs.getString("app_cat_$currentActivePkg", "OTHER") ?: "OTHER"
+                                }
+                                val currentCategoryLabel = if (currentActivePkg == "HOME") {
+                                    "Trực tuyến"
+                                } else {
+                                    prefs.getString("app_cat_label_$currentActivePkg", "Đang mở") ?: "Đang mở"
+                                }
                                 val activeFallback = JSONObject().apply {
                                     put("packageName", currentActivePkg)
                                     put("appName", currentActiveName)
-                                    put("category", if (currentActivePkg == "HOME") "HOME" else "OTHER")
-                                    put("categoryLabel", if (currentActivePkg == "HOME") "Trực tuyến" else "Đang mở")
+                                    put("category", currentCategory)
+                                    put("categoryLabel", currentCategoryLabel)
                                     put("timestamp", now)
                                     put("isForeground", true)
                                 }
@@ -3371,7 +3443,9 @@ class UsageTrackerService : Service() {
                                 prefs.edit()
                                     .putLong("last_written_epoch", screenOffEpoch)
                                     .putString("last_foreground_pkg", "")
+                                    .putString("last_active_package", "")
                                     .putLong("last_foreground_start", 0L)
+                                    .putLong("last_active_timestamp", 0L)
                                     .putBoolean("is_device_online", false)
                                     .commit()
                             }

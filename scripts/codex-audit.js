@@ -957,7 +957,10 @@ try {
     'testWalJournalRecoversValidSessionsWhenFileIsTruncatedOrCorruptAndPreservesSessionAWhenAddingSessionB',
     'testWalJournalRejectsMismatchedCrcAndDoesNotExecuteCorruptRecord',
     'testLruSessionSetRestoreSnapshotRawStrictlyEnforcesMaxEntriesBound',
-    'testRestorePersistedSessionTokensRejectsOversizedJsonAndCapsAt500'
+    'testRestorePersistedSessionTokensRejectsOversizedJsonAndCapsAt500',
+    'testResolveCurrentForegroundPackagePrefersLastForegroundPkg',
+    'testResolveCurrentForegroundPackageFallsBackToLastActivePackageWhenForegroundEmpty',
+    'testResolveCurrentForegroundPackageRejectsScreenOff'
   ];
 
   for (const testName of requiredProductionFeatureTests) {

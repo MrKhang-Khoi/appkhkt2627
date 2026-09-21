@@ -727,7 +727,9 @@ class GuardianAccessibilityService : AccessibilityService() {
                     val prefs = try { getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE) } catch (e: Exception) { null }
                     prefs?.edit()
                         ?.putString("last_foreground_pkg", "")
+                        ?.putString("last_active_package", "")
                         ?.putLong("last_foreground_start", 0L)
+                        ?.putLong("last_active_timestamp", 0L)
                         ?.apply()
                 }
             }
@@ -763,7 +765,9 @@ class GuardianAccessibilityService : AccessibilityService() {
                     val prefs = try { getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE) } catch (e: Exception) { null }
                     prefs?.edit()
                         ?.putString("last_foreground_pkg", "")
+                        ?.putString("last_active_package", "")
                         ?.putLong("last_foreground_start", 0L)
+                        ?.putLong("last_active_timestamp", 0L)
                         ?.putBoolean("is_device_online", false)
                         ?.apply()
                 }
@@ -800,7 +804,9 @@ class GuardianAccessibilityService : AccessibilityService() {
                     val prefs = try { getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE) } catch (e: Exception) { null }
                     prefs?.edit()
                         ?.putString("last_foreground_pkg", "")
+                        ?.putString("last_active_package", "")
                         ?.putLong("last_foreground_start", 0L)
+                        ?.putLong("last_active_timestamp", 0L)
                         ?.apply()
                 }
             }
@@ -849,7 +855,9 @@ class GuardianAccessibilityService : AccessibilityService() {
                     val prefs = try { getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE) } catch (e: Exception) { null }
                     prefs?.edit()
                         ?.putString("last_foreground_pkg", packageName)
+                        ?.putString("last_active_package", packageName)
                         ?.putLong("last_foreground_start", now)
+                        ?.putLong("last_active_timestamp", now)
                         ?.apply()
                 }
             }

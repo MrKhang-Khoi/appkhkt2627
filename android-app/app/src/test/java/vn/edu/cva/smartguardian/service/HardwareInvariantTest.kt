@@ -5165,6 +5165,39 @@ class HardwareInvariantTest {
         assertEquals("In-memory cache must be overridden to empty JSON []", "[]", failingPrefs.data["persisted_session_tokens_json"])
     }
 
+    @Test
+    fun testResolveCurrentForegroundPackagePrefersLastForegroundPkg() {
+        val fakePrefs = FakeSharedPreferences(commitReturnsSuccess = true)
+        val fakeContext = FakeTestContext(fakePrefs)
+        fakePrefs.data["last_foreground_pkg"] = "com.google.android.youtube"
+        fakePrefs.data["last_active_package"] = "com.facebook.katana"
+
+        val resolved = UsageTrackerService.resolveCurrentForegroundPackage(fakeContext, fakePrefs)
+        assertEquals("com.google.android.youtube", resolved)
+    }
+
+    @Test
+    fun testResolveCurrentForegroundPackageFallsBackToLastActivePackageWhenForegroundEmpty() {
+        val fakePrefs = FakeSharedPreferences(commitReturnsSuccess = true)
+        val fakeContext = FakeTestContext(fakePrefs)
+        fakePrefs.data["last_foreground_pkg"] = ""
+        fakePrefs.data["last_active_package"] = "com.ss.android.ugc.trill"
+
+        val resolved = UsageTrackerService.resolveCurrentForegroundPackage(fakeContext, fakePrefs)
+        assertEquals("com.ss.android.ugc.trill", resolved)
+    }
+
+    @Test
+    fun testResolveCurrentForegroundPackageRejectsScreenOff() {
+        val fakePrefs = FakeSharedPreferences(commitReturnsSuccess = true)
+        val fakeContext = FakeTestContext(fakePrefs)
+        fakePrefs.data["last_foreground_pkg"] = "SCREEN_OFF"
+        fakePrefs.data["last_active_package"] = "SCREEN_OFF"
+
+        val resolved = UsageTrackerService.resolveCurrentForegroundPackage(fakeContext, fakePrefs)
+        assertEquals("", resolved)
+    }
+
     private class FakeTestContext(
         val prefs: FakeSharedPreferences
     ) : ContextWrapper(null) {
