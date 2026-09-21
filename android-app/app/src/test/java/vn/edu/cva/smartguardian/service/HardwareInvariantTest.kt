@@ -164,6 +164,109 @@ class HardwareInvariantTest {
     }
 
     @Test
+    fun testTrackedCallRegistryConcurrentRegisterCancelCompleteSequence() {
+        UsageTrackerService.activeOnlineCalls.clear()
+        UsageTrackerService.onlineCallRegistry.clear()
+
+        val client = OkHttpClient()
+        val request = Request.Builder().url("https://127.0.0.1:20128/registry_test").build()
+
+        val epoch1 = 100L
+        val gen1 = 1L
+        val epoch2 = 101L
+        val gen2 = 2L
+
+        val threadCount = 4
+        val iterations = 50
+        val barrier = java.util.concurrent.CyclicBarrier(threadCount)
+        val errors = java.util.concurrent.CopyOnWriteArrayList<Throwable>()
+        val doneLatch = CountDownLatch(threadCount)
+
+        // Pre-create shared calls to simulate in-flight responses completing
+        val sharedCalls = java.util.concurrent.ConcurrentHashMap<Int, Pair<Call, UsageTrackerService.TrackedCallRecord>>()
+
+        // Thread 1: Continuous registerOnlineCall for epoch1/gen1
+        val t1 = Thread {
+            try {
+                for (i in 1..iterations) {
+                    barrier.await(5, TimeUnit.SECONDS)
+                    val call = client.newCall(request)
+                    val record = UsageTrackerService.registerOnlineCall(call, epoch1, gen1)
+                    sharedCalls[i] = Pair(call, record)
+                    Thread.yield()
+                }
+            } catch (t: Throwable) {
+                errors.add(t)
+            } finally {
+                doneLatch.countDown()
+            }
+        }
+
+        // Thread 2: cancelActiveOnlineCalls() triggering atomic cancellation
+        val t2 = Thread {
+            try {
+                for (i in 1..iterations) {
+                    barrier.await(5, TimeUnit.SECONDS)
+                    UsageTrackerService.cancelActiveOnlineCalls()
+                    Thread.yield()
+                }
+            } catch (t: Throwable) {
+                errors.add(t)
+            } finally {
+                doneLatch.countDown()
+            }
+        }
+
+        // Thread 3: Simulates response complete and unregisterOnlineCall
+        val t3 = Thread {
+            try {
+                for (i in 1..iterations) {
+                    barrier.await(5, TimeUnit.SECONDS)
+                    val pair = sharedCalls.remove(i)
+                    if (pair != null) {
+                        UsageTrackerService.unregisterOnlineCall(pair.first, pair.second)
+                    }
+                    Thread.yield()
+                }
+            } catch (t: Throwable) {
+                errors.add(t)
+            } finally {
+                doneLatch.countDown()
+            }
+        }
+
+        // Thread 4: Registers new call for epoch2 / gen2
+        val t4 = Thread {
+            try {
+                for (i in 1..iterations) {
+                    barrier.await(5, TimeUnit.SECONDS)
+                    val call = client.newCall(request)
+                    val record = UsageTrackerService.registerOnlineCall(call, epoch2, gen2)
+                    if (i % 2 == 0) {
+                        UsageTrackerService.unregisterOnlineCall(call, record)
+                    }
+                    Thread.yield()
+                }
+            } catch (t: Throwable) {
+                errors.add(t)
+            } finally {
+                doneLatch.countDown()
+            }
+        }
+
+        listOf(t1, t2, t3, t4).forEach { it.start() }
+
+        val completed = doneLatch.await(10, TimeUnit.SECONDS)
+        assertTrue("Concurrent registry operations must complete within timeout", completed)
+        assertTrue("No concurrency exceptions must be thrown: $errors", errors.isEmpty())
+
+        // Final cancellation drains everything
+        UsageTrackerService.cancelActiveOnlineCalls()
+        assertEquals("activeOnlineCalls must be completely clean", 0, UsageTrackerService.activeOnlineCalls.size)
+        assertEquals("onlineCallRegistry must be completely clean", 0, UsageTrackerService.onlineCallRegistry.size)
+    }
+
+    @Test
     fun testEpochFencingInvariant() {
         val currentEpoch = GuardianAccessibilityService.telemetryEpoch.incrementAndGet()
         val staleEpoch = currentEpoch - 1L
@@ -5298,23 +5401,25 @@ class HardwareInvariantTest {
         val resolved20s = UsageTrackerService.resolveCurrentForegroundPackage(fakeContext, fakePrefs, events20s)
         assertEquals("App at 20s must be returned, not empty or HOME", "com.ss.android.ugc.trill", resolved20s)
 
-        // 3. Event at 30s ago: boundary of 30s window -> MUST return app package
+        // 3. Event within 30s window (28s ago) -> MUST return app package
+        val now30 = System.currentTimeMillis()
         val events30s = listOf(
             UsageTrackerService.RawUsageEvent(
                 packageName = "vn.edu.azota",
                 eventType = android.app.usage.UsageEvents.Event.MOVE_TO_FOREGROUND,
-                timeStamp = now - 30_000L
+                timeStamp = now30 - 28_000L
             )
         )
         val resolved30s = UsageTrackerService.resolveCurrentForegroundPackage(fakeContext, fakePrefs, events30s)
-        assertEquals("App at 30s boundary must be returned, not empty or HOME", "vn.edu.azota", resolved30s)
+        assertEquals("App within 30s boundary must be returned, not empty or HOME", "vn.edu.azota", resolved30s)
 
         // 4. Stale event at 35s ago: outside 30s window -> MUST fail-closed to ""
+        val now35 = System.currentTimeMillis()
         val events35s = listOf(
             UsageTrackerService.RawUsageEvent(
                 packageName = "com.facebook.katana",
                 eventType = android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED,
-                timeStamp = now - 35_000L
+                timeStamp = now35 - 35_000L
             )
         )
         val resolved35s = UsageTrackerService.resolveCurrentForegroundPackage(fakeContext, fakePrefs, events35s)
@@ -5349,14 +5454,63 @@ class HardwareInvariantTest {
         }
         assertEquals("Unverified empty package MUST map to UNKNOWN, NEVER falsely report HOME", "UNKNOWN", currentActivePkg)
 
-        // Verify that verified launcher DOES map to HOME
-        val launcherPkg = "com.google.android.apps.nexuslauncher"
+        // Verify that verified launcher ("HOME") DOES map to HOME
+        val launcherPkg = "HOME"
         val isLauncherHome = launcherPkg == "HOME" || GuardianAccessibilityService.isDefaultLauncher(fakeContext, launcherPkg)
         val activeLauncher = when {
             isLauncherHome -> "HOME"
             else -> launcherPkg
         }
         assertEquals("Verified launcher MUST map to HOME", "HOME", activeLauncher)
+
+        // Verify that third-party apps containing 'home' or 'launcher' in package name DO NOT map to HOME
+        val homeworkPkg = "com.example.homework"
+        val isHomeworkHome = homeworkPkg == "HOME" || GuardianAccessibilityService.isDefaultLauncher(fakeContext, homeworkPkg)
+        val activeHomework = when {
+            isHomeworkHome -> "HOME"
+            else -> homeworkPkg
+        }
+        assertEquals("Third-party app with 'home' in name MUST NOT map to HOME", "com.example.homework", activeHomework)
+
+        val launcherpadPkg = "com.example.launcherpad"
+        val isLauncherpadHome = launcherpadPkg == "HOME" || GuardianAccessibilityService.isDefaultLauncher(fakeContext, launcherpadPkg)
+        val activeLauncherpad = when {
+            isLauncherpadHome -> "HOME"
+            else -> launcherpadPkg
+        }
+        assertEquals("Third-party app with 'launcher' in name MUST NOT map to HOME", "com.example.launcherpad", activeLauncherpad)
+    }
+
+    @Test
+    fun testIsDefaultLauncherRejectsPackagesContainingHomeOrLauncherSubstrings() {
+        val fakePrefs = FakeSharedPreferences(commitReturnsSuccess = true)
+        val fakeContext = FakeTestContext(fakePrefs)
+
+        // 1. Literal "HOME" must return true
+        assertTrue("HOME literal must return true", GuardianAccessibilityService.isDefaultLauncher(fakeContext, "HOME"))
+
+        // 2. Null, empty string, and SCREEN_OFF must return false
+        assertFalse("null package must return false", GuardianAccessibilityService.isDefaultLauncher(fakeContext, null))
+        assertFalse("empty package must return false", GuardianAccessibilityService.isDefaultLauncher(fakeContext, ""))
+        assertFalse("SCREEN_OFF must return false", GuardianAccessibilityService.isDefaultLauncher(fakeContext, "SCREEN_OFF"))
+
+        // 3. Adversarial third-party apps containing 'home' or 'launcher' in their package names
+        // Under Karl Popper falsification, substring matching is prohibited and must fail-closed to false
+        val adversarialNonLauncherPackages = listOf(
+            "com.example.homework",
+            "com.example.launcherpad",
+            "org.education.homework",
+            "vn.edu.homework.app",
+            "com.google.android.apps.homelessness",
+            "com.game.rockethome",
+            "com.launcher.fakeapp",
+            "vn.edu.cva.homeworktracker"
+        )
+
+        for (pkg in adversarialNonLauncherPackages) {
+            val isLauncher = GuardianAccessibilityService.isDefaultLauncher(fakeContext, pkg)
+            assertFalse("Package '$pkg' must NOT be classified as default launcher via substring match", isLauncher)
+        }
     }
 
     @Test

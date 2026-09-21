@@ -34,6 +34,7 @@ internal data class ScreenOffTransition(
 internal data class ScreenOnTransition(
     val currentEpoch: Long,
     val currentPkg: String?,
+    val currentGen: Long,
     val proceed: Boolean
 )
 
@@ -101,12 +102,9 @@ class GuardianAccessibilityService : AccessibilityService() {
             return try {
                 val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
                 val resolveInfo = context.packageManager.resolveActivity(intent, 0)
-                resolveInfo?.activityInfo?.packageName == packageName ||
-                        packageName.contains("launcher", ignoreCase = true) ||
-                        packageName.contains("home", ignoreCase = true)
+                resolveInfo?.activityInfo?.packageName == packageName
             } catch (e: Exception) {
-                packageName.contains("launcher", ignoreCase = true) ||
-                        packageName.contains("home", ignoreCase = true)
+                false
             }
         }
 
@@ -200,10 +198,11 @@ class GuardianAccessibilityService : AccessibilityService() {
         internal fun transitionAppSessionAtomic(
             packageName: String,
             expectedEpoch: Long,
+            expectedGen: Long = -1L,
             now: Long
         ): WindowTransitionSnapshot? {
             return synchronized(sessionLock) {
-                if (!isScreenOnState || telemetryEpoch.get() != expectedEpoch) {
+                if (!isScreenOnState || telemetryEpoch.get() != expectedEpoch || (expectedGen != -1L && UsageTrackerService.foregroundGeneration.get() != expectedGen)) {
                     return null
                 }
 
@@ -238,10 +237,11 @@ class GuardianAccessibilityService : AccessibilityService() {
         @JvmStatic
         internal fun transitionBankSessionAtomic(
             expectedEpoch: Long,
+            expectedGen: Long = -1L,
             now: Long
         ): WindowTransitionSnapshot? {
             return synchronized(sessionLock) {
-                if (!isScreenOnState || telemetryEpoch.get() != expectedEpoch) {
+                if (!isScreenOnState || telemetryEpoch.get() != expectedEpoch || (expectedGen != -1L && UsageTrackerService.foregroundGeneration.get() != expectedGen)) {
                     return null
                 }
                 val prevPkg = currentForegroundPackage
@@ -271,10 +271,11 @@ class GuardianAccessibilityService : AccessibilityService() {
         internal fun transitionOfflineSessionAtomic(
             targetPackage: String,
             expectedEpoch: Long,
+            expectedGen: Long = -1L,
             now: Long
         ): WindowTransitionSnapshot? {
             return synchronized(sessionLock) {
-                if (!isScreenOnState || telemetryEpoch.get() != expectedEpoch) {
+                if (!isScreenOnState || telemetryEpoch.get() != expectedEpoch || (expectedGen != -1L && UsageTrackerService.foregroundGeneration.get() != expectedGen)) {
                     return null
                 }
                 val prevPkg = currentForegroundPackage
@@ -452,12 +453,13 @@ class GuardianAccessibilityService : AccessibilityService() {
                 isScreenOnState = false
                 heartbeatJob?.cancel()
                 Log.d("GuardianAccess", "handleScreenOn: Thiết bị chưa online hoàn toàn (isInteractive=${pm?.isInteractive}, isKeyguardLocked=${km?.isKeyguardLocked}) -> Chưa kích hoạt heartbeat")
-                return@synchronized ScreenOnTransition(telemetryEpoch.get(), null, false)
+                return@synchronized ScreenOnTransition(telemetryEpoch.get(), null, UsageTrackerService.foregroundGeneration.get(), false)
             }
 
             // Bất biến chuyển trạng thái phần cứng (Hardware State Transition Invariant - Codex Mandate):
             // Thực hiện đột biến RAM và giải phóng lock tức thì (< 1ms). CẤM giữ lock khi I/O đĩa hoặc mạng.
             val currentEpoch = telemetryEpoch.incrementAndGet()
+            val currentGen = UsageTrackerService.foregroundGeneration.get()
             isScreenOnState = true
             UsageTrackerService.lastDispatchedOfflineEpoch.set(-1L)
             UsageTrackerService.cancelActiveOfflineCalls()
@@ -469,7 +471,7 @@ class GuardianAccessibilityService : AccessibilityService() {
                 null
             }
 
-            ScreenOnTransition(currentEpoch, currentPkg, true)
+            ScreenOnTransition(currentEpoch, currentPkg, currentGen, true)
         }
 
         if (!transition.proceed) {
@@ -478,6 +480,7 @@ class GuardianAccessibilityService : AccessibilityService() {
 
         val currentEpoch = transition.currentEpoch
         val currentPkg = transition.currentPkg
+        val currentGen = transition.currentGen
 
         // Dispatch disk persistence sang Dispatchers.IO HOÀN TOÀN NGOÀI hardwareTransitionLock
         serviceScope.launch(Dispatchers.IO) {
@@ -488,27 +491,37 @@ class GuardianAccessibilityService : AccessibilityService() {
         }
 
         serviceScope.launch(Dispatchers.IO) {
+            if (!isScreenOnState || telemetryEpoch.get() != currentEpoch || UsageTrackerService.foregroundGeneration.get() != currentGen) {
+                return@launch
+            }
             val km = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
             val metadata = if (currentPkg != null) {
                 resolveAppMetadata(currentPkg, km?.isKeyguardLocked ?: false)
             } else null
 
+            if (!isScreenOnState || telemetryEpoch.get() != currentEpoch || UsageTrackerService.foregroundGeneration.get() != currentGen) {
+                return@launch
+            }
+
             val (uploadAction, actionGen) = UsageTrackerService.telemetryMutex.withLock {
-                if (!isScreenOnState || telemetryEpoch.get() != currentEpoch) {
+                if (!isScreenOnState || telemetryEpoch.get() != currentEpoch || UsageTrackerService.foregroundGeneration.get() != currentGen) {
                     return@withLock Pair(null, -1L)
                 }
                 synchronized(sessionLock) {
+                    if (UsageTrackerService.foregroundGeneration.get() != currentGen) {
+                        return@withLock Pair(null, -1L)
+                    }
                     lastActivePackage = ""
                     currentForegroundPackage = ""
                     currentForegroundStartTime = 0L
                 }
 
                 val act = if (metadata != null && currentPkg != null) {
-                    applyAppTransitionLocked(metadata, currentPkg, currentEpoch, UsageTrackerService.foregroundGeneration.get())
+                    applyAppTransitionLocked(metadata, currentPkg, currentEpoch, currentGen)
                 } else {
                     null
                 }
-                Pair(act, UsageTrackerService.foregroundGeneration.get())
+                Pair(act, currentGen)
             }
             if (uploadAction != null && actionGen != -1L) {
                 if (UsageTrackerService.foregroundGeneration.get() == actionGen && isScreenOnState && telemetryEpoch.get() == currentEpoch) {
@@ -810,20 +823,23 @@ class GuardianAccessibilityService : AccessibilityService() {
         expectedEpoch: Long,
         expectedGen: Long
     ): (suspend () -> Unit)? {
+        if (!isScreenOnState || telemetryEpoch.get() != expectedEpoch || (expectedGen != -1L && UsageTrackerService.foregroundGeneration.get() != expectedGen)) {
+            return null
+        }
         val now = System.currentTimeMillis()
         val shouldUpload: Boolean
         val prevSessionToRecord: Pair<String, Long>?
 
         when {
             metadata.isBank -> {
-                val transition = transitionBankSessionAtomic(expectedEpoch, now) ?: return null
+                val transition = transitionBankSessionAtomic(expectedEpoch, expectedGen, now) ?: return null
                 shouldUpload = transition.shouldUpload
                 prevSessionToRecord = if (transition.prevPkg.isNotEmpty() && transition.prevStart > 0L && now - transition.prevStart >= 1000L && transition.prevToken.isNotEmpty()) {
                     Pair(transition.prevPkg, now - transition.prevStart)
                 } else null
                 UsageTrackerService.closePolledSession(applicationContext, "BANK_APP_OPENED")
                 serviceScope.launch(Dispatchers.IO) {
-                    if (telemetryEpoch.get() == expectedEpoch) {
+                    if (telemetryEpoch.get() == expectedEpoch && (expectedGen == -1L || UsageTrackerService.foregroundGeneration.get() == expectedGen)) {
                         val prefs = try { getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE) } catch (e: Exception) { null }
                         prefs?.edit()
                             ?.putString("last_foreground_pkg", "")
@@ -835,13 +851,13 @@ class GuardianAccessibilityService : AccessibilityService() {
                 }
             }
             metadata.isLock -> {
-                val transition = transitionOfflineSessionAtomic("SCREEN_OFF", expectedEpoch, now) ?: return null
+                val transition = transitionOfflineSessionAtomic("SCREEN_OFF", expectedEpoch, expectedGen, now) ?: return null
                 shouldUpload = transition.shouldUpload
                 prevSessionToRecord = if (transition.prevPkg.isNotEmpty() && transition.prevStart > 0L && now - transition.prevStart >= 1500L && transition.prevToken.isNotEmpty()) {
                     Pair(transition.prevPkg, now - transition.prevStart)
                 } else null
                 serviceScope.launch(Dispatchers.IO) {
-                    if (telemetryEpoch.get() == expectedEpoch) {
+                    if (telemetryEpoch.get() == expectedEpoch && (expectedGen == -1L || UsageTrackerService.foregroundGeneration.get() == expectedGen)) {
                         val prefs = try { getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE) } catch (e: Exception) { null }
                         prefs?.edit()
                             ?.putString("last_foreground_pkg", "")
@@ -854,13 +870,13 @@ class GuardianAccessibilityService : AccessibilityService() {
                 }
             }
             metadata.isHome -> {
-                val transition = transitionOfflineSessionAtomic("HOME", expectedEpoch, now) ?: return null
+                val transition = transitionOfflineSessionAtomic("HOME", expectedEpoch, expectedGen, now) ?: return null
                 shouldUpload = transition.shouldUpload
                 prevSessionToRecord = if (transition.prevPkg.isNotEmpty() && transition.prevStart > 0L && now - transition.prevStart >= 1500L && transition.prevToken.isNotEmpty()) {
                     Pair(transition.prevPkg, now - transition.prevStart)
                 } else null
                 serviceScope.launch(Dispatchers.IO) {
-                    if (telemetryEpoch.get() == expectedEpoch) {
+                    if (telemetryEpoch.get() == expectedEpoch && (expectedGen == -1L || UsageTrackerService.foregroundGeneration.get() == expectedGen)) {
                         val prefs = try { getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE) } catch (e: Exception) { null }
                         prefs?.edit()
                             ?.putString("last_foreground_pkg", "")
@@ -872,14 +888,14 @@ class GuardianAccessibilityService : AccessibilityService() {
                 }
             }
             else -> {
-                val transition = transitionAppSessionAtomic(packageName, expectedEpoch, now) ?: return null
+                val transition = transitionAppSessionAtomic(packageName, expectedEpoch, expectedGen, now) ?: return null
                 shouldUpload = transition.shouldUpload
                 prevSessionToRecord = if (transition.isDifferent && transition.prevPkg.isNotEmpty() && transition.prevStart > 0L && now - transition.prevStart >= 1500L && transition.prevToken.isNotEmpty()) {
                     Pair(transition.prevPkg, now - transition.prevStart)
                 } else null
                 if (transition.isDifferent) {
                     serviceScope.launch(Dispatchers.IO) {
-                        if (telemetryEpoch.get() == expectedEpoch) {
+                        if (telemetryEpoch.get() == expectedEpoch && (expectedGen == -1L || UsageTrackerService.foregroundGeneration.get() == expectedGen)) {
                             val prefs = try { getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE) } catch (e: Exception) { null }
                             prefs?.edit()
                                 ?.putString("last_foreground_pkg", packageName)
