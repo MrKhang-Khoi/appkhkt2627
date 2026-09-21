@@ -2239,19 +2239,35 @@ class MainActivity : AppCompatActivity() {
                 )
             }
 
-            internal fun setCompanionUiState(
+            internal fun renderDialogState(
                 state: CompanionUiState,
                 loadingView: View?,
                 contentView: View?,
                 emptyView: View?,
                 errorView: View?
             ) {
-                val visMap = resolveCompanionUiVisibilities(state)
-                loadingView?.visibility = visMap[CompanionUiState.LOADING] ?: View.GONE
-                contentView?.visibility = visMap[CompanionUiState.CONTENT] ?: View.GONE
-                emptyView?.visibility = visMap[CompanionUiState.EMPTY] ?: View.GONE
-                errorView?.visibility = visMap[CompanionUiState.ERROR] ?: View.GONE
+                // Invariant: Unconditionally hide ALL four layouts first to guarantee 0 overlapping visibility
+                loadingView?.visibility = View.GONE
+                contentView?.visibility = View.GONE
+                emptyView?.visibility = View.GONE
+                errorView?.visibility = View.GONE
+
+                // Then activate ONLY the single intended state view
+                when (state) {
+                    CompanionUiState.LOADING -> loadingView?.visibility = View.VISIBLE
+                    CompanionUiState.CONTENT -> contentView?.visibility = View.VISIBLE
+                    CompanionUiState.EMPTY -> emptyView?.visibility = View.VISIBLE
+                    CompanionUiState.ERROR -> errorView?.visibility = View.VISIBLE
+                }
             }
+
+            internal fun setCompanionUiState(
+                state: CompanionUiState,
+                loadingView: View?,
+                contentView: View?,
+                emptyView: View?,
+                errorView: View?
+            ) = renderDialogState(state, loadingView, contentView, emptyView, errorView)
         }
 
         override fun onCreateView(
@@ -2324,6 +2340,10 @@ class MainActivity : AppCompatActivity() {
             val layoutDialogEmptyState = view.findViewById<LinearLayout>(R.id.layoutDialogEmptyState)
             val tvDialogEmptyTitle = view.findViewById<TextView>(R.id.tvDialogEmptyTitle)
             val tvDialogEmptyDesc = view.findViewById<TextView>(R.id.tvDialogEmptyDesc)
+
+            val layoutTabEmptyState = view.findViewById<LinearLayout>(R.id.layoutTabEmptyState)
+            val tvTabEmptyTitle = view.findViewById<TextView>(R.id.tvTabEmptyTitle)
+            val tvTabEmptyDesc = view.findViewById<TextView>(R.id.tvTabEmptyDesc)
             val btnDialogViewAllApps = view.findViewById<TextView>(R.id.btnDialogViewAllApps)
 
             val btnDialogSendMessage = view.findViewById<Button>(R.id.btnDialogSendMessage)
@@ -2334,6 +2354,9 @@ class MainActivity : AppCompatActivity() {
             val layoutDialogContent = view.findViewById<LinearLayout>(R.id.layoutDialogContent)
             val tvDialogErrorMessage = view.findViewById<TextView>(R.id.tvDialogErrorMessage)
             val btnRetryCompanion = view.findViewById<Button>(R.id.btnRetryCompanion)
+
+            // Invariant: Enforce LOADING as the ONLY active state upon inflation
+            renderDialogState(CompanionUiState.LOADING, layoutDialogLoading, layoutDialogContent, layoutDialogEmptyState, layoutDialogError)
 
             var currentTab = "SOCIAL"
             val preferredDeviceId = arguments?.getString(ARG_PREFERRED_DEVICE_ID)
@@ -2352,30 +2375,30 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 if (filteredList.isEmpty()) {
-                    layoutDialogEmptyState.visibility = View.VISIBLE
+                    layoutTabEmptyState?.visibility = View.VISIBLE
                     layoutDialogAppListContainer.visibility = View.GONE
                     when (currentTab) {
                         "SOCIAL" -> {
-                            tvDialogEmptyTitle.text = "Chưa có hoạt động Mạng XH"
-                            tvDialogEmptyDesc.text = "Thiết bị con chưa mở ứng dụng mạng xã hội nào hôm nay."
+                            tvTabEmptyTitle?.text = "Chưa có hoạt động Mạng XH"
+                            tvTabEmptyDesc?.text = "Thiết bị con chưa mở ứng dụng mạng xã hội nào hôm nay."
                         }
                         "STUDY" -> {
-                            tvDialogEmptyTitle.text = "Chưa có hoạt động Học tập"
-                            tvDialogEmptyDesc.text = "Thiết bị con chưa mở ứng dụng học tập nào hôm nay."
+                            tvTabEmptyTitle?.text = "Chưa có hoạt động Học tập"
+                            tvTabEmptyDesc?.text = "Thiết bị con chưa mở ứng dụng học tập nào hôm nay."
                         }
                         "GAME" -> {
-                            tvDialogEmptyTitle.text = "Chưa có hoạt động Trò chơi"
-                            tvDialogEmptyDesc.text = "Thiết bị con chưa mở game nào hôm nay."
+                            tvTabEmptyTitle?.text = "Chưa có hoạt động Trò chơi"
+                            tvTabEmptyDesc?.text = "Thiết bị con chưa mở game nào hôm nay."
                         }
                         else -> {
-                            tvDialogEmptyTitle.text = "Chưa có dữ liệu ứng dụng"
-                            tvDialogEmptyDesc.text = "Dữ liệu hoạt động sẽ xuất hiện khi thiết bị đồng bộ."
+                            tvTabEmptyTitle?.text = "Chưa có dữ liệu ứng dụng"
+                            tvTabEmptyDesc?.text = "Dữ liệu hoạt động sẽ xuất hiện khi thiết bị đồng bộ."
                         }
                     }
                     return
                 }
 
-                layoutDialogEmptyState.visibility = View.GONE
+                layoutTabEmptyState?.visibility = View.GONE
                 layoutDialogAppListContainer.visibility = View.VISIBLE
 
                 val sortedList = filteredList.sortedWith(
@@ -2462,7 +2485,7 @@ class MainActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) {
                     if (!isAdded) return@withContext
                     if (allAppsList.isEmpty()) {
-                        setCompanionUiState(CompanionUiState.LOADING, layoutDialogLoading, layoutDialogContent, layoutDialogEmptyState, layoutDialogError)
+                        renderDialogState(CompanionUiState.LOADING, layoutDialogLoading, layoutDialogContent, layoutDialogEmptyState, layoutDialogError)
                     }
                 }
                 try {
@@ -2559,7 +2582,7 @@ class MainActivity : AppCompatActivity() {
 
                         withContext(Dispatchers.Main) {
                             if (!isAdded) return@withContext
-                            setCompanionUiState(CompanionUiState.CONTENT, layoutDialogLoading, layoutDialogContent, layoutDialogEmptyState, layoutDialogError)
+                            renderDialogState(CompanionUiState.CONTENT, layoutDialogLoading, layoutDialogContent, layoutDialogEmptyState, layoutDialogError)
 
                             val savedChildName = targetDeviceObj.optString("childName", "").trim()
                             val titleName = if (savedChildName.isNotEmpty()) "$savedChildName • $devModel" else devModel
@@ -2655,11 +2678,9 @@ class MainActivity : AppCompatActivity() {
                     } else {
                         withContext(Dispatchers.Main) {
                             if (!isAdded) return@withContext
-                            setCompanionUiState(CompanionUiState.EMPTY, layoutDialogLoading, layoutDialogContent, layoutDialogEmptyState, layoutDialogError)
-                            layoutDialogAppListContainer.visibility = View.GONE
-                            layoutDialogEmptyState.visibility = View.VISIBLE
-                            tvDialogEmptyTitle.text = "Chưa có thiết bị con"
-                            tvDialogEmptyDesc.text = "Không tìm thấy thiết bị con trong gia đình. Vui lòng kết nối thiết bị của con."
+                            renderDialogState(CompanionUiState.EMPTY, layoutDialogLoading, layoutDialogContent, layoutDialogEmptyState, layoutDialogError)
+                            tvDialogEmptyTitle?.text = "Chưa có thiết bị con"
+                            tvDialogEmptyDesc?.text = "Không tìm thấy thiết bị con trong gia đình. Vui lòng kết nối thiết bị của con."
                         }
                     }
                 } catch (e: Exception) {
@@ -2667,7 +2688,7 @@ class MainActivity : AppCompatActivity() {
                     if (allAppsList.isEmpty()) {
                         withContext(Dispatchers.Main) {
                             if (!isAdded) return@withContext
-                            setCompanionUiState(CompanionUiState.ERROR, layoutDialogLoading, layoutDialogContent, layoutDialogEmptyState, layoutDialogError)
+                            renderDialogState(CompanionUiState.ERROR, layoutDialogLoading, layoutDialogContent, layoutDialogEmptyState, layoutDialogError)
                             tvDialogErrorMessage?.text = "Không thể kết nối máy chủ: ${e.message}"
                         }
                     }
@@ -2677,6 +2698,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             btnRetryCompanion?.setOnClickListener {
+                renderDialogState(CompanionUiState.LOADING, layoutDialogLoading, layoutDialogContent, layoutDialogEmptyState, layoutDialogError)
                 viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
                     loadCompanionData()
                 }

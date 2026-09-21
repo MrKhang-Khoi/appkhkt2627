@@ -3655,6 +3655,22 @@ class HardwareInvariantTest {
             assertEquals("Exactly three states must be GONE when state is $state", 3, goneStates.size)
             assertTrue("The target state $state must be the VISIBLE one", visibleStates.containsKey(state))
         }
+
+        // Verify XML Layout Invariant: layoutDialogLoading is visible on inflation, all others are gone
+        val xmlCandidates = listOf(
+            java.io.File("src/main/res/layout/dialog_child_companion.xml"),
+            java.io.File("app/src/main/res/layout/dialog_child_companion.xml"),
+            java.io.File("android-app/app/src/main/res/layout/dialog_child_companion.xml")
+        )
+        val xmlFile = xmlCandidates.firstOrNull { it.exists() }
+        assertNotNull("dialog_child_companion.xml must exist on disk", xmlFile)
+        val xmlContent = xmlFile?.readText().orEmpty()
+
+        assertTrue("layoutDialogLoading must default to visible", xmlContent.contains("""android:id="@+id/layoutDialogLoading"""") && xmlContent.contains("""android:visibility="visible""""))
+        assertTrue("layoutDialogContent must default to gone", xmlContent.contains("""android:id="@+id/layoutDialogContent"""") && xmlContent.contains("""android:visibility="gone""""))
+        assertTrue("layoutDialogError must default to gone", xmlContent.contains("""android:id="@+id/layoutDialogError"""") && xmlContent.contains("""android:visibility="gone""""))
+        assertTrue("layoutDialogEmptyState must default to gone", xmlContent.contains("""android:id="@+id/layoutDialogEmptyState"""") && xmlContent.contains("""android:visibility="gone""""))
+        assertTrue("layoutTabEmptyState must be present for category tab filtering", xmlContent.contains("""android:id="@+id/layoutTabEmptyState""""))
     }
 
     @Test

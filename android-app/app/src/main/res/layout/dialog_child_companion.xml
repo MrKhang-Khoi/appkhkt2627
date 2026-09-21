@@ -107,82 +107,126 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <!-- TRẠNG THÁI 1: LOADING PROGRESS -->
+            <!-- TRẠNG THÁI 1: LOADING PROGRESS (MẶC ĐỊNH DUY NHẤT KHI INFLATE) -->
             <LinearLayout
                 android:id="@+id/layoutDialogLoading"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:gravity="center"
-        android:paddingTop="32dp"
-        android:paddingBottom="32dp"
-        android:visibility="gone">
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:paddingTop="32dp"
+                android:paddingBottom="32dp"
+                android:visibility="visible">
 
-        <ProgressBar
-            android:layout_width="36dp"
-            android:layout_height="36dp"
-            android:indeterminate="true"
-            android:layout_marginBottom="12dp" />
+                <ProgressBar
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:indeterminate="true"
+                    android:layout_marginBottom="12dp" />
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Đang đồng bộ dữ liệu từ thiết bị con..."
-            android:textColor="#94A3B8"
-            android:textSize="13sp" />
-    </LinearLayout>
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Đang đồng bộ dữ liệu từ thiết bị con..."
+                    android:textColor="#94A3B8"
+                    android:textSize="13sp" />
+            </LinearLayout>
 
-    <!-- TRẠNG THÁI 2: ERROR STATE + NÚT THỬ LẠI -->
-    <LinearLayout
-        android:id="@+id/layoutDialogError"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:gravity="center"
-        android:paddingTop="24dp"
-        android:paddingBottom="24dp"
-        android:visibility="gone">
+            <!-- TRẠNG THÁI 2: ERROR STATE + NÚT THỬ LẠI -->
+            <LinearLayout
+                android:id="@+id/layoutDialogError"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:paddingTop="24dp"
+                android:paddingBottom="24dp"
+                android:visibility="gone">
 
-        <ImageView
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:src="@drawable/ic_error_outline_24"
-            android:layout_marginBottom="8dp"
-            android:contentDescription="Lỗi" />
+                <ImageView
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:src="@drawable/ic_error_outline_24"
+                    android:layout_marginBottom="8dp"
+                    android:contentDescription="Lỗi" />
 
-        <TextView
-            android:id="@+id/tvDialogErrorMessage"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Không thể tải thông tin từ thiết bị con"
-            android:textColor="#F87171"
-            android:textSize="13sp"
-            android:textStyle="bold"
-            android:gravity="center"
-            android:layout_marginBottom="12dp" />
+                <TextView
+                    android:id="@+id/tvDialogErrorMessage"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Không thể tải thông tin từ thiết bị con"
+                    android:textColor="#F87171"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:gravity="center"
+                    android:layout_marginBottom="12dp" />
 
-        <Button
-            android:id="@+id/btnRetryCompanion"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minHeight="48dp"
-            android:background="@drawable/bg_btn_primary_modern"
-            android:text="Thử Lại"
-            android:textColor="#FFFFFF"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            android:paddingLeft="20dp"
-            android:paddingRight="20dp"
-            android:paddingTop="10dp"
-            android:paddingBottom="10dp" />
-    </LinearLayout>
+                <Button
+                    android:id="@+id/btnRetryCompanion"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minHeight="48dp"
+                    android:background="@drawable/bg_btn_primary_modern"
+                    android:text="Thử Lại"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:paddingLeft="20dp"
+                    android:paddingRight="20dp"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="10dp" />
+            </LinearLayout>
 
-    <!-- TRẠNG THÁI 3: NỘI DUNG CHÍNH (CONTENT STATE) -->
-    <LinearLayout
-        android:id="@+id/layoutDialogContent"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical">
+            <!-- TRẠNG THÁI 3: EMPTY DIALOG STATE (CHƯA CÓ THIẾT BỊ CON HOẶC KHÔNG TÌM THẤY) -->
+            <LinearLayout
+                android:id="@+id/layoutDialogEmptyState"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:background="@drawable/bg_device_card"
+                android:paddingTop="32dp"
+                android:paddingBottom="32dp"
+                android:paddingLeft="16dp"
+                android:paddingRight="16dp"
+                android:visibility="gone">
+
+                <ImageView
+                    android:id="@+id/ivDialogEmptyIcon"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:src="@drawable/ic_inbox_24"
+                    android:layout_marginBottom="12dp"
+                    android:contentDescription="Trống" />
+
+                <TextView
+                    android:id="@+id/tvDialogEmptyTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Chưa có thiết bị con"
+                    android:textColor="#F8FAFC"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:gravity="center"
+                    android:layout_marginBottom="6dp" />
+
+                <TextView
+                    android:id="@+id/tvDialogEmptyDesc"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Không tìm thấy thiết bị con trong gia đình. Vui lòng kết nối thiết bị của con."
+                    android:textColor="#94A3B8"
+                    android:textSize="12sp"
+                    android:gravity="center" />
+            </LinearLayout>
+
+            <!-- TRẠNG THÁI 4: NỘI DUNG CHÍNH (CONTENT STATE, MẶC ĐỊNH GONE CHỐNG LỘ DỮ LIỆU GIẢ) -->
+            <LinearLayout
+                android:id="@+id/layoutDialogContent"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
 
         <!-- BANNER TRẠNG THÁI HIỆN TẠI (ACTIVE FOREGROUND APP LIVE) -->
         <LinearLayout
@@ -462,9 +506,9 @@
                     android:layout_height="wrap_content"
                     android:orientation="vertical" />
 
-                <!-- EMPTY STATE CHUẨN GOOGLE (VECTOR DRAWABLE, KHÔNG EMOJI) -->
+                <!-- EMPTY STATE KHI LỌC TAB DANH MỤC (VECTOR DRAWABLE, KHÔNG EMOJI) -->
                 <LinearLayout
-                    android:id="@+id/layoutDialogEmptyState"
+                    android:id="@+id/layoutTabEmptyState"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
@@ -477,7 +521,7 @@
                     android:visibility="gone">
 
                     <ImageView
-                        android:id="@+id/ivDialogEmptyIcon"
+                        android:id="@+id/ivTabEmptyIcon"
                         android:layout_width="36dp"
                         android:layout_height="36dp"
                         android:src="@drawable/ic_inbox_24"
@@ -485,14 +529,7 @@
                         android:contentDescription="Trống" />
 
                     <TextView
-                        android:id="@+id/tvDialogEmptyIcon"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:textSize="28sp"
-                        android:visibility="gone" />
-
-                    <TextView
-                        android:id="@+id/tvDialogEmptyTitle"
+                        android:id="@+id/tvTabEmptyTitle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="Chưa có hoạt động trong nhóm này"
@@ -503,7 +540,7 @@
                         android:layout_marginBottom="4dp" />
 
                     <TextView
-                        android:id="@+id/tvDialogEmptyDesc"
+                        android:id="@+id/tvTabEmptyDesc"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="Thiết bị con chưa mở ứng dụng thuộc danh mục này hôm nay."
