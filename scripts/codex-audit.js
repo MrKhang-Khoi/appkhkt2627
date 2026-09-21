@@ -865,7 +865,8 @@ try {
     'testScreenOffRaceDuringWindowStateChangeStrictlyAbortsWithoutReinfectingForeground',
     'testForegroundProcessAndSubprocessResolutionInvariants',
     'testSecondaryWindowFallbackRequiresUsageStatsAgreementAndRejectsStaleWindow',
-    'testSplitScreenConcurrentTargetAndOtherWindowStrictlyFailsClosed'
+    'testSplitScreenConcurrentTargetAndOtherWindowStrictlyFailsClosed',
+    'testZeroWindowEvidenceWithStaleOrRecentUsageStatsStrictlyFailsClosed'
   ];
 
   for (const testName of requiredProductionFeatureTests) {
@@ -1046,26 +1047,84 @@ async function runAudit() {
     process.exit(1);
   }
 
-  const apkMtime = fs.statSync(localApkPath).mtimeMs;
+  const apkStat = fs.statSync(localApkPath);
+  const apkMtime = apkStat.mtimeMs;
+
+  // Thu thập danh sách file Android thay đổi từ Git diff (HEAD~5 -> HEAD và uncommitted status)
   let changedAndroidFiles = [];
   try {
+    const diffFilesOutput = execSync('git diff --name-only HEAD~5 HEAD', { encoding: 'utf8' });
     const porcelainOutput = execSync('git status --porcelain -uall', { encoding: 'utf8' });
-    changedAndroidFiles = porcelainOutput
-      .split('\n')
-      .map(line => {
-        let f = line.substring(3).trim();
-        if (f.startsWith('"') && f.endsWith('"')) {
-          try {
-            f = JSON.parse(f);
-          } catch (err) {
-            f = f.slice(1, -1);
-          }
-        }
-        return f;
-      })
-      .filter(f => f.startsWith('android-app/app/src/') || f.endsWith('.kt') || f.endsWith('.xml') || f.endsWith('.gradle.kts'));
+    const allCandidates = new Set();
+    diffFilesOutput.split('\n').map(l => l.trim()).filter(Boolean).forEach(f => allCandidates.add(f));
+    porcelainOutput.split('\n').map(l => {
+      let f = l.substring(3).trim();
+      if (f.startsWith('"') && f.endsWith('"')) {
+        try { f = JSON.parse(f); } catch (e) { f = f.slice(1, -1); }
+      }
+      return f;
+    }).filter(Boolean).forEach(f => allCandidates.add(f));
+
+    changedAndroidFiles = Array.from(allCandidates).filter(f =>
+      (f.startsWith('android-app/app/src/') || f.includes('build.gradle.kts')) &&
+      (f.endsWith('.kt') || f.endsWith('.xml') || f.endsWith('.gradle.kts'))
+    );
   } catch (err) {
-    console.warn(`[WARN] git status failed: ${err.message}`);
+    console.warn(`[WARN] git diff/status failed: ${err.message}`);
+  }
+
+  // Quét toàn bộ kho mã nguồn Android (.kt, .xml, .gradle.kts)
+  function getAllAndroidSourceFiles(dir, list = []) {
+    if (!fs.existsSync(dir)) return list;
+    const entries = fs.readdirSync(dir);
+    for (const ent of entries) {
+      const full = path.join(dir, ent);
+      if (fs.statSync(full).isDirectory()) {
+        getAllAndroidSourceFiles(full, list);
+      } else if (ent.endsWith('.kt') || ent.endsWith('.xml') || ent.endsWith('.gradle.kts')) {
+        list.push(full);
+      }
+    }
+    return list;
+  }
+
+  const allAndroidSourceFiles = getAllAndroidSourceFiles(path.join(process.cwd(), 'android-app', 'app', 'src'));
+  const gradleKtsPath = path.join(process.cwd(), 'android-app', 'app', 'build.gradle.kts');
+  if (fs.existsSync(gradleKtsPath)) allAndroidSourceFiles.push(gradleKtsPath);
+
+  let newestSourceFile = '';
+  let newestSourceMtime = 0;
+  for (const absFile of allAndroidSourceFiles) {
+    const sMtime = fs.statSync(absFile).mtimeMs;
+    if (sMtime > newestSourceMtime) {
+      newestSourceMtime = sMtime;
+      newestSourceFile = path.relative(process.cwd(), absFile);
+    }
+    if (sMtime > apkMtime) {
+      console.error('\x1b[31m%s\x1b[0m', `❌ [ARTIFACT FRESHNESS]: PHÁT HIỆN HÀNH VI BYPASS BIÊN DỊCH!`);
+      console.error(`   - File mã nguồn mới hơn APK: ${path.relative(process.cwd(), absFile)} (mtime: ${new Date(sMtime).toISOString()})`);
+      console.error(`   - File APK (${localApkPath}) được biên dịch lúc: ${new Date(apkMtime).toISOString()}`);
+      console.error(`👉 BẮT BUỘC: Agent phải chạy '.\\gradlew assembleRelease' để đóng gói code mới vào APK trước khi xin review!`);
+      process.exit(1);
+    }
+  }
+
+  if (changedAndroidFiles.length === 0) {
+    console.error('\x1b[31m%s\x1b[0m', `❌ [ARTIFACT FRESHNESS]: Danh sách file thay đổi rỗng bất thường!`);
+    process.exit(1);
+  }
+
+  console.log('\x1b[33m%s\x1b[0m', `⏳ Đang xác minh độ tươi của ${changedAndroidFiles.length} file mã nguồn Android đã thay đổi so với APK...`);
+  for (const f of changedAndroidFiles) {
+    const fPath = path.join(process.cwd(), f);
+    if (fs.existsSync(fPath)) {
+      const fMtime = fs.statSync(fPath).mtimeMs;
+      if (fMtime > apkMtime) {
+        console.error('\x1b[31m%s\x1b[0m', `❌ [ARTIFACT FRESHNESS]: File ${f} mới hơn APK!`);
+        process.exit(1);
+      }
+      console.log(`   ✔ ${f} (mtime: ${new Date(fMtime).toISOString()} <= APK: ${new Date(apkMtime).toISOString()})`);
+    }
   }
 
   // Gradle Output Metadata Gatekeeper: Verify compiler output metadata matches version.json
@@ -1085,26 +1144,14 @@ async function runAudit() {
     }
   }
 
-  let artifactFreshnessReport = '';
-  for (const f of changedAndroidFiles) {
-    const fPath = path.join(process.cwd(), f);
-    if (fs.existsSync(fPath) && fs.statSync(fPath).mtimeMs > apkMtime) {
-      console.error('\x1b[31m%s\x1b[0m', `❌ [ARTIFACT FRESHNESS]: PHÁT HIỆN HÀNH VI BYPASS BIÊN DỊCH!`);
-      console.error(`   - File mã nguồn vừa sửa: ${f}`);
-      console.error(`   - File APK hiện tại (${localApkPath}) đang CŨ HƠN file mã nguồn!`);
-      console.error(`👉 BẮT BUỘC: Agent phải chạy '.\\gradlew assembleRelease' để đóng gói code mới vào APK trước khi xin review!`);
-      process.exit(1);
-    }
-  }
-  const apkStat = fs.statSync(localApkPath);
   let currentHeadCommit = 'HEAD';
   try {
     currentHeadCommit = execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim();
   } catch (err) {
     // ignore
   }
-  artifactFreshnessReport = `Physical Compiler Proof: assembleRelease output APK (size: ${(apkStat.size / (1024 * 1024)).toFixed(2)} MB, mtime: ${new Date(apkMtime).toISOString()}) is strictly newer than all ${changedAndroidFiles.length} modified source files. Output-metadata.json confirmed versionCode=${versionJson.versionCode}, versionName=${versionJson.versionName}. Git HEAD commit: ${currentHeadCommit}.`;
-  console.log('\x1b[32m%s\x1b[0m', `✅ ${artifactFreshnessReport}`);
+  let artifactFreshnessReport = `Physical Compiler Proof: assembleRelease output APK (size: ${(apkStat.size / (1024 * 1024)).toFixed(2)} MB, mtime: ${new Date(apkMtime).toISOString()}) is strictly newer than all ${allAndroidSourceFiles.length} total Android source files and all ${changedAndroidFiles.length} recently modified files (${changedAndroidFiles.join(', ')}). Newest source file: ${newestSourceFile} (${new Date(newestSourceMtime).toISOString()}). Output-metadata.json confirmed versionCode=${versionJson.versionCode}, versionName=${versionJson.versionName}. Git HEAD commit: ${currentHeadCommit}.`;
+  console.log('\x1b[32m%s\x1b[0m', `✅ Artifact Freshness Gatekeeper: 100% verified across ${allAndroidSourceFiles.length} source files.`);
 
   // Khử nhạy cảm (sanitization) toàn bộ secrets hoặc API keys khỏi diff và prompt
   const sensitiveKeys = [process.env.OPENAI_API_KEY, process.env.FIREBASE_TOKEN].filter(Boolean);

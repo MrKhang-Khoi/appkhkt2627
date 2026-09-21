@@ -87,7 +87,8 @@ class GuardianAccessibilityService : AccessibilityService() {
             lastEventTime: Long = 0L,
             maxEventAgeMs: Long = 15_000L,
             secondaryWindowPkg: String? = null,
-            conflictingWindowPkg: String? = null
+            conflictingWindowPkg: String? = null,
+            requireWindowEvidence: Boolean = false
         ): Boolean {
             if (targetPkg.isEmpty()) return false
 
@@ -128,8 +129,14 @@ class GuardianAccessibilityService : AccessibilityService() {
                 return isUsageStatsMatch
             }
 
-            // 3. Nếu không có cửa sổ phụ và activeRootPkg là null (chuyển cảnh cửa sổ tạm thời):
+            // 3. Nếu không có bất kỳ cửa sổ nào của target trên màn hình (cả activeRootPkg và secondaryWindowPkg đều null/rỗng):
+            // Bất biến chuyển tiếp Home/Launcher (Codex Anti-Ghost Invariant):
+            // Khi 0 cửa sổ hiện diện, UsageStats cũ KHÔNG ĐỦ để chứng minh ứng dụng còn chiếm màn hình (nguy cơ nhận diện sai A -> Home).
+            // Nếu requireWindowEvidence == true, bắt buộc FAIL-CLOSED trả về false!
             if (activeRootPkg.isNullOrEmpty() && secondaryWindowPkg.isNullOrEmpty()) {
+                if (requireWindowEvidence) {
+                    return false
+                }
                 return isUsageStatsMatch
             }
 
@@ -617,6 +624,14 @@ class GuardianAccessibilityService : AccessibilityService() {
             Log.w("GuardianAccess", "UsageStatsManager check failed: ${e.message}")
         }
 
+        // Bất biến Fail-Closed (Codex Anti-Ghost / Home Invariant):
+        // Bắt buộc phải có bằng chứng cửa sổ tương tác (directRootPkg hoặc secondaryMatchingPkg).
+        // Nếu cả directRootPkg và secondaryMatchingPkg đều là null (0 cửa sổ của target trên màn hình),
+        // tuyệt đối không được tin tưởng UsageStats cũ khi người dùng đã bấm Home hoặc chuyển app -> Fail-Closed!
+        if (directRootPkg.isNullOrEmpty() && secondaryMatchingPkg.isNullOrEmpty()) {
+            return false
+        }
+
         // 3. Bất biến phần cứng & an toàn số: Ủy quyền cho evaluateForegroundEvidence xác minh
         // Nếu chỉ có secondaryMatchingPkg mà không có directRootPkg, evaluateForegroundEvidence
         // BẮT BUỘC phải yêu cầu UsageStatsManager đồng thuận trong vòng 15s (Fail-Closed nếu stale hoặc lệch)
@@ -628,7 +643,8 @@ class GuardianAccessibilityService : AccessibilityService() {
             lastEventTime = lastResumedTime,
             maxEventAgeMs = 15_000L,
             secondaryWindowPkg = secondaryMatchingPkg,
-            conflictingWindowPkg = conflictingWindowPkg
+            conflictingWindowPkg = conflictingWindowPkg,
+            requireWindowEvidence = true
         )
     }
 

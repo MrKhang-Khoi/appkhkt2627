@@ -4264,6 +4264,28 @@ class HardwareInvariantTest {
         assertFalse("Split-screen concurrent windows must fail closed even with ultra fresh UsageStats", splitScreenResult)
     }
 
+    @Test
+    fun testZeroWindowEvidenceWithStaleOrRecentUsageStatsStrictlyFailsClosed() {
+        val target = "com.example.browser"
+        val now = 300_000L
+
+        // Falsification Case (Codex Anti-Ghost / Home Transition Invariant):
+        // Khi rootInActiveWindow == null và windows rỗng (không có cửa sổ nào của target trên màn hình),
+        // dù UsageStats có ghi nhận target cách đây 5 giây hay 14 giây,
+        // evaluateForegroundEvidence với requireWindowEvidence = true BẮT BUỘC trả về false (Fail-closed).
+        val zeroWindowResult = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = null,
+            usageStatsLastResumedPkg = target,
+            targetPkg = target,
+            now = now,
+            lastEventTime = now - 5000L,
+            maxEventAgeMs = 15_000L,
+            secondaryWindowPkg = null,
+            requireWindowEvidence = true
+        )
+        assertFalse("Zero window evidence must strictly fail closed against Home transition ghosting", zeroWindowResult)
+    }
+
     private class FakeTestContext(
         val prefs: FakeSharedPreferences
     ) : ContextWrapper(null) {
