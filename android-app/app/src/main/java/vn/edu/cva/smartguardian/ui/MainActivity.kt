@@ -23,6 +23,7 @@ import android.os.Bundle
 import android.os.Process
 import android.provider.Settings
 import android.text.InputType
+import android.text.TextUtils
 import android.util.Log
 import android.view.Gravity
 import android.view.LayoutInflater
@@ -2213,6 +2214,8 @@ class MainActivity : AppCompatActivity() {
     )
 
     class ChildCompanionBottomSheetDialogFragment : BottomSheetDialogFragment() {
+        enum class CompanionUiState { LOADING, CONTENT, EMPTY, ERROR }
+
         companion object {
             private const val ARG_PREFERRED_DEVICE_ID = "arg_preferred_device_id"
             const val TAG = "ChildCompanionBottomSheet"
@@ -2225,6 +2228,29 @@ class MainActivity : AppCompatActivity() {
                 }
                 fragment.arguments = args
                 return fragment
+            }
+
+            internal fun resolveCompanionUiVisibilities(state: CompanionUiState): Map<CompanionUiState, Int> {
+                return mapOf(
+                    CompanionUiState.LOADING to if (state == CompanionUiState.LOADING) View.VISIBLE else View.GONE,
+                    CompanionUiState.CONTENT to if (state == CompanionUiState.CONTENT) View.VISIBLE else View.GONE,
+                    CompanionUiState.EMPTY to if (state == CompanionUiState.EMPTY) View.VISIBLE else View.GONE,
+                    CompanionUiState.ERROR to if (state == CompanionUiState.ERROR) View.VISIBLE else View.GONE
+                )
+            }
+
+            internal fun setCompanionUiState(
+                state: CompanionUiState,
+                loadingView: View?,
+                contentView: View?,
+                emptyView: View?,
+                errorView: View?
+            ) {
+                val visMap = resolveCompanionUiVisibilities(state)
+                loadingView?.visibility = visMap[CompanionUiState.LOADING] ?: View.GONE
+                contentView?.visibility = visMap[CompanionUiState.CONTENT] ?: View.GONE
+                emptyView?.visibility = visMap[CompanionUiState.EMPTY] ?: View.GONE
+                errorView?.visibility = visMap[CompanionUiState.ERROR] ?: View.GONE
             }
         }
 
@@ -2243,7 +2269,14 @@ class MainActivity : AppCompatActivity() {
             bottomSheet?.let { sheet ->
                 val behavior = BottomSheetBehavior.from(sheet)
                 val density = resources.displayMetrics.density
-                behavior.maxWidth = (560 * density).toInt()
+                val screenWidth = resources.displayMetrics.widthPixels
+                val maxSheetWidth = (560 * density).toInt()
+                if (screenWidth > maxSheetWidth) {
+                    val lp = sheet.layoutParams
+                    lp.width = maxSheetWidth
+                    sheet.layoutParams = lp
+                }
+                behavior.maxWidth = maxSheetWidth
                 behavior.state = BottomSheetBehavior.STATE_EXPANDED
                 behavior.skipCollapsed = true
                 sheet.setBackgroundResource(android.R.color.transparent)
@@ -2429,9 +2462,7 @@ class MainActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) {
                     if (!isAdded) return@withContext
                     if (allAppsList.isEmpty()) {
-                        layoutDialogLoading?.visibility = View.VISIBLE
-                        layoutDialogError?.visibility = View.GONE
-                        layoutDialogContent?.visibility = View.GONE
+                        setCompanionUiState(CompanionUiState.LOADING, layoutDialogLoading, layoutDialogContent, layoutDialogEmptyState, layoutDialogError)
                     }
                 }
                 try {
@@ -2528,9 +2559,7 @@ class MainActivity : AppCompatActivity() {
 
                         withContext(Dispatchers.Main) {
                             if (!isAdded) return@withContext
-                            layoutDialogLoading?.visibility = View.GONE
-                            layoutDialogError?.visibility = View.GONE
-                            layoutDialogContent?.visibility = View.VISIBLE
+                            setCompanionUiState(CompanionUiState.CONTENT, layoutDialogLoading, layoutDialogContent, layoutDialogEmptyState, layoutDialogError)
 
                             val savedChildName = targetDeviceObj.optString("childName", "").trim()
                             val titleName = if (savedChildName.isNotEmpty()) "$savedChildName • $devModel" else devModel
@@ -2623,12 +2652,10 @@ class MainActivity : AppCompatActivity() {
                             allAppsList.addAll(loadedApps)
                             renderAppList()
                         }
-                    } else if (allAppsList.isEmpty()) {
+                    } else {
                         withContext(Dispatchers.Main) {
                             if (!isAdded) return@withContext
-                            layoutDialogLoading?.visibility = View.GONE
-                            layoutDialogError?.visibility = View.GONE
-                            layoutDialogContent?.visibility = View.VISIBLE
+                            setCompanionUiState(CompanionUiState.EMPTY, layoutDialogLoading, layoutDialogContent, layoutDialogEmptyState, layoutDialogError)
                             layoutDialogAppListContainer.visibility = View.GONE
                             layoutDialogEmptyState.visibility = View.VISIBLE
                             tvDialogEmptyTitle.text = "Chưa có thiết bị con"
@@ -2640,10 +2667,7 @@ class MainActivity : AppCompatActivity() {
                     if (allAppsList.isEmpty()) {
                         withContext(Dispatchers.Main) {
                             if (!isAdded) return@withContext
-                            layoutDialogLoading?.visibility = View.GONE
-                            layoutDialogContent?.visibility = View.GONE
-                            layoutDialogEmptyState.visibility = View.GONE
-                            layoutDialogError?.visibility = View.VISIBLE
+                            setCompanionUiState(CompanionUiState.ERROR, layoutDialogLoading, layoutDialogContent, layoutDialogEmptyState, layoutDialogError)
                             tvDialogErrorMessage?.text = "Không thể kết nối máy chủ: ${e.message}"
                         }
                     }
@@ -2687,43 +2711,156 @@ class MainActivity : AppCompatActivity() {
         dialogFragment.show(supportFragmentManager, ChildCompanionBottomSheetDialogFragment.TAG)
     }
 
-    internal fun showSendParentReminderDialog(familyCode: String, childDeviceId: String) {
-        val options = arrayOf(
-            "Đã đến giờ tập trung học bài rồi con nhé!",
-            "Con sắp hết giờ giải trí hôm nay rồi đó!",
-            "Chuẩn bị ăn cơm thôi con ơi!",
-            "Giữ khoảng cách mắt và nghỉ ngơi 5 phút con nhé!",
-            "Tự nhập lời nhắn riêng..."
-        )
+    class ParentReminderBottomSheetDialogFragment : BottomSheetDialogFragment() {
+        companion object {
+            const val TAG = "ParentReminderBottomSheet"
+            private const val ARG_FAMILY_CODE = "arg_family_code"
+            private const val ARG_CHILD_DEVICE_ID = "arg_child_device_id"
 
-        AlertDialog.Builder(this)
-            .setTitle("Gửi Tin Nhắn Nhắc Nhở")
-            .setItems(options) { _, which ->
-                if (which == options.size - 1) {
-                    val input = EditText(this).apply {
-                        hint = "Nhập lời nhắc gửi tới máy con..."
-                        setPadding(40, 30, 40, 30)
-                    }
-                    AlertDialog.Builder(this)
-                        .setTitle("Nhập Lời Nhắc")
-                        .setView(input)
-                        .setPositiveButton("GỬI") { _, _ ->
-                            val text = input.text.toString().trim()
-                            if (text.isNotEmpty()) {
-                                pushParentMessage(familyCode, childDeviceId, text)
-                            }
-                        }
-                        .setNegativeButton("Hủy", null)
-                        .show()
-                } else {
-                    pushParentMessage(familyCode, childDeviceId, options[which])
+            fun newInstance(familyCode: String, childDeviceId: String): ParentReminderBottomSheetDialogFragment {
+                val frag = ParentReminderBottomSheetDialogFragment()
+                val args = Bundle().apply {
+                    putString(ARG_FAMILY_CODE, familyCode)
+                    putString(ARG_CHILD_DEVICE_ID, childDeviceId)
                 }
+                frag.arguments = args
+                return frag
             }
-            .setNegativeButton("Đóng", null)
-            .show()
+        }
+
+        override fun onStart() {
+            super.onStart()
+            val sheetDialog = dialog as? BottomSheetDialog ?: return
+            val bottomSheet = sheetDialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
+            bottomSheet?.let { sheet ->
+                val behavior = BottomSheetBehavior.from(sheet)
+                val density = resources.displayMetrics.density
+                val screenWidth = resources.displayMetrics.widthPixels
+                val maxSheetWidth = (560 * density).toInt()
+                if (screenWidth > maxSheetWidth) {
+                    val lp = sheet.layoutParams
+                    lp.width = maxSheetWidth
+                    sheet.layoutParams = lp
+                }
+                behavior.maxWidth = maxSheetWidth
+                behavior.state = BottomSheetBehavior.STATE_EXPANDED
+                behavior.skipCollapsed = true
+                sheet.setBackgroundResource(android.R.color.transparent)
+            }
+            sheetDialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+            sheetDialog.window?.setDimAmount(0.65f)
+        }
+
+        override fun onCreateView(
+            inflater: LayoutInflater,
+            container: ViewGroup?,
+            savedInstanceState: Bundle?
+        ): View {
+            val ctx = requireContext()
+            val familyCode = arguments?.getString(ARG_FAMILY_CODE) ?: ""
+            val childDeviceId = arguments?.getString(ARG_CHILD_DEVICE_ID) ?: ""
+
+            val root = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                setBackgroundResource(R.drawable.bg_dialog_modern)
+                setPadding(48, 40, 48, 48)
+            }
+
+            val title = TextView(ctx).apply {
+                text = "Gửi Nhắc Nhở Cho Con"
+                setTextColor(Color.parseColor("#F8FAFC"))
+                textSize = 16f
+                setTypeface(null, Typeface.BOLD)
+                setSingleLine(true)
+                ellipsize = TextUtils.TruncateAt.END
+                setPadding(0, 0, 0, 24)
+            }
+            root.addView(title)
+
+            val options = arrayOf(
+                "Đã đến giờ tập trung học bài rồi con nhé!",
+                "Con sắp hết giờ giải trí hôm nay rồi đó!",
+                "Chuẩn bị ăn cơm thôi con ơi!",
+                "Giữ khoảng cách mắt và nghỉ ngơi 5 phút con nhé!",
+                "Tự nhập lời nhắn riêng..."
+            )
+
+            for (idx in options.indices) {
+                val optText = options[idx]
+                val itemBtn = TextView(ctx).apply {
+                    text = optText
+                    setTextColor(Color.parseColor(if (idx == options.size - 1) "#38BDF8" else "#E2E8F0"))
+                    textSize = 13f
+                    minHeight = (48 * resources.displayMetrics.density).toInt()
+                    gravity = Gravity.CENTER_VERTICAL
+                    setBackgroundResource(R.drawable.bg_tab_container)
+                    setPadding(32, 16, 32, 16)
+                    val lp = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply {
+                        setMargins(0, 0, 0, 12)
+                    }
+                    layoutParams = lp
+                    isClickable = true
+                    isFocusable = true
+                    setOnClickListener {
+                        if (idx == options.size - 1) {
+                            showCustomInputDialog(familyCode, childDeviceId)
+                        } else {
+                            (activity as? MainActivity)?.pushParentMessage(familyCode, childDeviceId, optText)
+                            dismissAllowingStateLoss()
+                        }
+                    }
+                }
+                root.addView(itemBtn)
+            }
+
+            val closeBtn = Button(ctx).apply {
+                text = "Đóng"
+                setTextColor(Color.parseColor("#CBD5E1"))
+                setBackgroundResource(R.drawable.bg_btn_secondary_modern)
+                minHeight = (48 * resources.displayMetrics.density).toInt()
+                setSingleLine(true)
+                setOnClickListener { dismissAllowingStateLoss() }
+            }
+            root.addView(closeBtn)
+
+            return root
+        }
+
+        private fun showCustomInputDialog(familyCode: String, childDeviceId: String) {
+            val ctx = requireContext()
+            val input = EditText(ctx).apply {
+                hint = "Nhập lời nhắc gửi tới máy con..."
+                setTextColor(Color.WHITE)
+                setHintTextColor(Color.parseColor("#94A3B8"))
+                setPadding(40, 30, 40, 30)
+            }
+            AlertDialog.Builder(ctx)
+                .setTitle("Nhập Lời Nhắc")
+                .setView(input)
+                .setPositiveButton("GỬI") { _, _ ->
+                    val text = input.text.toString().trim()
+                    if (text.isNotEmpty()) {
+                        (activity as? MainActivity)?.pushParentMessage(familyCode, childDeviceId, text)
+                        dismissAllowingStateLoss()
+                    }
+                }
+                .setNegativeButton("Hủy", null)
+                .show()
+        }
     }
 
-    private fun pushParentMessage(familyCode: String, childDeviceId: String, messageText: String) {
+    internal fun showSendParentReminderDialog(familyCode: String, childDeviceId: String) {
+        if (supportFragmentManager.findFragmentByTag(ParentReminderBottomSheetDialogFragment.TAG) != null) {
+            return
+        }
+        val frag = ParentReminderBottomSheetDialogFragment.newInstance(familyCode, childDeviceId)
+        frag.show(supportFragmentManager, ParentReminderBottomSheetDialogFragment.TAG)
+    }
+
+    internal fun pushParentMessage(familyCode: String, childDeviceId: String, messageText: String) {
         if (familyCode.isEmpty()) return
         lifecycleScope.launch(Dispatchers.IO) {
             try {

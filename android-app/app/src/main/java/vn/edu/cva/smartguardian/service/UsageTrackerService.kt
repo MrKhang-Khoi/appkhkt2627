@@ -741,39 +741,63 @@ class UsageTrackerService : Service() {
                     }
 
                     // Server-Side CAS Failure Handling (HTTP 412 Precondition Failed):
-                    // When another write already updated the node, Firebase returns 412 with the current server body.
+                    // Bắt buộc GET lại node kèm X-Firebase-ETag: true để đọc body và ETag mới nhất từ server
                     if (isPutActiveApp && resp.code == 412) {
-                        val bodyStr = resp.body?.string() ?: ""
-                        val serverJson = try { JSONObject(bodyStr) } catch (e: Exception) { null }
-                        val serverGen = serverJson?.optLong("foregroundGeneration", -1L) ?: -1L
-                        if (serverGen >= expectedGen) {
+                        val getReq = okhttp3.Request.Builder()
+                            .url(request.url)
+                            .get()
+                            .header("X-Firebase-ETag", "true")
+                            .build()
+                        val getCall = sharedHttpClient.newCall(getReq)
+                        activeOnlineCalls.add(getCall)
+                        val (serverGen, freshEtag) = try {
+                            val getResp = getCall.execute()
+                            getResp.use { gResp ->
+                                val gEtag = gResp.header("ETag")
+                                val gBody = gResp.body?.string() ?: ""
+                                val gJson = try { JSONObject(gBody) } catch (e: Exception) { null }
+                                val gGen = gJson?.optLong("foregroundGeneration", -1L) ?: -1L
+                                Pair(gGen, gEtag)
+                            }
+                        } catch (e: Exception) {
+                            Log.w("UsageTrackerService", "CAS GET node failed: ${e.message}")
+                            Pair(-1L, null)
+                        } finally {
+                            activeOnlineCalls.remove(getCall)
+                        }
+
+                        if (freshEtag != null) {
+                            lastKnownETags[request.url.toString()] = freshEtag
+                        }
+
+                        if (serverGen >= expectedGen && expectedGen != -1L) {
                             Log.w("UsageTrackerService", "CAS Aborted: Server already holds newer/equal generation ($serverGen >= $expectedGen) at ${request.url}. Stale overwrite safely prevented at server!")
                             return false
-                        } else {
-                            // Server holds an older state, retry once with the updated ETag provided by the server
-                            if (etagHeader != null && isHardwareOnlineValid(context, expectedEpoch) && (expectedGen == -1L || foregroundGeneration.get() == expectedGen)) {
-                                Log.i("UsageTrackerService", "CAS Retry: Server generation is older ($serverGen < $expectedGen). Retrying with updated server ETag...")
-                                val retryReq = request.newBuilder()
-                                    .header("X-Firebase-ETag", "true")
-                                    .header("if-match", etagHeader)
-                                    .build()
-                                val retryCall = sharedHttpClient.newCall(retryReq)
-                                activeOnlineCalls.add(retryCall)
-                                try {
-                                    val retryResp = retryCall.execute()
-                                    retryResp.use { rResp ->
-                                        val newEtag = rResp.header("ETag")
-                                        if (newEtag != null) {
-                                            lastKnownETags[request.url.toString()] = newEtag
-                                        }
-                                        return rResp.isSuccessful
-                                    }
-                                } finally {
-                                    activeOnlineCalls.remove(retryCall)
-                                }
-                            }
-                            return false
                         }
+
+                        // Chỉ khi serverGen < expectedGen VÀ freshEtag != null VÀ phần cứng online VÀ expectedGen vẫn hợp lệ:
+                        if (freshEtag != null && isHardwareOnlineValid(context, expectedEpoch) && (expectedGen == -1L || foregroundGeneration.get() == expectedGen)) {
+                            Log.i("UsageTrackerService", "CAS Retry: Server generation is older ($serverGen < $expectedGen). Retrying with fresh server ETag...")
+                            val retryReq = request.newBuilder()
+                                .header("X-Firebase-ETag", "true")
+                                .header("if-match", freshEtag)
+                                .build()
+                            val retryCall = sharedHttpClient.newCall(retryReq)
+                            activeOnlineCalls.add(retryCall)
+                            try {
+                                val retryResp = retryCall.execute()
+                                retryResp.use { rResp ->
+                                    val newEtag = rResp.header("ETag")
+                                    if (newEtag != null) {
+                                        lastKnownETags[request.url.toString()] = newEtag
+                                    }
+                                    return rResp.isSuccessful
+                                }
+                            } finally {
+                                activeOnlineCalls.remove(retryCall)
+                            }
+                        }
+                        return false
                     }
 
                     // Fencing ngay sau khi nhận phản hồi từ server
@@ -842,12 +866,35 @@ class UsageTrackerService : Service() {
                     }
 
                     if (isPutActiveApp && resp.code == 412) {
-                        val bodyString = resp.body?.string()
-                        val serverJson = try { JSONObject(bodyString ?: "") } catch (e: Exception) { null }
-                        val serverGen = serverJson?.optLong("foregroundGeneration", -1L) ?: -1L
-                        if (serverGen >= expectedGen) {
+                        val getReq = okhttp3.Request.Builder()
+                            .url(request.url)
+                            .get()
+                            .header("X-Firebase-ETag", "true")
+                            .build()
+                        val getCall = sharedHttpClient.newCall(getReq)
+                        activeOnlineCalls.add(getCall)
+                        val (serverGen, freshEtag, bodyStr) = try {
+                            val getResp = getCall.execute()
+                            getResp.use { gResp ->
+                                val gEtag = gResp.header("ETag")
+                                val gBody = gResp.body?.string() ?: ""
+                                val gJson = try { JSONObject(gBody) } catch (e: Exception) { null }
+                                val gGen = gJson?.optLong("foregroundGeneration", -1L) ?: -1L
+                                Triple(gGen, gEtag, gBody)
+                            }
+                        } catch (e: Exception) {
+                            Triple(-1L, null, "")
+                        } finally {
+                            activeOnlineCalls.remove(getCall)
+                        }
+
+                        if (freshEtag != null) {
+                            lastKnownETags[request.url.toString()] = freshEtag
+                        }
+
+                        if (serverGen >= expectedGen && expectedGen != -1L) {
                             Log.w("UsageTrackerService", "CAS Aborted: Server holds newer/equal generation ($serverGen >= $expectedGen).")
-                            return HttpResult(code = resp.code, body = bodyString, etag = etag, isSuccessful = false)
+                            return HttpResult(code = resp.code, body = bodyStr, etag = freshEtag, isSuccessful = false)
                         }
                     }
 

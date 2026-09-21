@@ -8,7 +8,7 @@
   "fileSize": "5.86 MB",
   "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.3.0.apk",
   "apkFallbackUrl": "https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/CVA-SmartGuardian-v1.3.0.apk",
-  "sha256": "E449EEB34E3FCF5640E2F678934F0D8096F63E7E0F569829771D99F6A233D700",
+  "sha256": "54C24B2F4F48D909942326EF6F8ED7413D57ECC37B7C19AE31F01250DDD39634",
   "changelog": [
     "Khắc phục triệt để nhận diện app online: Bổ sung cờ flagRetrieveInteractiveWindows và loại bỏ hoàn toàn Dead API getRunningAppProcesses.",
     "Chuẩn hóa giao diện M3 Responsive 4 trạng thái: Loading, Content, Empty, Error kèm nút Thử Lại.",
@@ -16,7 +16,7 @@
     "Bảo vệ kế toán phiên sử dụng với Epoch Fencing, Monotonic Foreground Generation và nhịp tim nền 60s tiết kiệm pin."
   ],
   "releaseNotes": "Bản phát hành v1.3.0: Chuẩn hóa Android Google toàn diện, khắc phục triệt để nhận diện app online, bổ sung 4 trạng thái UI responsive, loại bỏ Dead API và bảo vệ kế toán phiên thời gian thực.",
-  "updatedAt": 1789987080857,
-  "size": 6143847,
+  "updatedAt": 1789988500000,
+  "size": 6147317,
   "releaseDate": "2026-09-21"
 }

@@ -63,6 +63,8 @@
                 android:text="Đang kết nối..."
                 android:textColor="#94A3B8"
                 android:textSize="12sp"
+                android:maxLines="2"
+                android:ellipsize="end"
                 android:layout_marginTop="2dp" />
         </LinearLayout>
 
@@ -74,6 +76,7 @@
             android:background="@drawable/bg_score_pill"
             android:orientation="horizontal"
             android:gravity="center_vertical"
+            android:layout_marginStart="8dp"
             android:paddingLeft="10dp"
             android:paddingRight="12dp"
             android:paddingTop="6dp"
@@ -86,7 +89,8 @@
                 android:text="85/100"
                 android:textColor="#FBBF24"
                 android:textSize="12sp"
-                android:textStyle="bold" />
+                android:textStyle="bold"
+                android:singleLine="true" />
         </LinearLayout>
     </LinearLayout>
 
@@ -517,10 +521,12 @@
                         android:paddingRight="14dp"
                         android:paddingTop="6dp"
                         android:paddingBottom="6dp"
-                        android:text="Xem tất cả ứng dụng"
+                        android:text="Xem tất cả"
                         android:textColor="#38BDF8"
                         android:textSize="11sp"
                         android:textStyle="bold"
+                        android:singleLine="true"
+                        android:ellipsize="end"
                         android:clickable="true"
                         android:focusable="true" />
                 </LinearLayout>
@@ -544,29 +550,32 @@
             android:minHeight="48dp"
             android:layout_weight="1"
             android:background="@drawable/bg_btn_primary_modern"
-            android:text="Gửi Lời Nhắc Nhở"
+            android:text="Gửi Nhắc Nhở"
             android:textColor="#FFFFFF"
             android:textSize="13sp"
             android:textStyle="bold"
+            android:singleLine="true"
+            android:ellipsize="end"
             android:paddingTop="12dp"
             android:paddingBottom="12dp"
-            android:paddingLeft="14dp"
-            android:paddingRight="14dp"
-            android:layout_marginEnd="10dp" />
+            android:paddingLeft="10dp"
+            android:paddingRight="10dp"
+            android:layout_marginEnd="8dp" />
 
         <Button
             android:id="@+id/btnDialogClose"
             android:layout_width="wrap_content"
-            android:minWidth="95dp"
+            android:minWidth="80dp"
             android:layout_height="wrap_content"
             android:minHeight="48dp"
             android:background="@drawable/bg_btn_secondary_modern"
             android:text="Đóng"
             android:textColor="#CBD5E1"
+            android:singleLine="true"
             android:paddingTop="12dp"
             android:paddingBottom="12dp"
-            android:paddingLeft="16dp"
-            android:paddingRight="16dp"
+            android:paddingLeft="14dp"
+            android:paddingRight="14dp"
             android:textSize="13sp" />
     </LinearLayout>
 </LinearLayout>

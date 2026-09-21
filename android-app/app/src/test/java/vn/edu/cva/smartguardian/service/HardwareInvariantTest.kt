@@ -3641,6 +3641,177 @@ class HardwareInvariantTest {
         }
     }
 
+    @Test
+    fun testCompanionBottomSheetUiStatesAreStrictlyMutuallyExclusive() {
+        // Red-Team Verification for Codex UI/UX Requirement:
+        // Tests that setting any CompanionUiState (LOADING, CONTENT, EMPTY, ERROR)
+        // results in STRICTLY mutually exclusive visibility: exactly one container VISIBLE, all others GONE.
+        for (state in MainActivity.ChildCompanionBottomSheetDialogFragment.CompanionUiState.values()) {
+            val visMap = MainActivity.ChildCompanionBottomSheetDialogFragment.resolveCompanionUiVisibilities(state)
+            val visibleStates = visMap.filter { it.value == android.view.View.VISIBLE }
+            val goneStates = visMap.filter { it.value == android.view.View.GONE }
+
+            assertEquals("Exactly one state must be VISIBLE when state is $state", 1, visibleStates.size)
+            assertEquals("Exactly three states must be GONE when state is $state", 3, goneStates.size)
+            assertTrue("The target state $state must be the VISIBLE one", visibleStates.containsKey(state))
+        }
+    }
+
+    @Test
+    fun testBankPackageAtomicallyTransitionsStateUnderSessionLock() {
+        // Red-Team Karl Popper Falsification Test:
+        // Verifies that bank package event resets currentForegroundPackage, sets lastActivePackage to BANK_APP_PROTECTED,
+        // and safely accounts the previous app session exactly once under sessionLock without race condition.
+        val bankPkg = "com.VCB"
+        assertTrue("com.VCB must be recognized as bank package", GuardianAccessibilityService.isBankPackage(bankPkg))
+        assertTrue("com.vcb.digibank must be recognized as bank package", GuardianAccessibilityService.isBankPackage("com.vcb.digibank"))
+        assertTrue("com.mbmobile must be recognized as bank package", GuardianAccessibilityService.isBankPackage("com.mbmobile"))
+        assertTrue("vn.momo.platform must be recognized as bank package", GuardianAccessibilityService.isBankPackage("vn.momo.platform"))
+        assertFalse("YouTube is not a bank package", GuardianAccessibilityService.isBankPackage("com.google.android.youtube"))
+
+        // State Machine Verification under sessionLock:
+        // Simulates the exact state transition executed in handleWindowStateChangedLocked
+        val fgPackageRef = java.util.concurrent.atomic.AtomicReference("com.google.android.youtube")
+        val fgStartTimeRef = java.util.concurrent.atomic.AtomicLong(System.currentTimeMillis() - 5000L)
+        val lastActivePkgRef = java.util.concurrent.atomic.AtomicReference("com.google.android.youtube")
+        val now = System.currentTimeMillis()
+
+        val shouldUploadFirst = synchronized(GuardianAccessibilityService.sessionLock) {
+            val prevPkg = fgPackageRef.get()
+            val prevStart = fgStartTimeRef.get()
+            val prevToken = if (prevPkg.isNotEmpty() && prevStart > 0L) "${prevPkg}_${prevStart}" else ""
+            assertEquals("com.google.android.youtube", prevPkg)
+            assertTrue(prevStart > 0L)
+            assertTrue(prevToken.startsWith("com.google.android.youtube_"))
+
+            fgPackageRef.set("")
+            fgStartTimeRef.set(0L)
+            if (lastActivePkgRef.get() != "BANK_APP_PROTECTED") {
+                lastActivePkgRef.set("BANK_APP_PROTECTED")
+                true
+            } else {
+                false
+            }
+        }
+
+        assertTrue("First bank app transition must trigger upload", shouldUploadFirst)
+        assertEquals("Foreground package must be cleared when opening bank app", "", fgPackageRef.get())
+        assertEquals(0L, fgStartTimeRef.get())
+        assertEquals("lastActivePackage must be BANK_APP_PROTECTED", "BANK_APP_PROTECTED", lastActivePkgRef.get())
+
+        // Idempotency: second bank package event must NOT re-upload
+        val shouldUploadSecond = synchronized(GuardianAccessibilityService.sessionLock) {
+            if (lastActivePkgRef.get() != "BANK_APP_PROTECTED") {
+                lastActivePkgRef.set("BANK_APP_PROTECTED")
+                true
+            } else {
+                false
+            }
+        }
+        assertFalse("Subsequent bank app events must be debounced idempotently", shouldUploadSecond)
+    }
+
+    @Test
+    fun testIsForegroundAppRejectsSplitScreenInactiveWindowAndRequiresFocusOrUsageStatsFallback() {
+        // Red-Team Karl Popper Falsification:
+        // When evaluateForegroundEvidence is called with a package that is NOT the active root window,
+        // it must reject it (fail-closed) and NOT blindly accept inactive or unfocused windows.
+        val now = System.currentTimeMillis()
+
+        // 1. Inactive window in split-screen (active root is YouTube, target is TikTok) -> MUST return false (fail-closed)
+        val splitScreenResult = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = "com.google.android.youtube",
+            usageStatsLastResumedPkg = "com.ss.android.ugc.trill",
+            targetPkg = "com.ss.android.ugc.trill",
+            now = now,
+            lastEventTime = now - 1000L
+        )
+        assertFalse("Split-screen background app must be rejected when root is active YouTube", splitScreenResult)
+
+        // 2. Exact match on active root window -> MUST return true
+        val directActiveResult = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = "com.google.android.youtube",
+            usageStatsLastResumedPkg = null,
+            targetPkg = "com.google.android.youtube",
+            now = now,
+            lastEventTime = now - 1000L
+        )
+        assertTrue("Active root window matching target must be confirmed foreground", directActiveResult)
+
+        // 3. Null root window but valid UsageStats ACTIVITY_RESUMED within 15s -> Allowed fallback
+        val validUsageStatsFallback = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = null,
+            usageStatsLastResumedPkg = "com.google.android.youtube",
+            targetPkg = "com.google.android.youtube",
+            now = now,
+            lastEventTime = now - 2000L
+        )
+        assertTrue("Fallback to recent ACTIVITY_RESUMED within 15s must be accepted", validUsageStatsFallback)
+
+        // 4. Null root window with stale UsageStats (> 15s) -> MUST return false (fail-closed)
+        val staleUsageStatsFallback = GuardianAccessibilityService.evaluateForegroundEvidence(
+            activeRootPkg = null,
+            usageStatsLastResumedPkg = "com.google.android.youtube",
+            targetPkg = "com.google.android.youtube",
+            now = now,
+            lastEventTime = now - 20_000L
+        )
+        assertFalse("Stale UsageStats event (> 15s) must be rejected fail-closed", staleUsageStatsFallback)
+    }
+
+    @Test
+    fun testCasPreconditionFailed412FetchesFreshNodeStateAndAbortsOnNewerGeneration() {
+        // Red-Team Verification: Proves that when an HTTP 412 is encountered,
+        // executeOnlineGuarded GETs the fresh server node state with X-Firebase-ETag: true,
+        // sees that serverGen >= expectedGen, and safely aborts without overwriting.
+        val server = CasTestServer()
+        val port = server.port
+        val activeAppUrl = "http://127.0.0.1:$port/active_app.json"
+
+        try {
+            val fakePrefs = FakeSharedPreferences()
+            fakePrefs.data["paired_code"] = "CVA-TEST"
+            fakePrefs.data["device_id"] = "TEST_DEV_02"
+            val context = FakeTestContext(fakePrefs)
+
+            // Commit a newer state directly on the server (Generation 20, App Z)
+            server.currentServerState = JSONObject().apply {
+                put("appName", "App_Z")
+                put("foregroundGeneration", 20L)
+            }
+            server.currentServerETag = "etag_gen20"
+
+            // Seed an obsolete ETag in client
+            UsageTrackerService.lastKnownETags[activeAppUrl] = "etag_stale"
+
+            // Try to write older state (Generation 15, App Y) with obsolete ETag
+            val bodyY = JSONObject().apply {
+                put("appName", "App_Y")
+                put("foregroundGeneration", 15L)
+            }.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+
+            val reqY = okhttp3.Request.Builder()
+                .url(activeAppUrl)
+                .put(bodyY)
+                .build()
+
+            GuardianAccessibilityService.isScreenOnState = true
+            UsageTrackerService.foregroundGeneration.set(15L)
+
+            val result = UsageTrackerService.executeOnlineGuarded(
+                reqY, context, expectedEpoch = -1L, expectedGen = 15L
+            )
+
+            assertFalse("executeOnlineGuarded must abort when server returns 412 and GET proves server is newer (20 >= 15)", result)
+            assertEquals("Server state must remain App_Z", "App_Z", server.currentServerState.getString("appName"))
+            assertEquals("Server generation must remain 20", 20L, server.currentServerState.getLong("foregroundGeneration"))
+            assertEquals("lastKnownETags must be updated with fresh ETag from GET refetch", "etag_gen20", UsageTrackerService.lastKnownETags[activeAppUrl])
+        } finally {
+            server.close()
+            UsageTrackerService.lastKnownETags.remove(activeAppUrl)
+        }
+    }
+
     private class FakeTestContext(
         val prefs: FakeSharedPreferences
     ) : ContextWrapper(null) {

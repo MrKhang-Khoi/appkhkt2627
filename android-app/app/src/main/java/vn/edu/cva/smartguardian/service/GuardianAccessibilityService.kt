@@ -319,29 +319,10 @@ class GuardianAccessibilityService : AccessibilityService() {
         val eventPkg = event.packageName?.toString() ?: return
 
         // BẢO VỆ TUYỆT ĐỐI ỨNG DỤNG NGÂN HÀNG & VÍ ĐIỆN TỬ (CHUẨN RASP)
-        // Khi mở app ngân hàng: chốt an toàn phiên ứng dụng trước đó, tuyệt đối không quét node, không đọc cây UI, không can thiệp
+        // Khi mở app ngân hàng: chốt an toàn phiên ứng dụng trước đó qua state machine nguyên tử,
+        // tuyệt đối không quét node, không đọc cây UI, không can thiệp
         if (isBankPackage(eventPkg)) {
-            val now = System.currentTimeMillis()
-            val (closedPkg, closedStart) = synchronized(sessionLock) {
-                val pkg = currentForegroundPackage
-                val start = currentForegroundStartTime
-                currentForegroundPackage = ""
-                currentForegroundStartTime = 0L
-                lastActivePackage = "BANK_APP_PROTECTED"
-                Pair(pkg, start)
-            }
-
-            if (closedPkg.isNotEmpty() && closedStart > 0L && now - closedStart >= 1000L) {
-                val sessionDuration = now - closedStart
-                val sessionToken = "${closedPkg}_${closedStart}"
-                val currentEpoch = telemetryEpoch.get()
-                serviceScope.launch(Dispatchers.IO) {
-                    if (telemetryEpoch.get() == currentEpoch) {
-                        UsageTrackerService.recordAppSession(applicationContext, closedPkg, sessionDuration, sessionToken, currentEpoch)
-                    }
-                }
-            }
-            UsageTrackerService.closePolledSession(applicationContext, "BANK_APP_OPENED")
+            handleWindowStateChanged(eventPkg)
             return
         }
 
@@ -417,12 +398,17 @@ class GuardianAccessibilityService : AccessibilityService() {
             if (rootPkg == packageName) {
                 packageName
             } else {
-                // Kiểm tra danh sách windows tương tác nếu rootInActiveWindow chưa kịp cập nhật lúc chuyển cảnh
-                val hasAppWindow = windows?.any { win ->
-                    win.type == AccessibilityWindowInfo.TYPE_APPLICATION &&
-                    win.root?.packageName?.toString()?.trim() == packageName
-                } ?: false
-                if (hasAppWindow) packageName else null
+                // Kiểm tra danh sách windows tương tác: Chỉ chấp nhận cửa sổ có isActive hoặc isFocused
+                val appWindows = windows?.filter { win ->
+                    win.type == AccessibilityWindowInfo.TYPE_APPLICATION && (win.isActive || win.isFocused)
+                }
+                // Nếu có đúng 1 cửa sổ active/focused và root của nó là packageName -> chấp nhận
+                if (appWindows?.size == 1 && appWindows[0].root?.packageName?.toString()?.trim() == packageName) {
+                    packageName
+                } else {
+                    // Khi có nhiều cửa sổ hoặc trạng thái focus không xác định: fail-closed (đối soát bằng UsageStatsManager)
+                    null
+                }
             }
         } catch (e: Exception) {
             Log.w("GuardianAccess", "rootInActiveWindow check failed: ${e.message}")
@@ -506,6 +492,52 @@ class GuardianAccessibilityService : AccessibilityService() {
 
         val isHome = isDefaultLauncher(packageName)
         val isLock = packageName == "com.android.systemui" || packageName.contains("keyguard")
+        val isBank = isBankPackage(packageName)
+
+        // Ứng dụng ngân hàng / Ví điện tử (Chuẩn RASP): Chốt phiên an toàn và chuyển trạng thái bảo vệ nguyên tử
+        if (isBank) {
+            val shouldUploadBank = synchronized(sessionLock) {
+                currentForegroundPackage = ""
+                currentForegroundStartTime = 0L
+                if (lastActivePackage != "BANK_APP_PROTECTED") {
+                    lastActivePackage = "BANK_APP_PROTECTED"
+                    lastActiveUploadTimestamp = now
+                    true
+                } else {
+                    false
+                }
+            }
+            if (prevPkg.isNotEmpty() && prevStart > 0L && now - prevStart >= 1000L && prevToken.isNotEmpty()) {
+                val sessionDuration = now - prevStart
+                serviceScope.launch(Dispatchers.IO) {
+                    if (telemetryEpoch.get() == expectedEpoch) {
+                        UsageTrackerService.recordAppSession(applicationContext, prevPkg, sessionDuration, prevToken, expectedEpoch)
+                    }
+                }
+            }
+            UsageTrackerService.closePolledSession(applicationContext, "BANK_APP_OPENED")
+            serviceScope.launch(Dispatchers.IO) {
+                if (telemetryEpoch.get() == expectedEpoch) {
+                    val prefs = try { getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE) } catch (e: Exception) { null }
+                    prefs?.edit()
+                        ?.putString("last_foreground_pkg", "")
+                        ?.putLong("last_foreground_start", 0L)
+                        ?.apply()
+                }
+            }
+            if (shouldUploadBank) {
+                return UsageTrackerService.prepareActiveAppLocked(
+                    context = this@GuardianAccessibilityService,
+                    packageName = "BANK_APP_PROTECTED",
+                    appName = "Ứng dụng Ngân hàng / Ví điện tử (Được bảo vệ)",
+                    category = "OTHER",
+                    categoryLabel = "Bảo mật",
+                    isForeground = true,
+                    expectedEpoch = expectedEpoch
+                )
+            }
+            return null
+        }
 
         // Màn hình khóa (Keyguard/Lockscreen) hoặc KeyguardManager báo đang khóa
         if (isLock || isLocked) {

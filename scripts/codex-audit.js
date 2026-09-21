@@ -850,7 +850,11 @@ try {
     'testParentDashboardSubtitleEvaluationAndAntiSpoofing',
     'testGpsCommandHardwareFencingAndTimeoutInvariants',
     'testHomeAndKeyguardTransitionDoesNotBlockTelemetryMutexUnderSlowDiskIo',
-    'testReversedArrivalOrderWithCasPreservesLatestForegroundStateOnServer'
+    'testReversedArrivalOrderWithCasPreservesLatestForegroundStateOnServer',
+    'testCompanionBottomSheetUiStatesAreStrictlyMutuallyExclusive',
+    'testBankPackageAtomicallyTransitionsStateUnderSessionLock',
+    'testIsForegroundAppRejectsSplitScreenInactiveWindowAndRequiresFocusOrUsageStatsFallback',
+    'testCasPreconditionFailed412FetchesFreshNodeStateAndAbortsOnNewerGeneration'
   ];
 
   for (const testName of requiredProductionFeatureTests) {
