@@ -41,6 +41,151 @@ import vn.edu.cva.smartguardian.location.LocationHelper
 
 class UsageTrackerService : Service() {
 
+    sealed class LocationCommandDecision {
+        data class Expire(val requestedAt: Long, val expiredAt: Long) : LocationCommandDecision()
+        data class PromptGps(val requestedAt: Long, val updatedAt: Long, val shouldUpdateStatus: Boolean) : LocationCommandDecision()
+        data class SearchingFix(val requestedAt: Long, val updatedAt: Long, val shouldUpdateStatus: Boolean) : LocationCommandDecision()
+        data class Complete(val requestedAt: Long, val completedAt: Long) : LocationCommandDecision()
+        object Ignore : LocationCommandDecision()
+    }
+
+    data class HttpResult(
+        val code: Int,
+        val body: String?,
+        val etag: String?,
+        val isSuccessful: Boolean
+    )
+
+    object LocationProtocol {
+        const val COMMAND_LOCATE_NOW = "locate_now"
+        const val STATUS_PENDING = "PENDING"
+        const val STATUS_WAITING_GPS = "WAITING_GPS"
+        const val STATUS_SEARCHING_FIX = "SEARCHING_FIX"
+        const val STATUS_COMPLETED = "COMPLETED"
+        const val STATUS_EXPIRED = "EXPIRED"
+        const val COMMAND_EXPIRY_TIMEOUT_MS = 180_000L
+
+        private val SAFE_SEGMENT_REGEX = Regex("^[a-zA-Z0-9_-]{1,128}$")
+        private val FIREBASE_HOST_REGEX = Regex("^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\\.(firebasedatabase\\.app|firebaseio\\.com|firebase\\.io)$")
+
+        @JvmStatic
+        fun validateBaseUrl(rawUrl: String): String {
+            require(rawUrl.startsWith("https://")) {
+                "Fail-Closed: Base URL must start with https://: $rawUrl"
+            }
+            val uri = try {
+                java.net.URI(rawUrl)
+            } catch (e: Exception) {
+                throw IllegalArgumentException("Fail-Closed: Invalid Firebase base URL syntax: $rawUrl", e)
+            }
+            require(uri.scheme == "https") {
+                "Fail-Closed: Scheme must be https: $rawUrl"
+            }
+            require(uri.userInfo == null) {
+                "Fail-Closed: Base URL cannot contain userInfo: $rawUrl"
+            }
+            require(uri.rawQuery == null) {
+                "Fail-Closed: Base URL cannot contain query parameters: $rawUrl"
+            }
+            require(uri.rawFragment == null) {
+                "Fail-Closed: Base URL cannot contain fragment: $rawUrl"
+            }
+            require(uri.port == -1 || uri.port == 443) {
+                "Fail-Closed: Base URL cannot use non-standard port: ${uri.port}"
+            }
+            val path = uri.path
+            require(path.isNullOrEmpty() || path == "/") {
+                "Fail-Closed: Base URL cannot contain extra path segments: $path"
+            }
+            val host = uri.host ?: throw IllegalArgumentException("Fail-Closed: Base URL missing host: $rawUrl")
+            require(FIREBASE_HOST_REGEX.matches(host)) {
+                "Fail-Closed: Host $host is not a valid Firebase RTDB domain: $rawUrl"
+            }
+            return "https://$host"
+        }
+
+        @JvmStatic
+        fun sanitizeSegment(raw: String): String {
+            require(SAFE_SEGMENT_REGEX.matches(raw)) {
+                "Fail-Closed: Segment contains invalid characters or path traversal: $raw"
+            }
+            return raw
+        }
+
+        /**
+         * Kiểm tra điều kiện tiên quyết (In-Memory State Machine OCC Precondition).
+         * Kết hợp với Atomic Conditional Write (ETag-based Compare-And-Set qua header if-match trên Firebase RTDB REST API)
+         * để đảm bảo tính nguyên tử tuyệt đối ở cả 2 tầng: logic bộ nhớ và máy chủ cơ sở dữ liệu.
+         */
+        @JvmStatic
+        fun validateOccPrecondition(
+            serverStatus: String,
+            serverRequestedAt: Long,
+            targetRequestedAt: Long
+        ): Boolean {
+            if (serverRequestedAt <= 0L || targetRequestedAt <= 0L) return false
+            if (serverRequestedAt != targetRequestedAt) return false
+            if (serverStatus == STATUS_COMPLETED || serverStatus == STATUS_EXPIRED) return false
+            return true
+        }
+
+        @JvmStatic
+        fun getCommandUrl(baseUrl: String, familyCode: String, deviceId: String, commandName: String = COMMAND_LOCATE_NOW): String {
+            val cleanBase = validateBaseUrl(baseUrl)
+            val safeFam = sanitizeSegment(familyCode)
+            val safeDev = sanitizeSegment(deviceId)
+            val safeCmd = sanitizeSegment(commandName)
+            return "$cleanBase/families/$safeFam/devices/$safeDev/commands/$safeCmd.json"
+        }
+
+        @JvmStatic
+        fun getFamilyLocationUrl(baseUrl: String, familyCode: String, deviceId: String): String {
+            val cleanBase = validateBaseUrl(baseUrl)
+            val safeFam = sanitizeSegment(familyCode)
+            val safeDev = sanitizeSegment(deviceId)
+            return "$cleanBase/families/$safeFam/devices/$safeDev/location.json"
+        }
+
+        @JvmStatic
+        fun getDeviceLocationUrl(baseUrl: String, deviceId: String): String {
+            val cleanBase = validateBaseUrl(baseUrl)
+            val safeDev = sanitizeSegment(deviceId)
+            return "$cleanBase/devices/$safeDev/location.json"
+        }
+
+        const val HEADER_FIREBASE_ETAG = "X-Firebase-ETag"
+        const val HEADER_IF_MATCH = "if-match"
+
+        @JvmStatic
+        fun buildGetCommandRequest(cmdUrl: String): okhttp3.Request {
+            return okhttp3.Request.Builder()
+                .url(cmdUrl)
+                .header(HEADER_FIREBASE_ETAG, "true")
+                .build()
+        }
+
+        @JvmStatic
+        fun buildConditionalPutRequest(cmdUrl: String, etag: String, body: okhttp3.RequestBody): okhttp3.Request {
+            require(etag.isNotBlank()) { "Fail-Closed: ETag cannot be blank for atomic conditional write" }
+            return okhttp3.Request.Builder()
+                .url(cmdUrl)
+                .header(HEADER_IF_MATCH, etag)
+                .put(body)
+                .build()
+        }
+
+        @JvmStatic
+        fun shouldPublishLocationAfterCas(httpStatusCode: Int): Boolean {
+            return httpStatusCode == 200
+        }
+
+        @JvmStatic
+        fun isCommandActiveAndRecent(status: String, requestedAt: Long, now: Long, timeoutMs: Long = COMMAND_EXPIRY_TIMEOUT_MS): Boolean {
+            val isActive = (status == STATUS_PENDING || status == STATUS_WAITING_GPS || status == STATUS_SEARCHING_FIX)
+            return isActive && (now - requestedAt in 0L..timeoutMs)
+        }
+    }
+
     private val serviceJob = Job()
     private val serviceScope = CoroutineScope(Dispatchers.Default + serviceJob)
 
@@ -49,9 +194,13 @@ class UsageTrackerService : Service() {
         const val NOTIFICATION_ID = 1001
         const val OTA_CHANNEL_ID = "cva_smart_guardian_ota"
         const val OTA_NOTIFICATION_ID = 2002
+        const val GPS_CHANNEL_ID = "cva_smart_guardian_gps"
+        const val GPS_NOTIFICATION_ID = 3003
+        internal val lastGpsPromptTimestamp = java.util.concurrent.atomic.AtomicLong(0L)
         private val lastNotifiedUpdateCode = java.util.concurrent.atomic.AtomicInteger(0)
         const val ACTION_USAGE_UPDATED = "vn.edu.cva.smartguardian.ACTION_USAGE_UPDATED"
         const val PREFS_NAME = "cva_guardian_stats"
+        const val FIREBASE_RTDB_URL = "https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app"
 
         private val sharedHttpClient by lazy {
             okhttp3.OkHttpClient.Builder()
@@ -569,11 +718,11 @@ class UsageTrackerService : Service() {
             }
         }
 
-        fun executeOnlineStringGuarded(
+        fun executeOnlineHttpGuarded(
             request: okhttp3.Request,
             context: Context,
             expectedEpoch: Long = -1L
-        ): String? {
+        ): HttpResult? {
             if (!isHardwareOnlineValid(context, expectedEpoch)) return null
 
             val call = sharedHttpClient.newCall(request)
@@ -583,7 +732,7 @@ class UsageTrackerService : Service() {
             if (!isHardwareOnlineValid(context, expectedEpoch)) {
                 activeOnlineCalls.remove(call)
                 call.cancel()
-                Log.w("UsageTrackerService", "Hủy bỏ request online string ngay sau khi đăng ký do phần cứng đã ngắt")
+                Log.w("UsageTrackerService", "Hủy bỏ request online http ngay sau khi đăng ký do phần cứng đã ngắt")
                 return null
             }
 
@@ -591,13 +740,30 @@ class UsageTrackerService : Service() {
                 val response = call.execute()
                 response.use { resp ->
                     if (!isHardwareOnlineValid(context, expectedEpoch)) return null
-                    return if (resp.isSuccessful) resp.body?.string() else null
+                    val bodyString = resp.body?.string()
+                    val etag = resp.header("ETag")
+                    return HttpResult(
+                        code = resp.code,
+                        body = bodyString,
+                        etag = etag,
+                        isSuccessful = resp.isSuccessful
+                    )
                 }
             } catch (e: Exception) {
-                Log.w("UsageTrackerService", "executeOnlineStringGuarded failed/cancelled: ${e.message}")
+                Log.w("UsageTrackerService", "executeOnlineHttpGuarded failed/cancelled: ${e.message}")
                 return null
             } finally {
                 activeOnlineCalls.remove(call)
+            }
+        }
+
+        fun executeOnlineStringGuarded(
+            request: okhttp3.Request,
+            context: Context,
+            expectedEpoch: Long = -1L
+        ): String? {
+            return executeOnlineHttpGuarded(request, context, expectedEpoch)?.let {
+                if (it.isSuccessful) it.body else null
             }
         }
 
@@ -906,6 +1072,120 @@ class UsageTrackerService : Service() {
             }
         }
 
+        @JvmStatic
+        fun evaluateLocationCommand(
+            currentStatus: String,
+            requestedAt: Long,
+            now: Long,
+            isGpsEnabled: Boolean,
+            hasLocationFix: Boolean
+        ): LocationCommandDecision {
+            if (currentStatus != LocationProtocol.STATUS_PENDING &&
+                currentStatus != LocationProtocol.STATUS_SEARCHING_FIX &&
+                currentStatus != LocationProtocol.STATUS_WAITING_GPS) {
+                return LocationCommandDecision.Ignore
+            }
+            // Fail-closed: requestedAt must be valid positive timestamp
+            if (requestedAt <= 0L) {
+                return LocationCommandDecision.Ignore
+            }
+            // Anti Clock-Skew / Anti-Future Timestamp Defense: reject timestamps > now + 60_000L
+            if (requestedAt > now + 60_000L) {
+                return LocationCommandDecision.Ignore
+            }
+            // 1. Kiểm tra hết hạn 3 phút (COMMAND_EXPIRY_TIMEOUT_MS)
+            if ((now - requestedAt) > LocationProtocol.COMMAND_EXPIRY_TIMEOUT_MS) {
+                return LocationCommandDecision.Expire(requestedAt, now)
+            }
+            // 2. Nếu GPS chưa bật: nhắc học sinh bật vị trí
+            if (!isGpsEnabled) {
+                return LocationCommandDecision.PromptGps(
+                    requestedAt = requestedAt,
+                    updatedAt = now,
+                    shouldUpdateStatus = (currentStatus != LocationProtocol.STATUS_WAITING_GPS)
+                )
+            }
+            // 3. Nếu GPS đã bật và đã có fix vị trí: hoàn tất
+            if (hasLocationFix) {
+                return LocationCommandDecision.Complete(requestedAt = requestedAt, completedAt = now)
+            }
+            // 4. Nếu GPS đã bật nhưng chưa có fix vệ tinh: chuyển sang SEARCHING_FIX
+            return LocationCommandDecision.SearchingFix(
+                requestedAt = requestedAt,
+                updatedAt = now,
+                shouldUpdateStatus = (currentStatus != LocationProtocol.STATUS_SEARCHING_FIX)
+            )
+        }
+
+        fun notifyStudentToEnableGps(context: Context): Boolean {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    val hasNotifPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+                        context,
+                        android.Manifest.permission.POST_NOTIFICATIONS
+                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                    if (!hasNotifPermission) {
+                        Log.w("UsageTrackerService", "Quyền POST_NOTIFICATIONS chưa được cấp, bỏ qua gửi thông báo thanh trạng thái")
+                        return false
+                    }
+                }
+
+                val now = System.currentTimeMillis()
+                val last = lastGpsPromptTimestamp.get()
+                if (now - last < 30_000L) {
+                    // Rate-limit thông báo để tránh spam
+                    return false
+                }
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                    val channel = NotificationChannel(
+                        GPS_CHANNEL_ID,
+                        "Yêu Cầu Định Vị GPS",
+                        NotificationManager.IMPORTANCE_HIGH
+                    ).apply {
+                        description = "Thông báo yêu cầu bật GPS / định vị từ phụ huynh"
+                        setShowBadge(true)
+                        enableVibration(true)
+                    }
+                    manager?.createNotificationChannel(channel)
+                }
+
+                val settingsIntent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                }
+                val pendingIntent = PendingIntent.getActivity(
+                    context,
+                    101,
+                    settingsIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+
+                val notification = NotificationCompat.Builder(context, GPS_CHANNEL_ID)
+                    .setSmallIcon(android.R.drawable.ic_menu_mylocation)
+                    .setContentTitle("📍 Yêu cầu định vị từ Phụ Huynh")
+                    .setContentText("Phụ huynh đang yêu cầu định vị thiết bị. Chạm để bật GPS ngay.")
+                    .setStyle(NotificationCompat.BigTextStyle().bigText("Phụ huynh đang gửi tín hiệu yêu cầu cập nhật vị trí thiết bị của bạn. Vui lòng chạm vào đây để bật GPS / Dịch vụ vị trí."))
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .setCategory(NotificationCompat.CATEGORY_ALARM)
+                    .setAutoCancel(true)
+                    .setContentIntent(pendingIntent)
+                    .build()
+
+                val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                if (manager != null) {
+                    if (lastGpsPromptTimestamp.compareAndSet(last, now)) {
+                        manager.notify(GPS_NOTIFICATION_ID, notification)
+                        return true
+                    }
+                }
+                return false
+            } catch (e: Exception) {
+                Log.w("UsageTrackerService", "Không thể gửi thông báo GPS: ${e.message}")
+                return false
+            }
+        }
+
         fun checkLocationRequest(context: Context) {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val pairedCode = prefs.getString("paired_code", "") ?: ""
@@ -916,42 +1196,217 @@ class UsageTrackerService : Service() {
 
             syncScope.launch {
                 try {
-                    val req = okhttp3.Request.Builder()
-                        .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId/commands/locate_now.json")
-                        .build()
-                    val body = executeOnlineStringGuarded(req, context)
+                    val startEpoch = GuardianAccessibilityService.telemetryEpoch.get()
+                    if (!isHardwareOnlineValid(context, startEpoch)) {
+                        Log.w("UsageTrackerService", "Phần cứng không online hoặc bị khóa, hủy bỏ checkLocationRequest")
+                        return@launch
+                    }
+
+                    val cmdUrl = LocationProtocol.getCommandUrl(FIREBASE_RTDB_URL, pairedCode, androidId, LocationProtocol.COMMAND_LOCATE_NOW)
+                    val req = LocationProtocol.buildGetCommandRequest(cmdUrl)
+                    val initialResult = executeOnlineHttpGuarded(req, context, startEpoch) ?: return@launch
+                    val body = initialResult.body
+                    val initialEtag = initialResult.etag
+                    if (initialEtag.isNullOrBlank()) {
+                        Log.w("UsageTrackerService", "Fail-Closed: Firebase RTDB không trả về ETag cho command, hủy bỏ để bảo vệ OCC.")
+                        return@launch
+                    }
                     if (!body.isNullOrEmpty() && body != "null") {
                         val json = JSONObject(body)
                         val status = json.optString("status", "")
-                        if (status == "PENDING" || status.isEmpty()) {
-                            val loc = LocationHelper.fetchCurrentLocation(context)
-                            val mediaType = "application/json; charset=utf-8".toMediaType()
-                            if (loc != null) {
-                                val locBody = loc.toJsonObject().toString().toRequestBody(mediaType)
+                        val requestedAt = json.optLong("requestedAt", 0L)
+                        val now = System.currentTimeMillis()
+                        val mediaType = "application/json; charset=utf-8".toMediaType()
 
-                                val putFamLoc = okhttp3.Request.Builder()
-                                    .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId/location.json")
-                                    .put(locBody)
-                                    .build()
-                                executeOnlineGuarded(putFamLoc, context)
+                        // Tầng 1: Kiểm tra sơ bộ tính hợp lệ và hết hạn (Lazy Hardware Invariant)
+                        // Tuyệt đối không bật GPS hoặc dò vị trí nếu command đã hết hạn hoặc không hợp lệ
+                        val preDecision = evaluateLocationCommand(
+                            currentStatus = status,
+                            requestedAt = requestedAt,
+                            now = now,
+                            isGpsEnabled = false,
+                            hasLocationFix = false
+                        )
 
-                                val putDevLoc = okhttp3.Request.Builder()
-                                    .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$androidId/location.json")
-                                    .put(locBody)
-                                    .build()
-                                executeOnlineGuarded(putDevLoc, context)
+                        if (preDecision is LocationCommandDecision.Ignore) {
+                            return@launch
+                        }
+
+                        if (preDecision is LocationCommandDecision.Expire) {
+                            val expiredJson = JSONObject().apply {
+                                put("status", LocationProtocol.STATUS_EXPIRED)
+                                put("requestedAt", preDecision.requestedAt)
+                                put("message", "Yêu cầu định vị đã hết hạn (quá 3 phút).")
+                                put("expiredAt", preDecision.expiredAt)
                             }
-
-                            val doneJson = JSONObject().apply {
-                                put("status", "COMPLETED")
-                                put("completedAt", System.currentTimeMillis())
+                            val expiredBody = expiredJson.toString().toRequestBody(mediaType)
+                            val updateCmd = LocationProtocol.buildConditionalPutRequest(cmdUrl, initialEtag, expiredBody)
+                            val res = executeOnlineHttpGuarded(updateCmd, context, startEpoch)
+                            if (res?.code == 412) {
+                                Log.w("UsageTrackerService", "Firebase RTDB HTTP 412: Command đã bị thay đổi, hủy ghi EXPIRED.")
                             }
-                            val doneBody = doneJson.toString().toRequestBody(mediaType)
-                            val updateCmd = okhttp3.Request.Builder()
-                                .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId/commands/locate_now.json")
-                                .put(doneBody)
-                                .build()
-                            executeOnlineGuarded(updateCmd, context)
+                            return@launch
+                        }
+
+                        // Tầng 2: Kiểm tra phần cứng GPS
+                        val isGpsOn = LocationHelper.isGpsEnabled(context)
+                        if (!isGpsOn) {
+                            val notifDispatched = notifyStudentToEnableGps(context)
+                            if (status != LocationProtocol.STATUS_WAITING_GPS) {
+                                val hasNotifPerm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    androidx.core.content.ContextCompat.checkSelfPermission(
+                                        context,
+                                        android.Manifest.permission.POST_NOTIFICATIONS
+                                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                } else true
+
+                                val feedbackMsg = if (!hasNotifPerm) {
+                                    "Thiết bị con chưa bật GPS và chưa cấp quyền thông báo. Vui lòng nhắc con mở ứng dụng để bật vị trí."
+                                } else if (notifDispatched) {
+                                    "Thiết bị con chưa bật GPS. Đã gửi thông báo nhắc con bật vị trí."
+                                } else {
+                                    "Thiết bị con chưa bật GPS. Đang chờ con bật vị trí trong Cài đặt."
+                                }
+
+                                val waitingJson = JSONObject().apply {
+                                    put("status", LocationProtocol.STATUS_WAITING_GPS)
+                                    put("requestedAt", requestedAt)
+                                    put("message", feedbackMsg)
+                                    put("updatedAt", now)
+                                }
+                                val waitingBody = waitingJson.toString().toRequestBody(mediaType)
+                                val updateCmd = LocationProtocol.buildConditionalPutRequest(cmdUrl, initialEtag, waitingBody)
+                                val res = executeOnlineHttpGuarded(updateCmd, context, startEpoch)
+                                if (res?.code == 412) {
+                                    Log.w("UsageTrackerService", "Firebase RTDB HTTP 412: Command đã bị thay đổi, hủy ghi WAITING_GPS.")
+                                }
+                            }
+                            return@launch
+                        }
+
+                        // Tầng 3: GPS đã bật -> Truy vấn tọa độ vệ tinh (Lazy Location Fix với Hardware Fencing)
+                        if (!isHardwareOnlineValid(context, startEpoch)) {
+                            Log.w("UsageTrackerService", "Phần cứng đã ngắt trước khi dò GPS, hủy bỏ.")
+                            return@launch
+                        }
+                        val loc = LocationHelper.fetchCurrentLocation(context)
+                        if (!isHardwareOnlineValid(context, startEpoch)) {
+                            Log.w("UsageTrackerService", "Phần cứng đã ngắt trong khi dò GPS, hủy bỏ kết quả stale.")
+                            return@launch
+                        }
+
+                        val decision = evaluateLocationCommand(
+                            currentStatus = status,
+                            requestedAt = requestedAt,
+                            now = now,
+                            isGpsEnabled = true,
+                            hasLocationFix = (loc != null)
+                        )
+
+                        when (decision) {
+                            is LocationCommandDecision.SearchingFix -> {
+                                if (decision.shouldUpdateStatus) {
+                                    val searchingJson = JSONObject().apply {
+                                        put("status", LocationProtocol.STATUS_SEARCHING_FIX)
+                                        put("requestedAt", decision.requestedAt)
+                                        put("message", "Đang dò tìm tọa độ vệ tinh GPS...")
+                                        put("updatedAt", decision.updatedAt)
+                                    }
+                                    val searchingBody = searchingJson.toString().toRequestBody(mediaType)
+                                    val verifyReq = LocationProtocol.buildGetCommandRequest(cmdUrl)
+                                    val freshResult = executeOnlineHttpGuarded(verifyReq, context, startEpoch) ?: return@launch
+                                    val freshEtag = freshResult.etag
+                                    if (freshEtag.isNullOrBlank()) {
+                                        Log.w("UsageTrackerService", "Fail-Closed: Thiếu fresh ETag cho SEARCHING_FIX, hủy bỏ.")
+                                        return@launch
+                                    }
+                                    val freshBody = freshResult.body
+                                    if (freshBody.isNullOrEmpty() || freshBody == "null") return@launch
+                                    val freshJson = JSONObject(freshBody)
+                                    val freshStatus = freshJson.optString("status", "")
+                                    val freshReqAt = freshJson.optLong("requestedAt", 0L)
+                                    if (!LocationProtocol.validateOccPrecondition(freshStatus, freshReqAt, decision.requestedAt)) {
+                                        Log.w("UsageTrackerService", "Precondition không hợp lệ khi cập nhật SEARCHING_FIX, hủy bỏ.")
+                                        return@launch
+                                    }
+                                    val updateCmd = LocationProtocol.buildConditionalPutRequest(cmdUrl, freshEtag, searchingBody)
+                                    val res = executeOnlineHttpGuarded(updateCmd, context, startEpoch)
+                                    if (res?.code == 412) {
+                                        Log.w("UsageTrackerService", "Firebase RTDB HTTP 412: Command đã bị thay đổi, hủy ghi SEARCHING_FIX.")
+                                    }
+                                }
+                            }
+                            is LocationCommandDecision.Complete -> {
+                                // Bước 1: OCC Pre-condition Guard & ETag Acquisition - Đọc lại command với header X-Firebase-ETag: true
+                                val verifyReq = LocationProtocol.buildGetCommandRequest(cmdUrl)
+                                val preCommitResult = executeOnlineHttpGuarded(verifyReq, context, startEpoch) ?: return@launch
+                                val preCommitBody = preCommitResult.body
+                                val commitEtag = preCommitResult.etag
+                                if (commitEtag.isNullOrBlank()) {
+                                    Log.w("UsageTrackerService", "Fail-Closed: Thiếu ETag trước khi chốt COMPLETED, hủy bỏ để bảo vệ OCC.")
+                                    return@launch
+                                }
+                                if (preCommitBody.isNullOrEmpty() || preCommitBody == "null") {
+                                    return@launch
+                                }
+                                val preCommitJson = JSONObject(preCommitBody)
+                                val preCommitReqAt = preCommitJson.optLong("requestedAt", 0L)
+                                val preCommitStatus = preCommitJson.optString("status", "")
+                                val isOccValid = LocationProtocol.validateOccPrecondition(
+                                    serverStatus = preCommitStatus,
+                                    serverRequestedAt = preCommitReqAt,
+                                    targetRequestedAt = decision.requestedAt
+                                )
+                                if (!isOccValid) {
+                                    Log.w("UsageTrackerService", "Precondition không hợp lệ hoặc lệnh đã được phụ huynh thay đổi, hủy bỏ.")
+                                    return@launch
+                                }
+
+                                // Bước 2: Atomic CAS chốt trạng thái COMPLETED lên /commands/locate_now.json TRƯỚC TIÊN
+                                // Header if-match: commitEtag đảm bảo tính nguyên tử tuyệt đối ở tầng máy chủ RTDB.
+                                // Nhúng trực tiếp tọa độ vào payload của command để ràng buộc chặt chẽ vị trí với phiên lệnh.
+                                val doneJson = JSONObject().apply {
+                                    put("status", LocationProtocol.STATUS_COMPLETED)
+                                    put("requestedAt", decision.requestedAt)
+                                    put("completedAt", decision.completedAt)
+                                    if (loc != null) {
+                                        put("latitude", loc.latitude)
+                                        put("longitude", loc.longitude)
+                                        put("accuracy", loc.accuracy.toDouble())
+                                        put("provider", loc.provider)
+                                    }
+                                }
+                                val doneBody = doneJson.toString().toRequestBody(mediaType)
+                                val doneReq = LocationProtocol.buildConditionalPutRequest(cmdUrl, commitEtag, doneBody)
+                                val doneResult = executeOnlineHttpGuarded(doneReq, context, startEpoch) ?: return@launch
+                                if (!LocationProtocol.shouldPublishLocationAfterCas(doneResult.code)) {
+                                    Log.w("UsageTrackerService", "Fail-Closed: Firebase RTDB CAS không trả về HTTP 200 (code=${doneResult.code}), hủy công bố vị trí.")
+                                    return@launch
+                                }
+
+                                // Bước 3: Sau khi CAS thành công 100% (HTTP 200 chứng minh command hợp lệ duy nhất),
+                                // kiểm tra fencing lại một lần nữa trước khi công bố vị trí chính thức vào /location.json
+                                if (!isHardwareOnlineValid(context, startEpoch)) {
+                                    Log.w("UsageTrackerService", "Phần cứng đã ngắt trước khi công bố location.json, hủy bỏ để tránh ghi stale telemetry.")
+                                    return@launch
+                                }
+
+                                if (loc != null) {
+                                    val locJson = loc.toJsonObject().apply {
+                                        put("commandRequestedAt", decision.requestedAt)
+                                        put("commandCompletedAt", decision.completedAt)
+                                        put("isCommandFix", true)
+                                    }
+                                    val locBody = locJson.toString().toRequestBody(mediaType)
+                                    val famLocUrl = LocationProtocol.getFamilyLocationUrl(FIREBASE_RTDB_URL, pairedCode, androidId)
+                                    val devLocUrl = LocationProtocol.getDeviceLocationUrl(FIREBASE_RTDB_URL, androidId)
+                                    executeOnlineGuarded(okhttp3.Request.Builder().url(famLocUrl).put(locBody).build(), context, startEpoch)
+                                    executeOnlineGuarded(okhttp3.Request.Builder().url(devLocUrl).put(locBody).build(), context, startEpoch)
+                                }
+                            }
+                            else -> {
+                                // Ignore / Expire đã được chặn ở Tầng 1
+                            }
                         }
                     }
                 } catch (e: Exception) {
@@ -2031,9 +2486,19 @@ class UsageTrackerService : Service() {
                 description = "Thông báo bản cập nhật mới cho SmartGuardian"
                 setShowBadge(true)
             }
+            val gpsChannel = NotificationChannel(
+                GPS_CHANNEL_ID,
+                "Yêu Cầu Định Vị GPS",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Thông báo yêu cầu bật GPS / định vị từ phụ huynh"
+                setShowBadge(true)
+                enableVibration(true)
+            }
             val manager = getSystemService(NotificationManager::class.java)
             manager?.createNotificationChannel(channel)
             manager?.createNotificationChannel(otaChannel)
+            manager?.createNotificationChannel(gpsChannel)
         }
     }
 

@@ -407,7 +407,7 @@ class GuardianAccessibilityService : AccessibilityService() {
                     win.type == AccessibilityWindowInfo.TYPE_APPLICATION &&
                     win.root?.packageName?.toString()?.trim() == packageName
                 } ?: false
-                if (hasAppWindow) packageName else rootPkg
+                if (hasAppWindow) packageName else null
             }
         } catch (e: Exception) {
             Log.w("GuardianAccess", "rootInActiveWindow check failed: ${e.message}")

@@ -45,6 +45,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -299,6 +300,172 @@ class MainActivity : AppCompatActivity() {
             return diff in 0L..45000L
         }
 
+        data class WebBannerDisplayState(
+            val isVisible: Boolean,
+            val headerText: String,
+            val domainText: String,
+            val subtitleText: String,
+            val badgeText: String,
+            val isLiveBrowsing: Boolean,
+            val isBlocked: Boolean
+        )
+
+        @JvmStatic
+        @JvmOverloads
+        fun evaluateWebBannerDisplay(
+            isOnline: Boolean,
+            webDomain: String,
+            webTitle: String,
+            webBrowser: String,
+            webTimestamp: Long,
+            webIsBlocked: Boolean,
+            activePkg: String,
+            activeCat: String,
+            now: Long,
+            webUrl: String = ""
+        ): WebBannerDisplayState {
+            val rawDomain = webDomain.trim()
+            val cleanDomain = rawDomain
+                .replaceFirst(Regex("^https?://", RegexOption.IGNORE_CASE), "")
+                .split('/', ':', '?', '#')[0]
+                .lowercase(Locale.ROOT)
+
+            val domainRegex = Regex("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$")
+            val isValidDomain = cleanDomain.isNotEmpty() && domainRegex.matches(cleanDomain)
+            if (!isValidDomain) {
+                return WebBannerDisplayState(
+                    isVisible = false,
+                    headerText = "",
+                    domainText = "",
+                    subtitleText = "",
+                    badgeText = "",
+                    isLiveBrowsing = false,
+                    isBlocked = false
+                )
+            }
+
+            // Anti-Malicious URL & Pseudo-Protocol defense (XSS/Telemetry Spoofing)
+            if (webUrl.isNotEmpty()) {
+                val lowerUrl = webUrl.trim().lowercase(Locale.ROOT)
+                if (lowerUrl.startsWith("javascript:") || lowerUrl.startsWith("data:") || lowerUrl.startsWith("file:") || lowerUrl.startsWith("vbscript:")) {
+                    return WebBannerDisplayState(
+                        isVisible = false,
+                        headerText = "",
+                        domainText = "",
+                        subtitleText = "",
+                        badgeText = "",
+                        isLiveBrowsing = false,
+                        isBlocked = false
+                    )
+                }
+            }
+
+            // Anti-Telemetry Spoofing & Fail-Closed Time Invariant: Reject future or non-positive timestamps
+            if (webTimestamp <= 0L || webTimestamp > now) {
+                return WebBannerDisplayState(
+                    isVisible = false,
+                    headerText = "",
+                    domainText = "",
+                    subtitleText = "",
+                    badgeText = "",
+                    isLiveBrowsing = false,
+                    isBlocked = false
+                )
+            }
+
+            val cleanTitle = webTitle.replace(Regex("<[^>]*>"), "").replace(Regex("[\r\n\t]+"), " ").trim().take(80)
+            val displayDomain = if (cleanTitle.isNotEmpty() && cleanTitle != cleanDomain) "$cleanDomain • $cleanTitle" else cleanDomain
+
+            val webAgeMins = (now - webTimestamp) / 60000L
+            if (isOnline) {
+                if (webAgeMins <= 15L) {
+                    val timeStr = if (webAgeMins < 1L) "Vừa truy cập" else "${webAgeMins}m trước"
+                    val subtitle = "$webBrowser • $timeStr"
+                    if (webIsBlocked) {
+                        return WebBannerDisplayState(
+                            isVisible = true,
+                            headerText = "TRANG WEB ĐÃ BỊ CHẶN BỞI BỘ LỌC:",
+                            domainText = displayDomain,
+                            subtitleText = subtitle,
+                            badgeText = "🚫 ĐÃ CHẶN",
+                            isLiveBrowsing = false,
+                            isBlocked = true
+                        )
+                    } else {
+                        val isWebLive = (activeCat == "BROWSER" || activePkg.contains("chrome") || activePkg.contains("browser") || webAgeMins < 2L)
+                        val badge = if (isWebLive) "🟢 ĐANG DUYỆT" else "⚪ VỪA XEM"
+                        return WebBannerDisplayState(
+                            isVisible = true,
+                            headerText = "TRANG WEB ĐANG TRUY CẬP (REALTIME):",
+                            domainText = displayDomain,
+                            subtitleText = subtitle,
+                            badgeText = badge,
+                            isLiveBrowsing = isWebLive,
+                            isBlocked = false
+                        )
+                    }
+                } else {
+                    return WebBannerDisplayState(
+                        isVisible = false,
+                        headerText = "",
+                        domainText = "",
+                        subtitleText = "",
+                        badgeText = "",
+                        isLiveBrowsing = false,
+                        isBlocked = false
+                    )
+                }
+            } else {
+                // Zero-Phantom-Online Rule: Khi offline, cấm hiển thị nhãn "(REALTIME)" giả mạo
+                if (webAgeMins <= 60L) {
+                    val subtitle = "$webBrowser • ${webAgeMins}m trước khi ngoại tuyến"
+                    val badge = if (webIsBlocked) "[🔴 OFFLINE] • 🚫 ĐÃ CHẶN" else "[🔴 OFFLINE]"
+                    return WebBannerDisplayState(
+                        isVisible = true,
+                        headerText = "LẦN CUỐI GHI NHẬN TRƯỚC KHI NGOẠI TUYẾN:",
+                        domainText = displayDomain,
+                        subtitleText = subtitle,
+                        badgeText = badge,
+                        isLiveBrowsing = false,
+                        isBlocked = webIsBlocked
+                    )
+                } else {
+                    return WebBannerDisplayState(
+                        isVisible = false,
+                        headerText = "",
+                        domainText = "",
+                        subtitleText = "",
+                        badgeText = "",
+                        isLiveBrowsing = false,
+                        isBlocked = false
+                    )
+                }
+            }
+        }
+
+        @JvmStatic
+        fun evaluateParentDashboardSubtitle(
+            isOnline: Boolean,
+            deviceModel: String,
+            webDomain: String,
+            webTimestamp: Long,
+            now: Long
+        ): String {
+            if (!isOnline) {
+                return ""
+            }
+            val cleanDomain = webDomain.trim()
+                .replaceFirst(Regex("^https?://", RegexOption.IGNORE_CASE), "")
+                .split('/', ':', '?', '#')[0]
+                .lowercase(Locale.ROOT)
+            val domainRegex = Regex("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$")
+            val isValidDomain = cleanDomain.isNotEmpty() && domainRegex.matches(cleanDomain)
+
+            val isWebRecent = isValidDomain && webTimestamp > 0L && webTimestamp <= now && (now - webTimestamp) <= 600_000L
+            val webSuffix = if (isWebRecent) " • 🌐 $cleanDomain" else ""
+            return "🟢 Đang hoạt động • $deviceModel$webSuffix"
+        }
+
     }
 
     private val TAG = "MainActivity"
@@ -385,6 +552,7 @@ class MainActivity : AppCompatActivity() {
     )
     private val familyChildrenList = mutableListOf<FamilyChildDevice>()
     private var activeSelectedChildId: String = ""
+    private var currentFamilyCode: String = ""
 
     // 5. Modals & Overlays
     private lateinit var layoutPinConfirmModal: FrameLayout
@@ -795,8 +963,48 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Bấm vào thiết bị con trong Parent Hub -> Mở Bảng Giám Sát Đồng Hành
-        findViewById<View>(R.id.layoutParentChildRow).setOnClickListener {
-            showChildCompanionDialog()
+        layoutParentChildRow?.setOnClickListener {
+            val child = familyChildrenList.firstOrNull { it.deviceId == activeSelectedChildId }
+            showChildCompanionDialog(child?.deviceId ?: activeSelectedChildId)
+        }
+
+        tvParentChildName.setOnClickListener {
+            val child = familyChildrenList.firstOrNull { it.deviceId == activeSelectedChildId }
+            if (child != null && currentFamilyCode.isNotEmpty()) {
+                showRenameChildDialog(currentFamilyCode, child)
+            }
+        }
+
+        tvParentLocationTime.setOnClickListener {
+            val child = familyChildrenList.firstOrNull { it.deviceId == activeSelectedChildId }
+            if (child != null && currentFamilyCode.isNotEmpty()) {
+                requestChildLocation(currentFamilyCode, child.deviceId)
+            }
+        }
+
+        btnParentOpenMap.setOnClickListener {
+            val child = familyChildrenList.firstOrNull { it.deviceId == activeSelectedChildId }
+            if (child == null) return@setOnClickListener
+            val locObj = child.rawObj.optJSONObject("location")
+            val lat = locObj?.optDouble("latitude", 0.0) ?: 0.0
+            val lng = locObj?.optDouble("longitude", 0.0) ?: 0.0
+            if (Math.abs(lat) > 0.0001 && Math.abs(lng) > 0.0001) {
+                try {
+                    val uri = Uri.parse("geo:$lat,$lng?q=$lat,$lng(${Uri.encode(child.childName)})")
+                    val intent = Intent(Intent.ACTION_VIEW, uri)
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    try {
+                        val webUri = Uri.parse("https://www.google.com/maps/search/?api=1&query=$lat,$lng")
+                        val webIntent = Intent(Intent.ACTION_VIEW, webUri)
+                        startActivity(webIntent)
+                    } catch (e2: Exception) {
+                        Toast.makeText(this, "Không thể mở bản đồ: ${e2.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } else if (currentFamilyCode.isNotEmpty()) {
+                requestChildLocation(currentFamilyCode, child.deviceId)
+            }
         }
 
         // Xử lý phản hồi tin nhắn của Phụ huynh
@@ -816,8 +1024,6 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "Vui lòng nhập lời nhắn gửi Bố Mẹ", Toast.LENGTH_SHORT).show()
             }
         }
-
-        layoutParentChildRow?.setOnClickListener { showChildCompanionDialog() }
     }
 
     private fun applyRoleRouting() {
@@ -1283,22 +1489,6 @@ class MainActivity : AppCompatActivity() {
 
             layoutChildSelectorChips.addView(chipView)
         }
-
-        // Chip Thêm Con ở cuối
-        val addChip = TextView(this).apply {
-            text = "➕ Thêm"
-            setTextColor(Color.parseColor("#38BDF8"))
-            textSize = 12f
-            setBackgroundResource(R.drawable.bg_add_child_chip)
-            setPadding(30, 16, 30, 16)
-            setOnClickListener {
-                showAddChildDialog(familyCode)
-            }
-        }
-        val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-        lp.setMargins(0, 0, 20, 0)
-        addChip.layoutParams = lp
-        layoutChildSelectorChips.addView(addChip)
     }
 
     private fun formatCompactDuration(mins: Long): String {
@@ -1308,24 +1498,29 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateActiveChildDashboard(familyCode: String, child: FamilyChildDevice) {
+        currentFamilyCode = familyCode
+        activeSelectedChildId = child.deviceId
+
         val isGirl = child.childName.lowercase().let { it.contains("linh") || it.contains("chi") || it.contains("gái") || it.contains("mai") }
         tvParentChildAvatar.text = if (isGirl) "👧" else "👦"
         tvParentChildName.text = child.childName
 
-        tvParentChildName.setOnClickListener {
-            showRenameChildDialog(familyCode, child)
-        }
-
-        layoutParentChildRow?.setOnClickListener {
-            showChildCompanionDialog(child.deviceId)
-        }
-
         val now = System.currentTimeMillis()
+        val webObj = child.rawObj.optJSONObject("web_activity")
+        val webDomain = webObj?.optString("domain", "") ?: ""
+        val webTs = webObj?.optLong("timestamp", 0L) ?: 0L
+
         if (child.isOnline) {
             dotParentChildOnline.setBackgroundColor(Color.parseColor("#10B981"))
             tvParentChildStatusBadge.text = "TRỰC TUYẾN"
             tvParentChildStatusBadge.setTextColor(Color.parseColor("#38BDF8"))
-            tvParentChildSubtitle.text = "🟢 Đang hoạt động • ${child.deviceModel}"
+            tvParentChildSubtitle.text = evaluateParentDashboardSubtitle(
+                isOnline = true,
+                deviceModel = child.deviceModel,
+                webDomain = webDomain,
+                webTimestamp = webTs,
+                now = now
+            )
         } else {
             dotParentChildOnline.setBackgroundColor(Color.parseColor("#64748B"))
             tvParentChildStatusBadge.text = "NGOẠI TUYẾN"
@@ -1346,33 +1541,14 @@ class MainActivity : AppCompatActivity() {
             tvParentLocationAddress.text = if (address.isNotEmpty()) address else "Tọa độ: ${"%.4f".format(lat)}, ${"%.4f".format(lng)}"
             val minDiff = if (timestamp > 0) maxOf(0L, (now - timestamp) / 60000L) else 999L
             val prefix = if (child.isOnline) "Cập nhật" else "[Snapshot Ngoại Tuyến]"
-            tvParentLocationTime.text = if (minDiff < 2) (if (child.isOnline) "Vừa cập nhật" else "$prefix Vừa cập nhật") else "$prefix ${minDiff}m trước"
-
+            tvParentLocationTime.text = if (minDiff < 2) (if (child.isOnline) "Vừa cập nhật 🔄" else "$prefix Vừa cập nhật 🔄") else "$prefix ${minDiff}m trước 🔄"
             btnParentOpenMap.text = "🗺️ Xem Vị Trí Trên Bản Đồ"
             btnParentOpenMap.setTextColor(Color.parseColor("#38BDF8"))
-            btnParentOpenMap.setOnClickListener {
-                try {
-                    val uri = Uri.parse("geo:$lat,$lng?q=$lat,$lng(${Uri.encode(child.childName)})")
-                    val intent = Intent(Intent.ACTION_VIEW, uri)
-                    startActivity(intent)
-                } catch (e: Exception) {
-                    try {
-                        val webUri = Uri.parse("https://www.google.com/maps/search/?api=1&query=$lat,$lng")
-                        val webIntent = Intent(Intent.ACTION_VIEW, webUri)
-                        startActivity(webIntent)
-                    } catch (e2: Exception) {
-                        Toast.makeText(this, "Không thể mở bản đồ: ${e2.message}", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
         } else {
             tvParentLocationAddress.text = "Chưa nhận được tọa độ GPS từ thiết bị của ${child.childName}"
-            tvParentLocationTime.text = "Chờ tín hiệu..."
-            btnParentOpenMap.text = "📍 Chờ Tín Hiệu GPS..."
-            btnParentOpenMap.setTextColor(Color.parseColor("#64748B"))
-            btnParentOpenMap.setOnClickListener {
-                Toast.makeText(this, "Thiết bị con chưa cập nhật vị trí GPS.", Toast.LENGTH_SHORT).show()
-            }
+            tvParentLocationTime.text = "Chạm để yêu cầu định vị..."
+            btnParentOpenMap.text = "📍 Yêu Cầu Con Bật GPS & Định Vị"
+            btnParentOpenMap.setTextColor(Color.parseColor("#38BDF8"))
         }
 
         // Screen Time & App Usage Thật từ Firebase
@@ -1522,12 +1698,103 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun requestChildLocation(familyCode: String, targetDeviceId: String) {
+        if (familyCode.isEmpty() || targetDeviceId.isEmpty()) {
+            Toast.makeText(this, "Không xác định được mã gia đình hoặc thiết bị con!", Toast.LENGTH_SHORT).show()
+            return
+        }
+        Toast.makeText(this, "📍 Đang kiểm tra trạng thái định vị của con...", Toast.LENGTH_SHORT).show()
+        btnParentOpenMap.text = "⏳ Đang Chờ Con Bật GPS..."
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                withTimeout(8000L) {
+                    val cmdUrl = UsageTrackerService.LocationProtocol.getCommandUrl(FIREBASE_RTDB_URL, familyCode, targetDeviceId)
+                    val dedicatedClient = firebaseClient.newBuilder()
+                        .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                        .readTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                        .writeTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                        .callTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
+                        .build()
+
+                    // Bước 1: Inspect lệnh hiện tại để tránh ghi đè lệnh đang xử lý và thu thập ETag cho OCC
+                    val getReq = UsageTrackerService.LocationProtocol.buildGetCommandRequest(cmdUrl)
+                    val getResult = dedicatedClient.newCall(getReq).execute()
+                    val existingEtag = getResult.header("ETag")
+                    val existingBody = getResult.body?.string()
+                    getResult.close()
+
+                    if (existingEtag.isNullOrBlank()) {
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(this@MainActivity, "Máy chủ không cấp ETag, vui lòng thử lại để đảm bảo an toàn OCC.", Toast.LENGTH_SHORT).show()
+                            btnParentOpenMap.text = "📍 Yêu Cầu Con Bật GPS & Định Vị"
+                        }
+                        return@withTimeout
+                    }
+
+                    val now = System.currentTimeMillis()
+                    if (!existingBody.isNullOrEmpty() && existingBody != "null") {
+                        val json = JSONObject(existingBody)
+                        val status = json.optString("status", "")
+                        val reqAt = json.optLong("requestedAt", 0L)
+                        if (UsageTrackerService.LocationProtocol.isCommandActiveAndRecent(status, reqAt, now)) {
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(this@MainActivity, "📍 Đang xử lý yêu cầu định vị gần nhất, vui lòng chờ...", Toast.LENGTH_SHORT).show()
+                                btnParentOpenMap.text = "⏳ Đang Chờ Con Bật GPS..."
+                            }
+                            return@withTimeout
+                        }
+                    }
+
+                    // Bước 2: Chuẩn bị payload PENDING và gửi Conditional PUT (OCC) với ETag bắt buộc
+                    val mediaType = "application/json; charset=utf-8".toMediaType()
+                    val cmdJson = JSONObject().apply {
+                        put("status", UsageTrackerService.LocationProtocol.STATUS_PENDING)
+                        put("requestedAt", now)
+                        put("requestedBy", "Phụ Huynh")
+                        put("message", "Phụ huynh đang yêu cầu định vị thiết bị.")
+                    }
+                    val body = cmdJson.toString().toRequestBody(mediaType)
+                    val putReq = UsageTrackerService.LocationProtocol.buildConditionalPutRequest(cmdUrl, existingEtag, body)
+
+                    val putResp = dedicatedClient.newCall(putReq).execute()
+                    val putCode = putResp.code
+                    val isSuccess = putResp.isSuccessful
+                    putResp.close()
+
+                    withContext(Dispatchers.Main) {
+                        if (isSuccess) {
+                            Toast.makeText(this@MainActivity, "📍 Đã gửi tín hiệu yêu cầu GPS tới máy con!", Toast.LENGTH_SHORT).show()
+                        } else if (putCode == 412) {
+                            Toast.makeText(this@MainActivity, "Yêu cầu định vị xung đột, vui lòng thử lại.", Toast.LENGTH_SHORT).show()
+                            btnParentOpenMap.text = "📍 Yêu Cầu Con Bật GPS & Định Vị"
+                        } else {
+                            Toast.makeText(this@MainActivity, "Gửi yêu cầu thất bại! (Mã lỗi: $putCode)", Toast.LENGTH_SHORT).show()
+                            btnParentOpenMap.text = "📍 Yêu Cầu Con Bật GPS & Định Vị"
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@MainActivity, "Lỗi mạng khi gửi yêu cầu GPS: ${e.message}", Toast.LENGTH_SHORT).show()
+                    btnParentOpenMap.text = "📍 Yêu Cầu Con Bật GPS & Định Vị"
+                }
+            }
+        }
+    }
+
     private fun loadParentHubData(isBackgroundPoll: Boolean = false) {
         val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
-        val currentCode = prefs.getString("family_code", "CVA-8A20") ?: "CVA-8A20"
+        val currentCode = prefs.getString("family_code", "") ?: ""
+        currentFamilyCode = currentCode
+        if (currentCode.isEmpty()) {
+            if (!isBackgroundPoll) {
+                tvParentHubFamilyCode.text = "CHƯA THIẾT LẬP"
+                renderEmptyChildSelector("")
+            }
+            return
+        }
         if (!isBackgroundPoll) {
             tvParentHubFamilyCode.text = currentCode
-
             btnParentAddChild.setOnClickListener {
                 showAddChildDialog(currentCode)
             }
@@ -1947,7 +2214,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun showChildCompanionDialog(preferredDeviceId: String? = null) {
         val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
-        val currentCode = prefs.getString("family_code", "CVA-8A20") ?: "CVA-8A20"
+        val currentCode = prefs.getString("family_code", "") ?: ""
+        if (currentCode.isEmpty()) {
+            Toast.makeText(this, "Chưa thiết lập mã gia đình!", Toast.LENGTH_SHORT).show()
+            return
+        }
 
         val dialogView = layoutInflater.inflate(R.layout.dialog_child_companion, null)
         val tvDialogChildAvatar = dialogView.findViewById<TextView>(R.id.tvDialogChildAvatar)
@@ -1965,6 +2236,14 @@ class MainActivity : AppCompatActivity() {
         val tvActiveAppIcon = dialogView.findViewById<TextView>(R.id.tvActiveAppIcon)
         val tvActiveAppName = dialogView.findViewById<TextView>(R.id.tvActiveAppName)
         val tvActiveAppLiveBadge = dialogView.findViewById<TextView>(R.id.tvActiveAppLiveBadge)
+
+        val layoutDialogActiveWebBanner = dialogView.findViewById<LinearLayout>(R.id.layoutDialogActiveWebBanner)
+        val tvActiveWebIcon = dialogView.findViewById<TextView>(R.id.tvActiveWebIcon)
+        val tvActiveWebHeader = dialogView.findViewById<TextView>(R.id.tvActiveWebHeader)
+        val tvActiveWebDomain = dialogView.findViewById<TextView>(R.id.tvActiveWebDomain)
+        val tvActiveWebUrl = dialogView.findViewById<TextView>(R.id.tvActiveWebUrl)
+        val tvActiveWebStatusBadge = dialogView.findViewById<TextView>(R.id.tvActiveWebStatusBadge)
+
         val layoutDialogAppListContainer = dialogView.findViewById<LinearLayout>(R.id.layoutDialogAppListContainer)
 
         val layoutDialogEmptyState = dialogView.findViewById<LinearLayout>(R.id.layoutDialogEmptyState)
@@ -2110,8 +2389,11 @@ class MainActivity : AppCompatActivity() {
             showSendParentReminderDialog(currentCode, targetChildDeviceId)
         }
 
-        // Tải dữ liệu Firebase của thiết bị con thời gian thực
-        lifecycleScope.launch(Dispatchers.IO) {
+        val isCompanionDataLoading = java.util.concurrent.atomic.AtomicBoolean(false)
+
+        // Tải dữ liệu Firebase của thiết bị con và tự động cập nhật thời gian thực (Live Polling Loop)
+        suspend fun loadCompanionData() {
+            if (!isCompanionDataLoading.compareAndSet(false, true)) return
             try {
                 val req = Request.Builder()
                     .url("$FIREBASE_RTDB_URL/families/$currentCode/devices.json")
@@ -2160,96 +2442,164 @@ class MainActivity : AppCompatActivity() {
                     val isOnline = computeDeviceOnlineStatus(targetDeviceObj)
 
                     val usageObj = targetDeviceObj.optJSONObject("usage")
-                                val balanceScore = usageObj?.optInt("balanceScore", 85) ?: 85
+                    val balanceScore = usageObj?.optInt("balanceScore", 85) ?: 85
 
-                                val activeAppObj = targetDeviceObj.optJSONObject("active_app")
-                                val activePkg = activeAppObj?.optString("packageName", "SCREEN_OFF") ?: "SCREEN_OFF"
-                                val activeName = activeAppObj?.optString("appName", "Màn hình khóa / Màn hình tắt") ?: "Màn hình khóa / Màn hình tắt"
-                                val activeCat = activeAppObj?.optString("category", "OFFLINE") ?: "OFFLINE"
-                                val activeIsFg = activeAppObj?.optBoolean("isForeground", false) ?: false
+                    val activeAppObj = targetDeviceObj.optJSONObject("active_app")
+                    val activePkg = activeAppObj?.optString("packageName", "SCREEN_OFF") ?: "SCREEN_OFF"
+                    val activeName = activeAppObj?.optString("appName", "Màn hình khóa / Màn hình tắt") ?: "Màn hình khóa / Màn hình tắt"
+                    val activeCat = activeAppObj?.optString("category", "OFFLINE") ?: "OFFLINE"
+                    val activeIsFg = activeAppObj?.optBoolean("isForeground", false) ?: false
 
-                                val historyArr = targetDeviceObj.optJSONArray("app_history") ?: usageObj?.optJSONArray("appHistory")
-                                val loadedApps = mutableListOf<CompanionAppItem>()
-                                if (historyArr != null) {
-                                    for (i in 0 until historyArr.length()) {
-                                        val appItem = historyArr.optJSONObject(i) ?: continue
-                                        val pName = appItem.optString("packageName", "")
-                                        val aName = appItem.optString("appName", pName)
-                                        val cat = appItem.optString("category", "UTILITY")
-                                        val catLbl = appItem.optString("categoryLabel", "Ứng dụng")
-                                        val durMin = appItem.optInt("durationMinutes", 1)
-                                        val lastUsed = appItem.optLong("lastTimeUsed", 0L)
-                                        val isThisAppOnline = activeIsFg && (pName == activePkg)
+                    val webActObj = targetDeviceObj.optJSONObject("web_activity")
+                    val webDomain = webActObj?.optString("domain", "") ?: ""
+                    val webUrl = webActObj?.optString("url", "") ?: ""
+                    val webTitle = webActObj?.optString("title", "") ?: ""
+                    val webBrowser = webActObj?.optString("browserName", "Trình duyệt Web") ?: "Trình duyệt Web"
+                    val webTimestamp = webActObj?.optLong("timestamp", 0L) ?: 0L
+                    val webIsBlocked = webActObj?.optBoolean("isBlocked", false) ?: false
 
-                                        loadedApps.add(
-                                            CompanionAppItem(
-                                                packageName = pName,
-                                                appName = aName,
-                                                category = cat,
-                                                categoryLabel = catLbl,
-                                                durationMinutes = durMin,
-                                                lastTimeUsed = lastUsed,
-                                                isOnline = isThisAppOnline
-                                            )
-                                        )
-                                    }
-                                }
+                    val historyArr = targetDeviceObj.optJSONArray("app_history") ?: usageObj?.optJSONArray("appHistory")
+                    val loadedApps = mutableListOf<CompanionAppItem>()
+                    if (historyArr != null) {
+                        for (i in 0 until historyArr.length()) {
+                            val appItem = historyArr.optJSONObject(i) ?: continue
+                            val pName = appItem.optString("packageName", "")
+                            val aName = appItem.optString("appName", pName)
+                            val cat = appItem.optString("category", "UTILITY")
+                            val catLbl = appItem.optString("categoryLabel", "Ứng dụng")
+                            val durMin = appItem.optInt("durationMinutes", 1)
+                            val lastUsed = appItem.optLong("lastTimeUsed", 0L)
+                            val isThisAppOnline = activeIsFg && (pName == activePkg)
 
+                            loadedApps.add(
+                                CompanionAppItem(
+                                    packageName = pName,
+                                    appName = aName,
+                                    category = cat,
+                                    categoryLabel = catLbl,
+                                    durationMinutes = durMin,
+                                    lastTimeUsed = lastUsed,
+                                    isOnline = isThisAppOnline
+                                )
+                            )
+                        }
+                    }
 
+                    withContext(Dispatchers.Main) {
+                        val savedChildName = targetDeviceObj.optString("childName", "").trim()
+                        val titleName = if (savedChildName.isNotEmpty()) "$savedChildName • $devModel" else devModel
+                        tvDialogChildTitle.text = titleName
+                        val lowerName = savedChildName.lowercase()
+                        tvDialogChildAvatar.text = if (lowerName.contains("loan") || lowerName.contains("mẹ") || lowerName.contains("chị") || lowerName.contains("hoa") || lowerName.contains("linh") || lowerName.contains("nga") || lowerName.contains("mrs")) "👧" else "👦"
+                        tvDialogBalanceScore.text = "⚖️ $balanceScore/100"
 
-                                withContext(Dispatchers.Main) {
-                                    val savedChildName = targetDeviceObj.optString("childName", "").trim()
-                                    val titleName = if (savedChildName.isNotEmpty()) "$savedChildName • $devModel" else devModel
-                                    tvDialogChildTitle.text = titleName
-                                    val lowerName = savedChildName.lowercase()
-                                    tvDialogChildAvatar.text = if (lowerName.contains("loan") || lowerName.contains("mẹ") || lowerName.contains("chị") || lowerName.contains("hoa") || lowerName.contains("linh") || lowerName.contains("nga") || lowerName.contains("mrs")) "👧" else "👦"
-                                    tvDialogBalanceScore.text = "⚖️ $balanceScore/100"
+                        if (isOnline) {
+                            tvDialogChildSubtitle.text = "🟢 Trực tuyến • Đồng bộ thời gian thực"
+                            tvDialogChildSubtitle.setTextColor(Color.parseColor("#34D399"))
 
-                                    if (isOnline) {
-                                        tvDialogChildSubtitle.text = "🟢 Trực tuyến • Đồng bộ thời gian thực"
-                                        tvDialogChildSubtitle.setTextColor(Color.parseColor("#34D399"))
-
-                                        if (activeIsFg && activePkg != "SCREEN_OFF" && activePkg != "HOME") {
-                                            tvActiveAppTitle.text = "ỨNG DỤNG ĐANG MỞ TRÊN MÀN HÌNH:"
-                                            tvActiveAppTitle.setTextColor(Color.parseColor("#FDE047"))
-                                            tvActiveAppIcon.text = getAppIcon(activeCat, activePkg, activeName)
-                                            tvActiveAppName.text = activeName
-                                            tvActiveAppLiveBadge.text = "🟢 ONLINE"
-                                            tvActiveAppLiveBadge.setBackgroundColor(Color.parseColor("#15803D"))
-                                            tvActiveAppLiveBadge.setTextColor(Color.parseColor("#86EFAC"))
-                                            layoutDialogActiveAppBanner.setBackgroundResource(R.drawable.bg_gold_card)
-                                        } else {
-                                            tvActiveAppTitle.text = "TRẠNG THÁI MÀN HÌNH:"
-                                            tvActiveAppTitle.setTextColor(Color.parseColor("#94A3B8"))
-                                            tvActiveAppIcon.text = "🔒"
-                                            tvActiveAppName.text = "Màn hình khóa / Màn hình tắt (Zero-Phantom-Time)"
-                                            tvActiveAppLiveBadge.text = "⚪ ĐÃ KHÓA"
-                                            tvActiveAppLiveBadge.setBackgroundColor(Color.parseColor("#334155"))
-                                            tvActiveAppLiveBadge.setTextColor(Color.parseColor("#94A3B8"))
-                                            layoutDialogActiveAppBanner.setBackgroundResource(R.drawable.bg_device_card)
-                                        }
-                                    } else {
-                                        // THIẾT BỊ NGOẠI TUYẾN -> KHÔNG BAO GIỜ BÁO ONLINE GIẢ NỮA!
-                                        tvDialogChildSubtitle.text = "🔴 Ngoại tuyến (Đã ngắt mạng / tắt máy)"
-                                        tvDialogChildSubtitle.setTextColor(Color.parseColor("#EF4444"))
-                                        tvActiveAppTitle.text = "LẦN CUỐI GHI NHẬN TRƯỚC KHI NGOẠI TUYẾN:"
-                                        tvActiveAppTitle.setTextColor(Color.parseColor("#F87171"))
-                                        tvActiveAppIcon.text = if (activePkg != "SCREEN_OFF" && activePkg != "HOME") getAppIcon(activeCat, activePkg, activeName) else "⚪"
-                                        tvActiveAppName.text = if (activePkg != "SCREEN_OFF" && activePkg != "HOME") activeName else "Màn hình tắt / Không kết nối"
-                                        tvActiveAppLiveBadge.text = "🔴 OFFLINE"
-                                        tvActiveAppLiveBadge.setBackgroundColor(Color.parseColor("#7F1D1D"))
-                                        tvActiveAppLiveBadge.setTextColor(Color.parseColor("#FCA5A5"))
-                                        layoutDialogActiveAppBanner.setBackgroundResource(R.drawable.bg_device_card)
-                                    }
-
-                                    allAppsList.clear()
-                                    allAppsList.addAll(loadedApps)
-                                    updateTabs(currentTab)
-                                }
+                            if (activeIsFg && activePkg != "SCREEN_OFF" && activePkg != "HOME") {
+                                tvActiveAppTitle.text = "ỨNG DỤNG ĐANG MỞ TRÊN MÀN HÌNH:"
+                                tvActiveAppTitle.setTextColor(Color.parseColor("#FDE047"))
+                                tvActiveAppIcon.text = getAppIcon(activeCat, activePkg, activeName)
+                                tvActiveAppName.text = activeName
+                                tvActiveAppLiveBadge.text = "🟢 ONLINE"
+                                tvActiveAppLiveBadge.setBackgroundColor(Color.parseColor("#15803D"))
+                                tvActiveAppLiveBadge.setTextColor(Color.parseColor("#86EFAC"))
+                                layoutDialogActiveAppBanner.setBackgroundResource(R.drawable.bg_gold_card)
+                            } else {
+                                tvActiveAppTitle.text = "TRẠNG THÁI MÀN HÌNH:"
+                                tvActiveAppTitle.setTextColor(Color.parseColor("#94A3B8"))
+                                tvActiveAppIcon.text = "🔒"
+                                tvActiveAppName.text = "Màn hình khóa / Màn hình tắt (Zero-Phantom-Time)"
+                                tvActiveAppLiveBadge.text = "⚪ ĐÃ KHÓA"
+                                tvActiveAppLiveBadge.setBackgroundColor(Color.parseColor("#334155"))
+                                tvActiveAppLiveBadge.setTextColor(Color.parseColor("#94A3B8"))
+                                layoutDialogActiveAppBanner.setBackgroundResource(R.drawable.bg_device_card)
                             }
-                        } catch (e: Exception) {
+                        } else {
+                            // THIẾT BỊ NGOẠI TUYẾN
+                            tvDialogChildSubtitle.text = "🔴 Ngoại tuyến (Đã ngắt mạng / tắt máy)"
+                            tvDialogChildSubtitle.setTextColor(Color.parseColor("#EF4444"))
+                            tvActiveAppTitle.text = "LẦN CUỐI GHI NHẬN TRƯỚC KHI NGOẠI TUYẾN:"
+                            tvActiveAppTitle.setTextColor(Color.parseColor("#F87171"))
+                            tvActiveAppIcon.text = if (activePkg != "SCREEN_OFF" && activePkg != "HOME") getAppIcon(activeCat, activePkg, activeName) else "⚪"
+                            tvActiveAppName.text = if (activePkg != "SCREEN_OFF" && activePkg != "HOME") activeName else "Màn hình tắt / Không kết nối"
+                            tvActiveAppLiveBadge.text = "[🔴 OFFLINE]"
+                            tvActiveAppLiveBadge.setBackgroundColor(Color.parseColor("#7F1D1D"))
+                            tvActiveAppLiveBadge.setTextColor(Color.parseColor("#FCA5A5"))
+                            layoutDialogActiveAppBanner.setBackgroundResource(R.drawable.bg_device_card)
+                        }
+
+                        // Cập nhật Live Web Banner tuân thủ Zero-Phantom-Online
+                        val now = System.currentTimeMillis()
+                        val bannerState = evaluateWebBannerDisplay(
+                            isOnline = isOnline,
+                            webDomain = webDomain,
+                            webTitle = webTitle,
+                            webBrowser = webBrowser,
+                            webTimestamp = webTimestamp,
+                            webIsBlocked = webIsBlocked,
+                            activePkg = activePkg,
+                            activeCat = activeCat,
+                            now = now,
+                            webUrl = webUrl
+                        )
+                        if (bannerState.isVisible) {
+                            layoutDialogActiveWebBanner.visibility = View.VISIBLE
+                            tvActiveWebHeader.text = bannerState.headerText
+                            tvActiveWebDomain.text = bannerState.domainText
+                            tvActiveWebUrl.text = bannerState.subtitleText
+                            tvActiveWebStatusBadge.text = bannerState.badgeText
+
+                            if (bannerState.isBlocked) {
+                                tvActiveWebHeader.setTextColor(Color.parseColor("#EF4444"))
+                                tvActiveWebIcon.text = "🚫"
+                                tvActiveWebStatusBadge.setBackgroundColor(Color.parseColor("#7F1D1D"))
+                                tvActiveWebStatusBadge.setTextColor(Color.parseColor("#FCA5A5"))
+                            } else if (isOnline) {
+                                tvActiveWebHeader.setTextColor(Color.parseColor("#38BDF8"))
+                                tvActiveWebIcon.text = "🌐"
+                                if (bannerState.isLiveBrowsing) {
+                                    tvActiveWebStatusBadge.setBackgroundColor(Color.parseColor("#15803D"))
+                                    tvActiveWebStatusBadge.setTextColor(Color.parseColor("#86EFAC"))
+                                } else {
+                                    tvActiveWebStatusBadge.setBackgroundColor(Color.parseColor("#334155"))
+                                    tvActiveWebStatusBadge.setTextColor(Color.parseColor("#94A3B8"))
+                                }
+                            } else {
+                                tvActiveWebHeader.setTextColor(Color.parseColor("#F87171"))
+                                tvActiveWebIcon.text = "🌐"
+                                tvActiveWebStatusBadge.setBackgroundColor(Color.parseColor("#7F1D1D"))
+                                tvActiveWebStatusBadge.setTextColor(Color.parseColor("#FCA5A5"))
+                            }
+                        } else {
+                            layoutDialogActiveWebBanner.visibility = View.GONE
+                        }
+
+                        allAppsList.clear()
+                        allAppsList.addAll(loadedApps)
+                        renderAppList()
+                    }
+                }
+            } catch (e: Exception) {
                 Log.e(TAG, "Lỗi load data dialog companion", e)
+            } finally {
+                isCompanionDataLoading.set(false)
             }
+        }
+
+        val pollingJob = lifecycleScope.launch(Dispatchers.IO) {
+            // Tải dữ liệu ngay lập tức khi mở dialog (Zero initial delay)
+            loadCompanionData()
+            while (isActive) {
+                delay(60_000L)
+                if (!isActive) break
+                loadCompanionData()
+            }
+        }
+
+        dialog.setOnDismissListener {
+            pollingJob.cancel()
         }
 
         updateTabs("SOCIAL")
@@ -2420,53 +2770,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private suspend fun checkIncomingLocationCommand(pairedCode: String) {
-        try {
-            val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: "UNKNOWN"
-            val req = Request.Builder()
-                .url("$FIREBASE_RTDB_URL/families/$pairedCode/devices/$androidId/commands/locate_now.json")
-                .build()
-            firebaseClient.newCall(req).execute().use { response ->
-                if (response.isSuccessful) {
-                    val body = response.body?.string()
-                    if (!body.isNullOrEmpty() && body != "null") {
-                        val json = JSONObject(body)
-                        val status = json.optString("status", "")
-                        if (status == "PENDING" || status.isEmpty()) {
-                            val loc = LocationHelper.fetchCurrentLocation(this@MainActivity)
-                            val mediaType = "application/json; charset=utf-8".toMediaType()
-                            if (loc != null) {
-                                val locBody = loc.toJsonObject().toString().toRequestBody(mediaType)
-                                val putFamLoc = Request.Builder()
-                                    .url("$FIREBASE_RTDB_URL/families/$pairedCode/devices/$androidId/location.json")
-                                    .put(locBody)
-                                    .build()
-                                firebaseClient.newCall(putFamLoc).execute().close()
-
-                                val putDevLoc = Request.Builder()
-                                    .url("$FIREBASE_RTDB_URL/devices/$androidId/location.json")
-                                    .put(locBody)
-                                    .build()
-                                firebaseClient.newCall(putDevLoc).execute().close()
-                            }
-
-                            val doneJson = JSONObject().apply {
-                                put("status", "COMPLETED")
-                                put("completedAt", System.currentTimeMillis())
-                            }
-                            val doneBody = doneJson.toString().toRequestBody(mediaType)
-                            val updateCmd = Request.Builder()
-                                .url("$FIREBASE_RTDB_URL/families/$pairedCode/devices/$androidId/commands/locate_now.json")
-                                .put(doneBody)
-                                .build()
-                            firebaseClient.newCall(updateCmd).execute().close()
-                        }
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "checkIncomingLocationCommand error: ${e.message}")
-        }
+    private fun checkIncomingLocationCommand(pairedCode: String) {
+        UsageTrackerService.checkLocationRequest(this@MainActivity)
     }
 
     private suspend fun checkIncomingParentMessage(pairedCode: String) {

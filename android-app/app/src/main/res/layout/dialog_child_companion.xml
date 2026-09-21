@@ -152,6 +152,88 @@
             android:text="⚪ CHỜ ĐỒNG BỘ" />
     </LinearLayout>
 
+    <!-- 2b. BANNER TRANG WEB ĐANG TRUY CẬP (LIVE WEB ACTIVITY BANNER) -->
+    <LinearLayout
+        android:id="@+id/layoutDialogActiveWebBanner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_device_card"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="12dp"
+        android:layout_marginBottom="14dp"
+        android:visibility="gone">
+
+        <FrameLayout
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:background="@drawable/bg_glass_card"
+            android:layout_marginEnd="10dp">
+
+            <TextView
+                android:id="@+id/tvActiveWebIcon"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:text="🌐"
+                android:textSize="18sp" />
+        </FrameLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvActiveWebHeader"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="TRANG WEB ĐANG TRUY CẬP (REALTIME):"
+                android:textColor="#38BDF8"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.04" />
+
+            <TextView
+                android:id="@+id/tvActiveWebDomain"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Đang kết nối web..."
+                android:textColor="#F8FAFC"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:layout_marginTop="2dp"
+                android:singleLine="true"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/tvActiveWebUrl"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Trình duyệt Web"
+                android:textColor="#94A3B8"
+                android:textSize="11sp"
+                android:layout_marginTop="1dp"
+                android:singleLine="true"
+                android:ellipsize="end" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/tvActiveWebStatusBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="#15803D"
+            android:textColor="#86EFAC"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:paddingLeft="8dp"
+            android:paddingRight="8dp"
+            android:paddingTop="3dp"
+            android:paddingBottom="3dp"
+            android:text="🟢 ĐANG DUYỆT" />
+    </LinearLayout>
+
     <!-- 3. THANH CHỌN TAB CHUYÊN NGHIỆP DẠNG PILL (CHỐNG RỚT DÒNG) -->
     <LinearLayout
         android:layout_width="match_parent"

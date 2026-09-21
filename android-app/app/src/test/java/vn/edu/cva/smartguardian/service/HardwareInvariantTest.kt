@@ -14,6 +14,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 import vn.edu.cva.smartguardian.ui.MainActivity
@@ -44,6 +45,7 @@ class HardwareInvariantTest {
         UsageTrackerService.activeOnlineCalls.clear()
         UsageTrackerService.activeOfflineCalls.clear()
         UsageTrackerService.recordedSessionTokens.clear()
+        UsageTrackerService.lastGpsPromptTimestamp.set(0L)
         AppUpdateManager.mainDispatcher = kotlinx.coroutines.Dispatchers.Unconfined
     }
 
@@ -2598,6 +2600,740 @@ class HardwareInvariantTest {
         // When activity launcher is invoked on minimal test context without activity manager, must safely execute fallback without crash
         val launched = vn.edu.cva.smartguardian.util.OemPermissionHelper.openOemBackgroundSettings(fakeCtx)
         assertTrue("3-tier fallback chain must execute safely and report launch status", launched)
+    }
+
+    @Test
+    fun testWebActivityBannerEvaluationAndInvariants() {
+        val now = System.currentTimeMillis()
+
+        // Vector 1: Live active browsing while online (category BROWSER, age < 15m, full URL provided)
+        val liveState = MainActivity.evaluateWebBannerDisplay(
+            isOnline = true,
+            webDomain = "https://kenh14.vn/gioi-tre.chn",
+            webTitle = "<b>Kênh 14</b> - Tin tức giới trẻ",
+            webBrowser = "Google Chrome",
+            webTimestamp = now - 30_000L,
+            webIsBlocked = false,
+            activePkg = "com.android.chrome",
+            activeCat = "BROWSER",
+            now = now,
+            webUrl = "https://kenh14.vn/gioi-tre.chn"
+        )
+        assertTrue("Live banner must be visible", liveState.isVisible)
+        assertEquals("TRANG WEB ĐANG TRUY CẬP (REALTIME):", liveState.headerText)
+        assertEquals("kenh14.vn • Kênh 14 - Tin tức giới trẻ", liveState.domainText)
+        assertEquals("Google Chrome • Vừa truy cập", liveState.subtitleText)
+        assertEquals("🟢 ĐANG DUYỆT", liveState.badgeText)
+        assertTrue("isLiveBrowsing must be true", liveState.isLiveBrowsing)
+        assertFalse("isBlocked must be false", liveState.isBlocked)
+
+        // Vector 2: Stale browsing while online (switched to non-browser app, age 5m)
+        val staleState = MainActivity.evaluateWebBannerDisplay(
+            isOnline = true,
+            webDomain = "tuoitre.vn",
+            webTitle = "Báo Tuổi Trẻ",
+            webBrowser = "Google Chrome",
+            webTimestamp = now - 5 * 60_000L,
+            webIsBlocked = false,
+            activePkg = "com.facebook.katana",
+            activeCat = "SOCIAL",
+            now = now
+        )
+        assertTrue("Stale banner must be visible within 15m", staleState.isVisible)
+        assertEquals("TRANG WEB ĐANG TRUY CẬP (REALTIME):", staleState.headerText)
+        assertEquals("tuoitre.vn • Báo Tuổi Trẻ", staleState.domainText)
+        assertEquals("Google Chrome • 5m trước", staleState.subtitleText)
+        assertEquals("⚪ VỪA XEM", staleState.badgeText)
+        assertFalse("isLiveBrowsing must be false when switched away", staleState.isLiveBrowsing)
+        assertFalse(staleState.isBlocked)
+
+        // Vector 3: Online expired >15m (must hide banner)
+        val expiredOnlineState = MainActivity.evaluateWebBannerDisplay(
+            isOnline = true,
+            webDomain = "vnexpress.net",
+            webTitle = "VnExpress",
+            webBrowser = "Chrome",
+            webTimestamp = now - 16 * 60_000L,
+            webIsBlocked = false,
+            activePkg = "com.android.chrome",
+            activeCat = "BROWSER",
+            now = now
+        )
+        assertFalse("Online web banner must be hidden when older than 15m", expiredOnlineState.isVisible)
+        assertEquals("", expiredOnlineState.headerText)
+
+        // Vector 4: Blocked site while online
+        val blockedState = MainActivity.evaluateWebBannerDisplay(
+            isOnline = true,
+            webDomain = "violation-site.com",
+            webTitle = "Web độc hại",
+            webBrowser = "Google Chrome",
+            webTimestamp = now,
+            webIsBlocked = true,
+            activePkg = "com.android.chrome",
+            activeCat = "BROWSER",
+            now = now
+        )
+        assertTrue("Blocked banner must be visible", blockedState.isVisible)
+        assertEquals("TRANG WEB ĐÃ BỊ CHẶN BỞI BỘ LỌC:", blockedState.headerText)
+        assertEquals("violation-site.com • Web độc hại", blockedState.domainText)
+        assertEquals("🚫 ĐÃ CHẶN", blockedState.badgeText)
+        assertFalse("Live browsing flag must be false for blocked site", blockedState.isLiveBrowsing)
+        assertTrue("isBlocked flag must be true", blockedState.isBlocked)
+
+        // Vector 5: Offline recent <= 60m (shows last recorded website before going offline)
+        val offlineRecentState = MainActivity.evaluateWebBannerDisplay(
+            isOnline = false,
+            webDomain = "dantri.com.vn",
+            webTitle = "Báo Dân Trí",
+            webBrowser = "Google Chrome",
+            webTimestamp = now - 25 * 60_000L,
+            webIsBlocked = false,
+            activePkg = "",
+            activeCat = "",
+            now = now
+        )
+        assertTrue("Offline banner must be visible within 60m", offlineRecentState.isVisible)
+        assertEquals("LẦN CUỐI GHI NHẬN TRƯỚC KHI NGOẠI TUYẾN:", offlineRecentState.headerText)
+        assertEquals("dantri.com.vn • Báo Dân Trí", offlineRecentState.domainText)
+        assertEquals("Google Chrome • 25m trước khi ngoại tuyến", offlineRecentState.subtitleText)
+        assertEquals("[🔴 OFFLINE]", offlineRecentState.badgeText)
+        assertFalse(offlineRecentState.isLiveBrowsing)
+        assertFalse(offlineRecentState.isBlocked)
+
+        // Vector 5b: Offline recent <= 60m with blocked site (must preserve [🔴 OFFLINE] and indicate blocked)
+        val offlineBlockedState = MainActivity.evaluateWebBannerDisplay(
+            isOnline = false,
+            webDomain = "gambling-site.com",
+            webTitle = "Web Cờ Bạc",
+            webBrowser = "Google Chrome",
+            webTimestamp = now - 15 * 60_000L,
+            webIsBlocked = true,
+            activePkg = "",
+            activeCat = "",
+            now = now
+        )
+        assertTrue("Offline blocked banner must be visible within 60m", offlineBlockedState.isVisible)
+        assertEquals("LẦN CUỐI GHI NHẬN TRƯỚC KHI NGOẠI TUYẾN:", offlineBlockedState.headerText)
+        assertEquals("gambling-site.com • Web Cờ Bạc", offlineBlockedState.domainText)
+        assertEquals("Google Chrome • 15m trước khi ngoại tuyến", offlineBlockedState.subtitleText)
+        assertEquals("[🔴 OFFLINE] • 🚫 ĐÃ CHẶN", offlineBlockedState.badgeText)
+        assertTrue("Badge must contain [🔴 OFFLINE] indicator", offlineBlockedState.badgeText.contains("[🔴 OFFLINE]"))
+        assertFalse("isLiveBrowsing must be false when offline", offlineBlockedState.isLiveBrowsing)
+        assertTrue("isBlocked flag must be true", offlineBlockedState.isBlocked)
+
+        // Vector 6: Offline expired > 60m (must not show outdated history)
+        val offlineExpiredState = MainActivity.evaluateWebBannerDisplay(
+            isOnline = false,
+            webDomain = "dantri.com.vn",
+            webTitle = "Báo Dân Trí",
+            webBrowser = "Google Chrome",
+            webTimestamp = now - 65 * 60_000L,
+            webIsBlocked = false,
+            activePkg = "",
+            activeCat = "",
+            now = now
+        )
+        assertFalse("Offline banner must be hidden when older than 60m", offlineExpiredState.isVisible)
+
+        // Vector 7: Empty or invalid domain (fail-closed security invariants)
+        val emptyDomainState = MainActivity.evaluateWebBannerDisplay(
+            isOnline = true,
+            webDomain = "",
+            webTitle = "",
+            webBrowser = "Google Chrome",
+            webTimestamp = now,
+            webIsBlocked = false,
+            activePkg = "com.android.chrome",
+            activeCat = "BROWSER",
+            now = now
+        )
+        assertFalse("Banner must be hidden when domain is empty", emptyDomainState.isVisible)
+
+        val malformedDomainState = MainActivity.evaluateWebBannerDisplay(
+            isOnline = true,
+            webDomain = "invalid space domain",
+            webTitle = "Test",
+            webBrowser = "Google Chrome",
+            webTimestamp = now,
+            webIsBlocked = false,
+            activePkg = "com.android.chrome",
+            activeCat = "BROWSER",
+            now = now
+        )
+        assertFalse("Banner must be hidden for invalid domain format", malformedDomainState.isVisible)
+
+        // Vector 8: Anti-XSS and pseudo-protocol defense
+        val xssUrlState = MainActivity.evaluateWebBannerDisplay(
+            isOnline = true,
+            webDomain = "evil.com",
+            webTitle = "Attack",
+            webBrowser = "Google Chrome",
+            webTimestamp = now,
+            webIsBlocked = false,
+            activePkg = "com.android.chrome",
+            activeCat = "BROWSER",
+            now = now,
+            webUrl = "javascript:alert(document.cookie)"
+        )
+        assertFalse("Banner must reject pseudo-protocol javascript: URLs", xssUrlState.isVisible)
+
+        // Vector 9: Rejection of localhost (RFC Domain Invariant)
+        val localhostState = MainActivity.evaluateWebBannerDisplay(
+            isOnline = true,
+            webDomain = "localhost",
+            webTitle = "Local dev",
+            webBrowser = "Google Chrome",
+            webTimestamp = now,
+            webIsBlocked = false,
+            activePkg = "com.android.chrome",
+            activeCat = "BROWSER",
+            now = now
+        )
+        assertFalse("Banner must reject localhost domain according to RFC domain requirements", localhostState.isVisible)
+
+        // Vector 10: Anti-Telemetry Spoofing - Rejection of future timestamps
+        val futureState = MainActivity.evaluateWebBannerDisplay(
+            isOnline = true,
+            webDomain = "vnexpress.net",
+            webTitle = "Tin tức",
+            webBrowser = "Google Chrome",
+            webTimestamp = now + 60_000L,
+            webIsBlocked = false,
+            activePkg = "com.android.chrome",
+            activeCat = "BROWSER",
+            now = now
+        )
+        assertFalse("Banner must reject future timestamps (anti-telemetry spoofing)", futureState.isVisible)
+
+        // Vector 11: Rejection of zero or negative timestamps
+        val zeroTimeState = MainActivity.evaluateWebBannerDisplay(
+            isOnline = true,
+            webDomain = "vnexpress.net",
+            webTitle = "Tin tức",
+            webBrowser = "Google Chrome",
+            webTimestamp = 0L,
+            webIsBlocked = false,
+            activePkg = "com.android.chrome",
+            activeCat = "BROWSER",
+            now = now
+        )
+        assertFalse("Banner must reject zero timestamp", zeroTimeState.isVisible)
+    }
+
+    @Test
+    fun testParentDashboardSubtitleEvaluationAndAntiSpoofing() {
+        val now = 1_700_000_000_000L
+        val model = "Pixel 7"
+
+        // 1. Valid online recent web browsing -> includes web domain
+        val validSubtitle = MainActivity.evaluateParentDashboardSubtitle(
+            isOnline = true,
+            deviceModel = model,
+            webDomain = "vnexpress.net",
+            webTimestamp = now - 120_000L, // 2m ago
+            now = now
+        )
+        assertEquals("🟢 Đang hoạt động • Pixel 7 • 🌐 vnexpress.net", validSubtitle)
+
+        // 2. Offline device -> returns empty string (handled by offline branch)
+        val offlineSubtitle = MainActivity.evaluateParentDashboardSubtitle(
+            isOnline = false,
+            deviceModel = model,
+            webDomain = "vnexpress.net",
+            webTimestamp = now - 120_000L,
+            now = now
+        )
+        assertEquals("", offlineSubtitle)
+
+        // 3. Zero timestamp -> NO web suffix
+        val zeroTimeSubtitle = MainActivity.evaluateParentDashboardSubtitle(
+            isOnline = true,
+            deviceModel = model,
+            webDomain = "vnexpress.net",
+            webTimestamp = 0L,
+            now = now
+        )
+        assertEquals("🟢 Đang hoạt động • Pixel 7", zeroTimeSubtitle)
+
+        // 4. Negative timestamp -> NO web suffix
+        val negTimeSubtitle = MainActivity.evaluateParentDashboardSubtitle(
+            isOnline = true,
+            deviceModel = model,
+            webDomain = "vnexpress.net",
+            webTimestamp = -5000L,
+            now = now
+        )
+        assertEquals("🟢 Đang hoạt động • Pixel 7", negTimeSubtitle)
+
+        // 5. Future timestamp (Anti-Telemetry Spoofing) -> NO web suffix
+        val futureTimeSubtitle = MainActivity.evaluateParentDashboardSubtitle(
+            isOnline = true,
+            deviceModel = model,
+            webDomain = "vnexpress.net",
+            webTimestamp = now + 60_000L,
+            now = now
+        )
+        assertEquals("🟢 Đang hoạt động • Pixel 7", futureTimeSubtitle)
+
+        // 6. Stale web activity (> 10m / 600_000L) -> NO web suffix
+        val staleTimeSubtitle = MainActivity.evaluateParentDashboardSubtitle(
+            isOnline = true,
+            deviceModel = model,
+            webDomain = "vnexpress.net",
+            webTimestamp = now - 650_000L, // 10.8m ago
+            now = now
+        )
+        assertEquals("🟢 Đang hoạt động • Pixel 7", staleTimeSubtitle)
+
+        // 7. Invalid domain format (spaces, illegal characters) -> NO web suffix
+        val invalidDomainSubtitle = MainActivity.evaluateParentDashboardSubtitle(
+            isOnline = true,
+            deviceModel = model,
+            webDomain = "invalid space domain",
+            webTimestamp = now - 120_000L,
+            now = now
+        )
+        assertEquals("🟢 Đang hoạt động • Pixel 7", invalidDomainSubtitle)
+
+        // 8. Localhost domain -> NO web suffix (RFC Domain Invariant)
+        val localhostSubtitle = MainActivity.evaluateParentDashboardSubtitle(
+            isOnline = true,
+            deviceModel = model,
+            webDomain = "localhost",
+            webTimestamp = now - 120_000L,
+            now = now
+        )
+        assertEquals("🟢 Đang hoạt động • Pixel 7", localhostSubtitle)
+
+        // 9. Empty domain -> NO web suffix
+        val emptyDomainSubtitle = MainActivity.evaluateParentDashboardSubtitle(
+            isOnline = true,
+            deviceModel = model,
+            webDomain = "",
+            webTimestamp = now - 120_000L,
+            now = now
+        )
+        assertEquals("🟢 Đang hoạt động • Pixel 7", emptyDomainSubtitle)
+    }
+
+    @Test
+    fun testGpsCommandProtocolStateTransitionsAndInvariants() {
+        val now = 1_700_000_000_000L
+
+        // Protocol Helper URL Builder Contract
+        val cmdUrl = UsageTrackerService.LocationProtocol.getCommandUrl("https://rtdb.firebase.io", "FAM_123", "DEV_456")
+        assertEquals("https://rtdb.firebase.io/families/FAM_123/devices/DEV_456/commands/locate_now.json", cmdUrl)
+        val famLocUrl = UsageTrackerService.LocationProtocol.getFamilyLocationUrl("https://rtdb.firebase.io", "FAM_123", "DEV_456")
+        assertEquals("https://rtdb.firebase.io/families/FAM_123/devices/DEV_456/location.json", famLocUrl)
+        val devLocUrl = UsageTrackerService.LocationProtocol.getDeviceLocationUrl("https://rtdb.firebase.io", "DEV_456")
+        assertEquals("https://rtdb.firebase.io/devices/DEV_456/location.json", devLocUrl)
+
+        // URL Path Traversal & Sanitization Invariant (Strict Fail-Closed, No Silent Normalization)
+        val invalidSegments = listOf(
+            "../../hack_family?x=1#test",
+            "dev/123",
+            " DEV_456 ",
+            "DEV_456\n",
+            "DEV\t456",
+            "",
+            "   ",
+            "dev@123",
+            "dev:123"
+        )
+        for (invalid in invalidSegments) {
+            try {
+                UsageTrackerService.LocationProtocol.sanitizeSegment(invalid)
+                fail("Must fail-closed with IllegalArgumentException on invalid segment: '$invalid'")
+            } catch (e: IllegalArgumentException) {
+                assertTrue("Exception message must indicate Fail-Closed: ${e.message}", e.message?.contains("Fail-Closed") == true)
+            }
+        }
+
+        val validSeg = UsageTrackerService.LocationProtocol.sanitizeSegment("DEV_456")
+        assertEquals("DEV_456", validSeg)
+        val validDashSeg = UsageTrackerService.LocationProtocol.sanitizeSegment("CVA-8A20_CHILD-1")
+        assertEquals("CVA-8A20_CHILD-1", validDashSeg)
+
+        // Base URL Validation Invariant (Strict Fail-Closed URL Structure & Domain Guard)
+        val validBase1 = UsageTrackerService.LocationProtocol.validateBaseUrl("https://rtdb.firebase.io")
+        assertEquals("https://rtdb.firebase.io", validBase1)
+        val validBase2 = UsageTrackerService.LocationProtocol.validateBaseUrl("https://my-app.firebaseio.com/")
+        assertEquals("https://my-app.firebaseio.com", validBase2)
+        val validBase3 = UsageTrackerService.LocationProtocol.validateBaseUrl("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app")
+        assertEquals("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app", validBase3)
+
+        val invalidBaseUrls = listOf(
+            "http://insecure.firebaseio.com",
+            "https://user:pass@rtdb.firebase.io",
+            "https://rtdb.firebase.io?param=val",
+            "https://rtdb.firebase.io#frag",
+            "https://rtdb.firebase.io/extra/path",
+            "https://rtdb.firebase.io:8443",
+            "https://.firebaseio.com",
+            "https://evil-attacker.com",
+            "https://evil-attacker.com/fake.firebasedatabase.app",
+            "https://rtdb.firebase.io.attacker.com",
+            " https://rtdb.firebase.io "
+        )
+        for (invalidUrl in invalidBaseUrls) {
+            try {
+                UsageTrackerService.LocationProtocol.validateBaseUrl(invalidUrl)
+                fail("Must reject invalid base URL: '$invalidUrl'")
+            } catch (e: IllegalArgumentException) {
+                assertTrue("Exception message must indicate Fail-Closed: ${e.message}", e.message?.contains("Fail-Closed") == true)
+            }
+        }
+
+        // Optimistic Concurrency Control (OCC) Interleaving & Precondition Invariants
+        // Scenario A: Valid matching command -> OCC passes
+        val occPass = UsageTrackerService.LocationProtocol.validateOccPrecondition(
+            serverStatus = "SEARCHING_FIX",
+            serverRequestedAt = now,
+            targetRequestedAt = now
+        )
+        assertTrue("OCC must succeed when server command matches target requestedAt", occPass)
+
+        // Scenario B: Concurrently replaced by newer parent command -> OCC rejects
+        val occRejectNewer = UsageTrackerService.LocationProtocol.validateOccPrecondition(
+            serverStatus = "PENDING",
+            serverRequestedAt = now + 5000L,
+            targetRequestedAt = now
+        )
+        assertFalse("OCC must fail when server command has been replaced by a newer command", occRejectNewer)
+
+        // Scenario C: Already completed or expired -> OCC rejects
+        val occRejectCompleted = UsageTrackerService.LocationProtocol.validateOccPrecondition(
+            serverStatus = "COMPLETED",
+            serverRequestedAt = now,
+            targetRequestedAt = now
+        )
+        assertFalse("OCC must fail when server command is already COMPLETED", occRejectCompleted)
+
+        val occRejectExpired = UsageTrackerService.LocationProtocol.validateOccPrecondition(
+            serverStatus = "EXPIRED",
+            serverRequestedAt = now,
+            targetRequestedAt = now
+        )
+        assertFalse("OCC must fail when server command is already EXPIRED", occRejectExpired)
+
+        // Scenario D: Invalid non-positive timestamps -> OCC fails closed
+        assertFalse("OCC must fail-closed on 0L server timestamp", UsageTrackerService.LocationProtocol.validateOccPrecondition("PENDING", 0L, now))
+        assertFalse("OCC must fail-closed on 0L target timestamp", UsageTrackerService.LocationProtocol.validateOccPrecondition("PENDING", now, 0L))
+
+        // 1. Fail-closed: requestedAt <= 0L or future clock-skew must be IGNORED
+        val zeroReqDecision = UsageTrackerService.evaluateLocationCommand(
+            currentStatus = "PENDING",
+            requestedAt = 0L,
+            now = now,
+            isGpsEnabled = false,
+            hasLocationFix = false
+        )
+        assertEquals("requestedAt == 0L must be ignored", UsageTrackerService.LocationCommandDecision.Ignore, zeroReqDecision)
+
+        val negativeReqDecision = UsageTrackerService.evaluateLocationCommand(
+            currentStatus = "PENDING",
+            requestedAt = -500L,
+            now = now,
+            isGpsEnabled = false,
+            hasLocationFix = false
+        )
+        assertEquals("requestedAt < 0L must be ignored", UsageTrackerService.LocationCommandDecision.Ignore, negativeReqDecision)
+
+        val futureReqDecision = UsageTrackerService.evaluateLocationCommand(
+            currentStatus = "PENDING",
+            requestedAt = now + 65_000L, // 65s into the future (>60s clock skew)
+            now = now,
+            isGpsEnabled = false,
+            hasLocationFix = false
+        )
+        assertEquals("Future timestamp beyond 60s must be ignored", UsageTrackerService.LocationCommandDecision.Ignore, futureReqDecision)
+
+        // 2. PENDING -> WAITING_GPS when GPS is disabled
+        val promptDecision = UsageTrackerService.evaluateLocationCommand(
+            currentStatus = "PENDING",
+            requestedAt = now,
+            now = now + 1_000L,
+            isGpsEnabled = false,
+            hasLocationFix = false
+        )
+        assertTrue("Decision must be PromptGps", promptDecision is UsageTrackerService.LocationCommandDecision.PromptGps)
+        val prompt = promptDecision as UsageTrackerService.LocationCommandDecision.PromptGps
+        assertEquals(now, prompt.requestedAt)
+        assertEquals(now + 1_000L, prompt.updatedAt)
+        assertTrue("Status must be transitioned to WAITING_GPS", prompt.shouldUpdateStatus)
+
+        // 3. WAITING_GPS retry when GPS is still disabled (rate-limited / no status churn)
+        val waitingRetryDecision = UsageTrackerService.evaluateLocationCommand(
+            currentStatus = "WAITING_GPS",
+            requestedAt = now,
+            now = now + 5_000L,
+            isGpsEnabled = false,
+            hasLocationFix = false
+        )
+        assertTrue("Decision must still be PromptGps", waitingRetryDecision is UsageTrackerService.LocationCommandDecision.PromptGps)
+        val retryPrompt = waitingRetryDecision as UsageTrackerService.LocationCommandDecision.PromptGps
+        assertFalse("shouldUpdateStatus must be false to avoid redundant network churn", retryPrompt.shouldUpdateStatus)
+
+        // 4. WAITING_GPS -> SEARCHING_FIX when GPS is enabled but satellite fix is pending
+        val searchingDecision = UsageTrackerService.evaluateLocationCommand(
+            currentStatus = "WAITING_GPS",
+            requestedAt = now,
+            now = now + 10_000L,
+            isGpsEnabled = true,
+            hasLocationFix = false
+        )
+        assertTrue("Decision must be SearchingFix", searchingDecision is UsageTrackerService.LocationCommandDecision.SearchingFix)
+        val searching = searchingDecision as UsageTrackerService.LocationCommandDecision.SearchingFix
+        assertEquals(now, searching.requestedAt)
+        assertEquals(now + 10_000L, searching.updatedAt)
+        assertTrue("Status must transition to SEARCHING_FIX", searching.shouldUpdateStatus)
+
+        // 5. SEARCHING_FIX retry while still acquiring satellite fix
+        val searchingRetryDecision = UsageTrackerService.evaluateLocationCommand(
+            currentStatus = "SEARCHING_FIX",
+            requestedAt = now,
+            now = now + 15_000L,
+            isGpsEnabled = true,
+            hasLocationFix = false
+        )
+        assertTrue("Decision must be SearchingFix", searchingRetryDecision is UsageTrackerService.LocationCommandDecision.SearchingFix)
+        val searchingRetry = searchingRetryDecision as UsageTrackerService.LocationCommandDecision.SearchingFix
+        assertFalse("shouldUpdateStatus must be false during search retry", searchingRetry.shouldUpdateStatus)
+
+        // 6. SEARCHING_FIX -> COMPLETED when satellite fix is acquired
+        val completeDecision = UsageTrackerService.evaluateLocationCommand(
+            currentStatus = "SEARCHING_FIX",
+            requestedAt = now,
+            now = now + 20_000L,
+            isGpsEnabled = true,
+            hasLocationFix = true
+        )
+        assertTrue("Decision must be Complete", completeDecision is UsageTrackerService.LocationCommandDecision.Complete)
+        val complete = completeDecision as UsageTrackerService.LocationCommandDecision.Complete
+        assertEquals(now, complete.requestedAt)
+        assertEquals(now + 20_000L, complete.completedAt)
+
+        // 7. Command expiration when age exceeds 3 minutes (>180,000ms)
+        val expiredDecision = UsageTrackerService.evaluateLocationCommand(
+            currentStatus = "PENDING",
+            requestedAt = now,
+            now = now + 180_001L,
+            isGpsEnabled = false,
+            hasLocationFix = false
+        )
+        assertTrue("Decision must be Expire when > 3 minutes", expiredDecision is UsageTrackerService.LocationCommandDecision.Expire)
+        val expire = expiredDecision as UsageTrackerService.LocationCommandDecision.Expire
+        assertEquals(now, expire.requestedAt)
+        assertEquals(now + 180_001L, expire.expiredAt)
+
+        // 8. Terminal or unknown state must be ignored
+        val terminalDecision = UsageTrackerService.evaluateLocationCommand(
+            currentStatus = "COMPLETED",
+            requestedAt = now,
+            now = now + 25_000L,
+            isGpsEnabled = true,
+            hasLocationFix = true
+        )
+        assertEquals(UsageTrackerService.LocationCommandDecision.Ignore, terminalDecision)
+
+        // 9. Thread-safe atomic rate-limiting of student GPS notifications (30-second window)
+        UsageTrackerService.lastGpsPromptTimestamp.set(0L)
+        val t0 = 1_000_000L
+        val casSuccess1 = UsageTrackerService.lastGpsPromptTimestamp.compareAndSet(0L, t0)
+        assertTrue("First notification CAS must succeed", casSuccess1)
+        assertEquals(t0, UsageTrackerService.lastGpsPromptTimestamp.get())
+
+        // Sub-30s invocation must be throttled
+        val tEarly = t0 + 15_000L
+        val isThrottled = (tEarly - UsageTrackerService.lastGpsPromptTimestamp.get()) < 30_000L
+        assertTrue("Notification within 30s must be throttled", isThrottled)
+
+        // Post-30s invocation must succeed
+        val tLate = t0 + 31_000L
+        val lastVal = UsageTrackerService.lastGpsPromptTimestamp.get()
+        val casSuccess2 = UsageTrackerService.lastGpsPromptTimestamp.compareAndSet(lastVal, tLate)
+        assertTrue("Notification after 30s CAS must succeed", casSuccess2)
+        assertEquals(tLate, UsageTrackerService.lastGpsPromptTimestamp.get())
+
+        // 10. Atomic Conditional Write (ETag CAS) structure & 412 Precondition verification
+        val mockResultMatch = UsageTrackerService.HttpResult(
+            code = 200,
+            body = "{\"status\":\"COMPLETED\"}",
+            etag = "\"etag_ok_123\"",
+            isSuccessful = true
+        )
+        assertTrue(mockResultMatch.isSuccessful)
+        assertEquals(200, mockResultMatch.code)
+        assertEquals("\"etag_ok_123\"", mockResultMatch.etag)
+
+        val mockResultPreconditionFailed = UsageTrackerService.HttpResult(
+            code = 412,
+            body = "{\"error\":\"Precondition Failed\"}",
+            etag = null,
+            isSuccessful = false
+        )
+        assertFalse(mockResultPreconditionFailed.isSuccessful)
+        assertEquals(412, mockResultPreconditionFailed.code)
+
+        // 11. X-Firebase-ETag Request Header Invariant:
+        val testCmdUrl = UsageTrackerService.LocationProtocol.getCommandUrl(
+            "https://test-rtdb.firebaseio.com",
+            "CVA-1234",
+            "device_android_99"
+        )
+        val getReq = UsageTrackerService.LocationProtocol.buildGetCommandRequest(testCmdUrl)
+        assertEquals("true", getReq.header("X-Firebase-ETag"))
+        assertEquals("GET", getReq.method)
+
+        // 12. Fail-Closed Conditional PUT Request Invariant:
+        val dummyBody = okhttp3.RequestBody.create("application/json; charset=utf-8".toMediaTypeOrNull(), "{\"status\":\"EXPIRED\"}")
+        val conditionalPutReq = UsageTrackerService.LocationProtocol.buildConditionalPutRequest(testCmdUrl, "\"etag_valid_456\"", dummyBody)
+        assertEquals("\"etag_valid_456\"", conditionalPutReq.header("if-match"))
+        assertEquals("PUT", conditionalPutReq.method)
+
+        // Fail-Closed: Blank or empty ETag MUST throw IllegalArgumentException
+        var failClosedCaught = false
+        try {
+            UsageTrackerService.LocationProtocol.buildConditionalPutRequest(testCmdUrl, "", dummyBody)
+        } catch (e: IllegalArgumentException) {
+            failClosedCaught = true
+        }
+        assertTrue("buildConditionalPutRequest with empty ETag must fail-closed with IllegalArgumentException", failClosedCaught)
+
+        // Strict HTTP 200 CAS Precondition for Location Publishing
+        assertTrue("Only HTTP 200 OK permits publishing location coordinates", UsageTrackerService.LocationProtocol.shouldPublishLocationAfterCas(200))
+        assertFalse("HTTP 201 Created must NOT publish location", UsageTrackerService.LocationProtocol.shouldPublishLocationAfterCas(201))
+        assertFalse("HTTP 204 No Content must NOT publish location", UsageTrackerService.LocationProtocol.shouldPublishLocationAfterCas(204))
+        assertFalse("HTTP 412 Precondition Failed must NOT publish location", UsageTrackerService.LocationProtocol.shouldPublishLocationAfterCas(412))
+        assertFalse("HTTP 400 Bad Request must NOT publish location", UsageTrackerService.LocationProtocol.shouldPublishLocationAfterCas(400))
+        assertFalse("HTTP 404 Not Found must NOT publish location", UsageTrackerService.LocationProtocol.shouldPublishLocationAfterCas(404))
+        assertFalse("HTTP 500 Server Error must NOT publish location", UsageTrackerService.LocationProtocol.shouldPublishLocationAfterCas(500))
+    }
+
+    @Test
+    fun testGpsCommandHardwareFencingAndTimeoutInvariants() {
+        val now = 1770000000000L
+
+        // 1. Unified 180s timeout invariant (COMMAND_EXPIRY_TIMEOUT_MS)
+        assertEquals(180_000L, UsageTrackerService.LocationProtocol.COMMAND_EXPIRY_TIMEOUT_MS)
+
+        // PENDING within 180s -> true
+        assertTrue(
+            UsageTrackerService.LocationProtocol.isCommandActiveAndRecent(
+                UsageTrackerService.LocationProtocol.STATUS_PENDING,
+                now - 60_000L,
+                now
+            )
+        )
+        // WAITING_GPS within 180s -> true
+        assertTrue(
+            UsageTrackerService.LocationProtocol.isCommandActiveAndRecent(
+                UsageTrackerService.LocationProtocol.STATUS_WAITING_GPS,
+                now - 120_000L,
+                now
+            )
+        )
+        // SEARCHING_FIX within 180s -> true
+        assertTrue(
+            UsageTrackerService.LocationProtocol.isCommandActiveAndRecent(
+                UsageTrackerService.LocationProtocol.STATUS_SEARCHING_FIX,
+                now - 179_999L,
+                now
+            )
+        )
+        // Boundary exact 180s -> true
+        assertTrue(
+            UsageTrackerService.LocationProtocol.isCommandActiveAndRecent(
+                UsageTrackerService.LocationProtocol.STATUS_SEARCHING_FIX,
+                now - 180_000L,
+                now
+            )
+        )
+        // Stale > 180s -> false
+        assertFalse(
+            UsageTrackerService.LocationProtocol.isCommandActiveAndRecent(
+                UsageTrackerService.LocationProtocol.STATUS_SEARCHING_FIX,
+                now - 180_001L,
+                now
+            )
+        )
+        // COMPLETED -> false
+        assertFalse(
+            UsageTrackerService.LocationProtocol.isCommandActiveAndRecent(
+                UsageTrackerService.LocationProtocol.STATUS_COMPLETED,
+                now - 2_000L,
+                now
+            )
+        )
+        // EXPIRED -> false
+        assertFalse(
+            UsageTrackerService.LocationProtocol.isCommandActiveAndRecent(
+                UsageTrackerService.LocationProtocol.STATUS_EXPIRED,
+                now - 2_000L,
+                now
+            )
+        )
+        // Future timestamp (requestedAt > now) -> false
+        assertFalse(
+            UsageTrackerService.LocationProtocol.isCommandActiveAndRecent(
+                UsageTrackerService.LocationProtocol.STATUS_PENDING,
+                now + 1_000L,
+                now
+            )
+        )
+        // Non-positive timestamp -> false
+        assertFalse(
+            UsageTrackerService.LocationProtocol.isCommandActiveAndRecent(
+                UsageTrackerService.LocationProtocol.STATUS_PENDING,
+                0L,
+                now
+            )
+        )
+        assertFalse(
+            UsageTrackerService.LocationProtocol.isCommandActiveAndRecent(
+                UsageTrackerService.LocationProtocol.STATUS_PENDING,
+                -100L,
+                now
+            )
+        )
+
+        // 2. Hardware Fencing & Stale Telemetry Epoch Invariant
+        val prefs = FakeSharedPreferences()
+        val context = FakeTestContext(prefs)
+        val dummyReq = Request.Builder().url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/test.json").build()
+
+        // Case A: Screen is OFF -> Must immediately reject online command requests
+        GuardianAccessibilityService.isScreenOnState = false
+        val epochOff = GuardianAccessibilityService.telemetryEpoch.get()
+        val resOffHttp = UsageTrackerService.executeOnlineHttpGuarded(dummyReq, context, epochOff)
+        assertNull("executeOnlineHttpGuarded must return null when screen is off", resOffHttp)
+
+        val resOffGuarded = UsageTrackerService.executeOnlineGuarded(dummyReq, context, epochOff)
+        assertFalse("executeOnlineGuarded must return false when screen is off", resOffGuarded)
+
+        // Case B: Stale Epoch Fencing -> If epoch advances mid-operation, old epoch must be rejected
+        GuardianAccessibilityService.isScreenOnState = true
+        val startEpoch = GuardianAccessibilityService.telemetryEpoch.get()
+        // Epoch advances due to screen transition / keyguard lock
+        GuardianAccessibilityService.telemetryEpoch.incrementAndGet()
+
+        val staleHttpRes = UsageTrackerService.executeOnlineHttpGuarded(dummyReq, context, startEpoch)
+        assertNull("executeOnlineHttpGuarded must reject stale startEpoch", staleHttpRes)
+
+        val staleGuardedRes = UsageTrackerService.executeOnlineGuarded(dummyReq, context, startEpoch)
+        assertFalse("executeOnlineGuarded must reject stale startEpoch", staleGuardedRes)
+
+        // Case C: Active call cancellation on hardware state change
+        val client = OkHttpClient()
+        val call = client.newCall(dummyReq)
+        UsageTrackerService.activeOnlineCalls.add(call)
+        assertEquals(1, UsageTrackerService.activeOnlineCalls.size)
+        assertFalse(call.isCanceled())
+
+        UsageTrackerService.cancelActiveOnlineCalls()
+        assertTrue("cancelActiveOnlineCalls must cancel active command calls", call.isCanceled())
+        assertEquals(0, UsageTrackerService.activeOnlineCalls.size)
     }
     private class FakeTestContext(
         val prefs: FakeSharedPreferences
