@@ -23,6 +23,14 @@ import vn.edu.cva.smartguardian.data.AppClassifier
 import vn.edu.cva.smartguardian.data.WebFilterList
 import vn.edu.cva.smartguardian.ui.BlockedActivity
 
+internal data class ScreenOffTransition(
+    val currentEpoch: Long,
+    val closedPkg: String,
+    val closedStart: Long,
+    val sessionToken: String,
+    val proceed: Boolean
+)
+
 class GuardianAccessibilityService : AccessibilityService() {
 
     companion object {
@@ -339,13 +347,13 @@ class GuardianAccessibilityService : AccessibilityService() {
     }
 
     fun handleScreenOff(): Long {
-        return synchronized(hardwareTransitionLock) {
+        val transition = synchronized(hardwareTransitionLock) {
             val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
             val km = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
             val isHardwareStillOff = (pm?.isInteractive != true || km?.isKeyguardLocked == true)
             if (!isHardwareStillOff) {
                 Log.w("GuardianAccess", "Hủy bỏ handleScreenOff: Thiết bị đã trở lại Online trước khi chiếm lock!")
-                return@synchronized telemetryEpoch.get()
+                return@synchronized ScreenOffTransition(telemetryEpoch.get(), "", 0L, "", false)
             }
 
             // 1. NGAY LẬP TỨC và ĐỒNG BỘ NGUYÊN TỬ: Ngắt cờ phần cứng, hủy heartbeat, tăng epoch và generation
@@ -368,43 +376,46 @@ class GuardianAccessibilityService : AccessibilityService() {
             }
             val sessionToken = if (closedPkg.isNotEmpty() && closedStart > 0L) "${closedPkg}_${closedStart}" else ""
 
-            // 3. Chốt phiên polling độc lập (dispatches I/O to background coroutine)
-            UsageTrackerService.closePolledSession(applicationContext, "SCREEN_OFF")
-
-            // 4. Fast-path offline: Gửi ngay lập tức bản tin ngắt kết nối khẩn cấp lên Firebase
-            UsageTrackerService.sendUrgentOfflineStatus(this, currentEpoch)
-
-            // 5. Bất biến kế toán: Ghi nhận thời lượng phiên sử dụng ĐỘC LẬP (kèm session token chống duplicate)
-            if (closedPkg.isNotEmpty() && closedStart > 0L && now - closedStart >= 1000L && sessionToken.isNotEmpty()) {
-                val sessionDuration = now - closedStart
-                serviceScope.launch(Dispatchers.IO) {
-                    if (telemetryEpoch.get() == currentEpoch) {
-                        UsageTrackerService.recordAppSession(applicationContext, closedPkg, sessionDuration, sessionToken, currentEpoch)
-                    }
-                }
-            }
-
-            // 6. Telemetry offline state persistence: Áp dụng stale fencing riêng biệt cho trạng thái telemetry
-            serviceScope.launch(Dispatchers.IO) {
-                // FENCING BẤT BIẾN: Chỉ áp dụng hủy cập nhật trạng thái offline nếu màn hình đã bật lại
-                if (telemetryEpoch.get() != currentEpoch || isScreenOnState) {
-                    Log.w("GuardianAccess", "Hủy bỏ screen off persist: Phát hiện SCREEN_ON trước khi ghi đĩa (currentEpoch=$currentEpoch, latestEpoch=${telemetryEpoch.get()})")
-                    return@launch
-                }
-
-                val prefs = try { getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE) } catch (e: Exception) { null }
-                val lastEpoch = prefs?.getLong("last_written_epoch", -1L) ?: -1L
-                if (currentEpoch >= lastEpoch) {
-                    prefs?.edit()
-                        ?.putLong("last_written_epoch", currentEpoch)
-                        ?.putBoolean("is_device_online", false)
-                        ?.putString("last_foreground_pkg", "")
-                        ?.putLong("last_foreground_start", 0L)
-                        ?.apply()
-                }
-            }
-            currentEpoch
+            ScreenOffTransition(currentEpoch, closedPkg, closedStart, sessionToken, true)
         }
+
+        if (!transition.proceed) {
+            return transition.currentEpoch
+        }
+
+        val currentEpoch = transition.currentEpoch
+        val closedPkg = transition.closedPkg
+        val closedStart = transition.closedStart
+        val sessionToken = transition.sessionToken
+        val now = System.currentTimeMillis()
+
+        // 3. Chốt phiên polling độc lập (dispatches I/O to background coroutine)
+        UsageTrackerService.closePolledSession(applicationContext, "SCREEN_OFF")
+
+        // 4. Fast-path offline: Gửi ngay lập tức bản tin ngắt kết nối khẩn cấp lên Firebase (HOÀN TOÀN NGOÀI LOCK)
+        UsageTrackerService.sendUrgentOfflineStatus(this, currentEpoch)
+
+        // 5. Bất biến kế toán: Ghi nhận thời lượng phiên sử dụng ĐỘC LẬP (kèm session token chống duplicate)
+        if (closedPkg.isNotEmpty() && closedStart > 0L && now - closedStart >= 1000L && sessionToken.isNotEmpty()) {
+            val sessionDuration = now - closedStart
+            serviceScope.launch(Dispatchers.IO) {
+                if (telemetryEpoch.get() == currentEpoch) {
+                    UsageTrackerService.recordAppSession(applicationContext, closedPkg, sessionDuration, sessionToken, currentEpoch)
+                }
+            }
+        }
+
+        // 6. Telemetry offline state persistence: Áp dụng stale fencing riêng biệt cho trạng thái telemetry
+        serviceScope.launch(Dispatchers.IO) {
+            // FENCING BẤT BIẾN: Chỉ áp dụng hủy cập nhật trạng thái offline nếu màn hình đã bật lại
+            if (telemetryEpoch.get() != currentEpoch || isScreenOnState) {
+                Log.w("GuardianAccess", "Hủy bỏ screen off persist: Phát hiện SCREEN_ON trước khi ghi đĩa (currentEpoch=$currentEpoch, latestEpoch=${telemetryEpoch.get()})")
+                return@launch
+            }
+
+            UsageTrackerService.persistDeviceOfflineState(applicationContext, currentEpoch)
+        }
+        return currentEpoch
     }
 
     fun handleScreenOn(): Long {
@@ -426,6 +437,7 @@ class GuardianAccessibilityService : AccessibilityService() {
             isScreenOnState = true
             UsageTrackerService.lastDispatchedOfflineEpoch.set(-1L)
             UsageTrackerService.cancelActiveOfflineCalls()
+            UsageTrackerService.persistDeviceOnlineState(applicationContext, currentEpoch)
             startPeriodicHeartbeat()
 
             val currentPkg = try {

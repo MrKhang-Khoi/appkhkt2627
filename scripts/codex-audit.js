@@ -335,6 +335,16 @@ if (fs.existsSync(guardianAccessFile) && fs.existsSync(usageTrackerFile) && fs.e
   const hasHardwareTransitionLock = gaCode.includes('val hardwareTransitionLock = Any()') &&
     gaCode.includes('synchronized(hardwareTransitionLock)');
 
+  const handleScreenOffCode = gaCode.substring(gaCode.indexOf('fun handleScreenOff(): Long'), gaCode.indexOf('fun handleScreenOn(): Long'));
+  const urgentOfflineOutsideLock = handleScreenOffCode.indexOf('ScreenOffTransition(') !== -1 &&
+    handleScreenOffCode.indexOf('ScreenOffTransition(') < handleScreenOffCode.indexOf('UsageTrackerService.sendUrgentOfflineStatus(this, currentEpoch)');
+
+  const hasDiskStateLock = utCode.includes('internal val diskStateLock = Any()') &&
+    utCode.includes('fun persistDeviceOfflineState(') &&
+    utCode.includes('fun persistDeviceOnlineState(') &&
+    gaCode.includes('UsageTrackerService.persistDeviceOnlineState(applicationContext, currentEpoch)') &&
+    testCode.includes('testOfflineCheckPausedBeforeDiskCommitAbortsWhenOnlineTransitionIntervenes');
+
   if (!hasVolatileScreen || !hasTelemetryEpoch || !hasSyncScreenOff || !hasConcurrentCallSet ||
       !hasUrgentOffline || !hasSingleEpochScreenOff || !hasSingleEpochScreenOn || !noEarlyRejection ||
       !hasSessionDeduplication || !hasZeroRawClose || !webActivityGuarded || !collectAndSaveGuarded ||
@@ -342,7 +352,7 @@ if (fs.existsSync(guardianAccessFile) && fs.existsSync(usageTrackerFile) && fs.e
       !hasHomeBeforeForegroundCheck || !hasNoRunBlockingInDestroy || !hasDoubleCheckInExecuteOnline ||
       !noUnsynchronizedPrefsWrite || !hasStaleScreenOffFencing || !hasKeyguardStrictLockCheck ||
       !hasStatsLock || !hasSessionLock || !hasForegroundGeneration || !testsLifecycleRace || !hasCasProtection ||
-      !hasHardwareTransitionLock) {
+      !hasHardwareTransitionLock || !urgentOfflineOutsideLock || !hasDiskStateLock) {
     console.error('\x1b[31m%s\x1b[0m', '❌ LỖI BẤT BIẾN PHẦN CỨNG: Vi phạm một trong các tiêu chuẩn an toàn:');
     console.error({
       hasVolatileScreen, hasTelemetryEpoch, hasSyncScreenOff, hasConcurrentCallSet,
@@ -351,7 +361,8 @@ if (fs.existsSync(guardianAccessFile) && fs.existsSync(usageTrackerFile) && fs.e
       hasPreMutationGuard, hasHardwareBootCheck, hasLastWrittenEpochGuard,
       hasHomeBeforeForegroundCheck, hasNoRunBlockingInDestroy, hasDoubleCheckInExecuteOnline,
       noUnsynchronizedPrefsWrite, hasStaleScreenOffFencing, hasKeyguardStrictLockCheck,
-      hasStatsLock, hasForegroundGeneration, testsLifecycleRace, hasCasProtection, hasHardwareTransitionLock
+      hasStatsLock, hasForegroundGeneration, testsLifecycleRace, hasCasProtection, hasHardwareTransitionLock,
+      urgentOfflineOutsideLock, hasDiskStateLock
     });
     process.exit(1);
   }
@@ -884,7 +895,8 @@ try {
     'testCas412FailsClosedWhenServerBodyIsEmptyOrMissingGeneration',
     'testActiveAppLockSerializesConcurrentPutRequests',
     'testScreenOffInterleavedWithScreenOnLifecycleRaceStrictlyPreventsStaleOfflineOverwrite',
-    'testHardwareTransitionLockGuaranteesAtomicStateTransition'
+    'testHardwareTransitionLockGuaranteesAtomicStateTransition',
+    'testOfflineCheckPausedBeforeDiskCommitAbortsWhenOnlineTransitionIntervenes'
   ];
 
   for (const testName of requiredProductionFeatureTests) {

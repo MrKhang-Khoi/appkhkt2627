@@ -4577,6 +4577,93 @@ class HardwareInvariantTest {
             listOf("off_start", "off_end", "on_start", "on_end"), order)
     }
 
+    @Test
+    fun testOfflineCheckPausedBeforeDiskCommitAbortsWhenOnlineTransitionIntervenes() {
+        // Invariant (Codex Karl Popper Falsification Mandate):
+        // When an offline flow passes initial check for epoch E, but pauses (e.g. slow I/O / OS preemption),
+        // and an online transition intervenes (setting isScreenOnState=true, epoch=E+1, disk=online),
+        // the offline flow MUST abort and MUST NOT overwrite the online state on disk or in memory!
+        val fakePrefs = FakeSharedPreferences()
+        fakePrefs.data["paired_code"] = "FAM123"
+        fakePrefs.data["device_id"] = "DEV456"
+        fakePrefs.data["last_written_epoch"] = 10L
+        fakePrefs.data["is_device_online"] = true
+        val fakeContext = FakeTestContext(fakePrefs)
+
+        GuardianAccessibilityService.telemetryEpoch.set(10L)
+        GuardianAccessibilityService.isScreenOnState = false // Screen initially turning off
+        UsageTrackerService.lastDispatchedOfflineEpoch.set(-1L)
+
+        val offlineCheckPassedLatch = java.util.concurrent.CountDownLatch(1)
+        val onlineTransitionCompleteLatch = java.util.concurrent.CountDownLatch(1)
+        val testDoneLatch = java.util.concurrent.CountDownLatch(2)
+
+        val offlinePersistResult = java.util.concurrent.atomic.AtomicBoolean(true)
+        val offlineJobCreated = java.util.concurrent.atomic.AtomicBoolean(false)
+
+        // Thread 1: Simulates offline dispatch flow with preemption between offline validation and disk commit
+        val tOffline = Thread {
+            try {
+                val epoch = 10L
+                // 1. Initial check passes
+                val isOfflineValid = UsageTrackerService.isHardwareOfflineValid(fakeContext, epoch)
+                assertTrue("Initial offline check for epoch 10 must pass", isOfflineValid)
+
+                // Signal that check passed, then pause to allow online transition to intervene
+                offlineCheckPassedLatch.countDown()
+                onlineTransitionCompleteLatch.await(3, java.util.concurrent.TimeUnit.SECONDS)
+
+                // 2. Now attempt to persist offline state and send urgent status for stale epoch 10
+                val persisted = UsageTrackerService.persistDeviceOfflineState(fakeContext, epoch)
+                offlinePersistResult.set(persisted)
+
+                val job = UsageTrackerService.sendUrgentOfflineStatus(fakeContext, epoch)
+                if (job != null) {
+                    offlineJobCreated.set(true)
+                }
+            } finally {
+                testDoneLatch.countDown()
+            }
+        }
+
+        // Thread 2: Simulates intervening user unlocking device (SCREEN_ON / USER_PRESENT)
+        val tOnline = Thread {
+            try {
+                // Wait for Thread 1 to validate offline
+                offlineCheckPassedLatch.await(3, java.util.concurrent.TimeUnit.SECONDS)
+
+                // Perform atomic hardware state transition to ONLINE (epoch 11)
+                synchronized(GuardianAccessibilityService.hardwareTransitionLock) {
+                    GuardianAccessibilityService.isScreenOnState = true
+                    val onlineEpoch = GuardianAccessibilityService.telemetryEpoch.incrementAndGet() // 11L
+                    UsageTrackerService.lastDispatchedOfflineEpoch.set(-1L)
+                    UsageTrackerService.cancelActiveOfflineCalls()
+                    val onlinePersisted = UsageTrackerService.persistDeviceOnlineState(fakeContext, onlineEpoch)
+                    assertTrue("Online persistence for epoch 11 must succeed", onlinePersisted)
+                }
+
+                // Signal Thread 1 to resume
+                onlineTransitionCompleteLatch.countDown()
+            } finally {
+                testDoneLatch.countDown()
+            }
+        }
+
+        tOffline.start()
+        tOnline.start()
+
+        val finished = testDoneLatch.await(4, java.util.concurrent.TimeUnit.SECONDS)
+        assertTrue("Both threads must complete within timeout", finished)
+
+        // CRITICAL INVARIANT ASSERTIONS:
+        assertFalse("Stale offline disk commit (epoch 10) must be rejected fail-closed", offlinePersistResult.get())
+        assertFalse("Stale offline job must NOT be created when online transition intervened", offlineJobCreated.get())
+        assertEquals("Device online state in preferences MUST remain TRUE", true, fakePrefs.data["is_device_online"])
+        assertEquals("Last written epoch in preferences MUST be the online epoch 11", 11L, fakePrefs.data["last_written_epoch"])
+        assertTrue("Hardware screen state must remain true", GuardianAccessibilityService.isScreenOnState)
+        assertEquals("Telemetry epoch must be 11", 11L, GuardianAccessibilityService.telemetryEpoch.get())
+    }
+
     private class FakeTestContext(
         val prefs: FakeSharedPreferences
     ) : ContextWrapper(null) {

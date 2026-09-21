@@ -683,6 +683,81 @@ class UsageTrackerService : Service() {
             }
         }
 
+        internal val diskStateLock = Any()
+
+        internal fun persistDeviceOfflineState(
+            context: Context,
+            targetEpoch: Long
+        ): Boolean {
+            synchronized(diskStateLock) {
+                val prefs = try {
+                    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                } catch (e: Exception) {
+                    Log.w("UsageTrackerService", "persistDeviceOfflineState prefs error: ${e.message}")
+                    null
+                } ?: return false
+
+                val currentEpoch = GuardianAccessibilityService.telemetryEpoch.get()
+                if (targetEpoch != currentEpoch || !isHardwareOfflineValid(context, targetEpoch)) {
+                    Log.w("UsageTrackerService", "Hủy bỏ persistDeviceOfflineState: Epoch hoặc phần cứng đã đổi ($targetEpoch != $currentEpoch)")
+                    return false
+                }
+
+                val lastEpoch = prefs.getLong("last_written_epoch", -1L)
+                if (targetEpoch < lastEpoch) {
+                    Log.w("UsageTrackerService", "Hủy bỏ persistDeviceOfflineState: targetEpoch $targetEpoch < last_written_epoch $lastEpoch")
+                    return false
+                }
+
+                val success = prefs.edit()
+                    .putLong("last_written_epoch", targetEpoch)
+                    .putBoolean("is_device_online", false)
+                    .putString("last_foreground_pkg", "")
+                    .putLong("last_foreground_start", 0L)
+                    .commit()
+
+                if (GuardianAccessibilityService.telemetryEpoch.get() != targetEpoch || !isHardwareOfflineValid(context, targetEpoch)) {
+                    Log.w("UsageTrackerService", "Phát hiện race condition sau commit offline: Trạng thái phần cứng đã chuyển online")
+                    if (GuardianAccessibilityService.isScreenOnState) {
+                        prefs.edit().putBoolean("is_device_online", true).commit()
+                    }
+                    return false
+                }
+                return success
+            }
+        }
+
+        internal fun persistDeviceOnlineState(
+            context: Context,
+            targetEpoch: Long
+        ): Boolean {
+            synchronized(diskStateLock) {
+                val prefs = try {
+                    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                } catch (e: Exception) {
+                    Log.w("UsageTrackerService", "persistDeviceOnlineState prefs error: ${e.message}")
+                    null
+                } ?: return false
+
+                val currentEpoch = GuardianAccessibilityService.telemetryEpoch.get()
+                if (targetEpoch != currentEpoch || !isHardwareOnlineValid(context, targetEpoch)) {
+                    Log.w("UsageTrackerService", "Hủy bỏ persistDeviceOnlineState: Epoch hoặc phần cứng không online ($targetEpoch != $currentEpoch)")
+                    return false
+                }
+
+                val lastEpoch = prefs.getLong("last_written_epoch", -1L)
+                if (targetEpoch < lastEpoch) {
+                    Log.w("UsageTrackerService", "Hủy bỏ persistDeviceOnlineState: targetEpoch $targetEpoch < last_written_epoch $lastEpoch")
+                    return false
+                }
+
+                return prefs.edit()
+                    .putLong("last_written_epoch", targetEpoch)
+                    .putBoolean("is_device_online", true)
+                    .commit()
+            }
+        }
+
         internal fun ensureFreshActiveAppETag(
             requestUrl: okhttp3.HttpUrl,
             expectedEpoch: Long,
@@ -1213,10 +1288,9 @@ class UsageTrackerService : Service() {
                 }
             }
 
-            // Ghi nhận trạng thái offline tức thời vào đĩa CHỈ KHI phần cứng vẫn đang offline và epoch khớp tuyệt đối
-            if (isHardwareOfflineValid(context, expectedEpoch)) {
-                prefs?.edit()?.putBoolean("is_device_online", false)?.commit()
-            } else {
+            // Ghi nhận trạng thái offline tức thời vào đĩa bằng CAS logic nguyên tử bảo vệ bởi diskStateLock
+            val diskPersisted = persistDeviceOfflineState(context, expectedEpoch)
+            if (!diskPersisted) {
                 Log.w("UsageTrackerService", "Hủy bỏ sendUrgentOfflineStatus disk commit: Epoch hoặc trạng thái phần cứng không offline")
                 return null
             }
@@ -1895,12 +1969,19 @@ class UsageTrackerService : Service() {
                     return null
                 }
 
-                prefs.edit()
-                    .putLong("last_written_epoch", currentEpoch)
-                    .putBoolean("is_device_online", effectiveOnline)
-                    .putString("last_active_package", targetPkg)
-                    .putLong("last_active_timestamp", System.currentTimeMillis())
-                    .apply()
+                synchronized(diskStateLock) {
+                    val currentDiskEpoch = prefs.getLong("last_written_epoch", -1L)
+                    if (currentEpoch != -1L && currentDiskEpoch > currentEpoch) {
+                        Log.w("UsageTrackerService", "Hủy bỏ prepareActiveAppLocked: SharedPreferences đã ghi bởi epoch mới hơn ($currentDiskEpoch > $currentEpoch)")
+                        return null
+                    }
+                    prefs.edit()
+                        .putLong("last_written_epoch", currentEpoch)
+                        .putBoolean("is_device_online", effectiveOnline)
+                        .putString("last_active_package", targetPkg)
+                        .putLong("last_active_timestamp", System.currentTimeMillis())
+                        .apply()
+                }
 
                 val currentGen = foregroundGeneration.incrementAndGet()
                 lastKnownETags.clear()

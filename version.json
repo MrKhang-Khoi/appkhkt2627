@@ -8,15 +8,15 @@
   "fileSize": "5.87 MB",
   "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.3.8.apk",
   "apkFallbackUrl": "https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/CVA-SmartGuardian-v1.3.8.apk",
-  "sha256": "386D55AD941C2210690770571491C1EE01248E916E3D3C33BB09F6669ACA1010",
+  "sha256": "FBCA69DBB22ACF9B733F4213C3609772FC67B58B01476BC9B01B04579057818C",
   "changelog": [
-    "Thiết lập khóa chuyển đổi trạng thái phần cứng nguyên tử (hardwareTransitionLock) đồng bộ hóa hoàn toàn handleScreenOff() và handleScreenOn(), triệt tiêu race condition.",
-    "Cơ chế gating ngoại tuyến fail-closed (isHardwareOfflineValid) chặt chẽ trong sendUrgentOfflineStatus và executeOfflineGuarded, ngăn chặn rò rỉ ngoại tuyến khi máy đã bật sáng.",
+    "Di chuyển sendUrgentOfflineStatus ra ngoài hardwareTransitionLock để triệt tiêu hiện tượng giữ lock khi thực hiện I/O đĩa và mạng.",
+    "Bổ sung diskStateLock và persistDeviceOfflineState / persistDeviceOnlineState với CAS logic nguyên tử kiểm soát last_written_epoch.",
     "Bảo vệ epoch và generation tuyệt đối, tự động hủy bỏ các batch phát telemetry ngoại tuyến cũ khi xảy ra cạnh tranh vòng đời.",
     "Tuần tự hóa activeAppLock và xử lý fail-closed trên HTTP 412 CAS concurrency."
   ],
-  "releaseNotes": "Bản phát hành v1.3.8: Tích hợp hardwareTransitionLock nguyên tử, bảo vệ fail-closed ngoại tuyến isHardwareOfflineValid, và triệt tiêu xung đột vòng đời màn hình.",
-  "updatedAt": 1789995837504,
-  "size": 6154643,
+  "releaseNotes": "Bản phát hành v1.3.8: Non-blocking hardwareTransitionLock, khóa đĩa diskStateLock nguyên tử kiểm soát last_written_epoch, và triệt tiêu xung đột vòng đời màn hình.",
+  "updatedAt": 1789996508407,
+  "size": 6156166,
   "releaseDate": "2026-09-21"
 }
