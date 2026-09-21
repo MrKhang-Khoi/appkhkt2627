@@ -1315,7 +1315,11 @@ class HardwareInvariantTest {
                 return true
             }
             override fun apply() {
-                commit()
+                synchronized(prefs.data) {
+                    if (clearRequested) prefs.data.clear()
+                    for (k in toRemove) prefs.data.remove(k)
+                    for ((k, v) in temp) prefs.data[k] = v
+                }
             }
         }
     }
@@ -5119,7 +5123,7 @@ class HardwareInvariantTest {
         assertNull("Oversized poison key must be removed from SharedPreferences", fakePrefs.data["persisted_session_tokens_json"])
         assertEquals("recordedSessionTokens must remain empty after dropping oversized payload", 0, UsageTrackerService.recordedSessionTokens.size)
 
-        // 3. Test payload > 64KB when commit fails (Disk I/O failure): Must fail closed and not mark restored
+        // 3. Test payload > 64KB when commit fails (Disk I/O failure): Fallback purges memory to [] and marks restored
         UsageTrackerService.recordedSessionTokens.clear()
         UsageTrackerService.isSessionTokensRestored.set(false)
         val failingPrefs = FakeSharedPreferences(commitReturnsSuccess = false)
@@ -5127,8 +5131,10 @@ class HardwareInvariantTest {
         failingPrefs.data["persisted_session_tokens_json"] = oversizedJson
 
         val resultFailingCommit = UsageTrackerService.restorePersistedSessionTokens(failingContext)
-        assertFalse("Must return false when commit fails to remove oversized poison pill", resultFailingCommit)
-        assertFalse("Restore flag must remain false on commit failure to allow retry", UsageTrackerService.isSessionTokensRestored.get())
+        assertTrue("Must safely handle oversized payload even when initial commit fails", resultFailingCommit)
+        assertTrue("Restore flag must be set to true to prevent infinite retry loop", UsageTrackerService.isSessionTokensRestored.get())
+        assertEquals("recordedSessionTokens must be empty", 0, UsageTrackerService.recordedSessionTokens.size)
+        assertEquals("In-memory cache must be overridden to empty JSON []", "[]", failingPrefs.data["persisted_session_tokens_json"])
     }
 
     private class FakeTestContext(

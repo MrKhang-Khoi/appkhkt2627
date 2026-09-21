@@ -514,10 +514,10 @@ class UsageTrackerService : Service() {
                             Log.w("UsageTrackerService", "persisted_session_tokens_json vượt giới hạn 64KB (${rawJson.length} bytes), loại bỏ để chống OOM")
                             val removed = prefs.edit().remove("persisted_session_tokens_json").commit()
                             if (!removed) {
-                                Log.e("UsageTrackerService", "LỖI AN TOÀN: Không thể xóa persisted_session_tokens_json độc hại khỏi SharedPreferences!")
-                                isSessionTokensRestored.set(false)
-                                return false
+                                Log.w("UsageTrackerService", "commit() xóa key độc hại thất bại, áp dụng fallback ghi đè rỗng [] qua apply() để giải phóng in-memory cache")
+                                prefs.edit().putString("persisted_session_tokens_json", "[]").apply()
                             }
+                            recordedSessionTokens.clear()
                             isSessionTokensRestored.set(true)
                             return true
                         }

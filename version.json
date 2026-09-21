@@ -8,7 +8,7 @@
   "fileSize": "5.88 MB",
   "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.3.8.apk",
   "apkFallbackUrl": "https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/CVA-SmartGuardian-v1.3.8.apk",
-  "sha256": "74E29C0CEA40E86033A43D807503E65382D63E2F26BDF681915ADECB33BA0A90",
+  "sha256": "B81BA8E971154C956C192ED1C3A7033A6C02F3CCAEFDAB176E69203D803310AE",
   "changelog": [
     "Di chuyển sendUrgentOfflineStatus ra ngoài hardwareTransitionLock để triệt tiêu hiện tượng giữ lock khi thực hiện I/O đĩa và mạng.",
     "Bổ sung diskStateLock và persistDeviceOfflineState / persistDeviceOnlineState với CAS logic nguyên tử kiểm soát last_written_epoch.",
@@ -16,10 +16,10 @@
     "Tích hợp hàng đợi pending_sessions_json bền vững kèm RAM fallback queue tự động lưu và retry sau SCREEN_ON hoặc restart.",
     "Tích hợp Atomic Durable File Journal (pending_sessions.journal) kèm post-write verification, chống mất phiên khi SharedPreferences gặp sự cố hoặc tiến trình bị kill.",
     "Tích hợp Write-Ahead Log (pending_sessions.wal) append-only với CRC32 checksum per-record, hardware fsync và tự phục hồi khi file bị cắt dở do crash.",
-    "Cưỡng chế giới hạn cứng maxEntries trên restoreSnapshotRaw (slicing tail) và khử độc persisted_session_tokens_json (rào cản 64KB fail-closed chống OOM/DoS)."
+    "Cưỡng chế giới hạn cứng maxEntries trên restoreSnapshotRaw (slicing tail) và khử độc persisted_session_tokens_json (rào cản 64KB kèm apply fallback chống infinite retry loop)."
   ],
-  "releaseNotes": "Bản phát hành v1.3.8: Non-blocking hardwareTransitionLock, khóa đĩa diskStateLock nguyên tử, CRC32 WAL, và giới hạn cứng an toàn bộ nhớ LruSessionSet fail-closed chống OOM/DoS.",
-  "updatedAt": 1790001000000,
-  "size": 6163081,
+  "releaseNotes": "Bản phát hành v1.3.8: Non-blocking hardwareTransitionLock, khóa đĩa diskStateLock nguyên tử, CRC32 WAL, và giới hạn cứng an toàn bộ nhớ LruSessionSet kèm apply fallback chống infinite retry loop.",
+  "updatedAt": 1790001300000,
+  "size": 6163193,
   "releaseDate": "2026-09-21"
 }
