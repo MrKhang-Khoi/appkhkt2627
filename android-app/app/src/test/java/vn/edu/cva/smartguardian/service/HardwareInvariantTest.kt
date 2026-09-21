@@ -3667,6 +3667,7 @@ class HardwareInvariantTest {
         // 12. Fail-Closed Conditional PUT Request Invariant:
         val dummyBody = okhttp3.RequestBody.create("application/json; charset=utf-8".toMediaTypeOrNull(), "{\"status\":\"EXPIRED\"}")
         val conditionalPutReq = UsageTrackerService.LocationProtocol.buildConditionalPutRequest(testCmdUrl, "\"etag_valid_456\"", dummyBody)
+        assertEquals("true", conditionalPutReq.header("X-Firebase-ETag"))
         assertEquals("\"etag_valid_456\"", conditionalPutReq.header("if-match"))
         assertEquals("PUT", conditionalPutReq.method)
 
@@ -3687,6 +3688,19 @@ class HardwareInvariantTest {
         assertFalse("HTTP 400 Bad Request must NOT publish location", UsageTrackerService.LocationProtocol.shouldPublishLocationAfterCas(400))
         assertFalse("HTTP 404 Not Found must NOT publish location", UsageTrackerService.LocationProtocol.shouldPublishLocationAfterCas(404))
         assertFalse("HTTP 500 Server Error must NOT publish location", UsageTrackerService.LocationProtocol.shouldPublishLocationAfterCas(500))
+    }
+
+    @Test
+    fun testBuildConditionalPutRequestContainsBothETagHeaders() {
+        val body = "{}".toRequestBody("application/json".toMediaType())
+        val req = UsageTrackerService.LocationProtocol.buildConditionalPutRequest(
+            "https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/test.json",
+            "etag_12345",
+            body
+        )
+        assertEquals("true", req.header(UsageTrackerService.LocationProtocol.HEADER_FIREBASE_ETAG))
+        assertEquals("etag_12345", req.header(UsageTrackerService.LocationProtocol.HEADER_IF_MATCH))
+        assertEquals("PUT", req.method)
     }
 
     @Test

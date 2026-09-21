@@ -189,6 +189,7 @@ class UsageTrackerService : Service() {
             require(etag.isNotBlank()) { "Fail-Closed: ETag cannot be blank for atomic conditional write" }
             return okhttp3.Request.Builder()
                 .url(cmdUrl)
+                .header(HEADER_FIREBASE_ETAG, "true")
                 .header(HEADER_IF_MATCH, etag)
                 .put(body)
                 .build()
