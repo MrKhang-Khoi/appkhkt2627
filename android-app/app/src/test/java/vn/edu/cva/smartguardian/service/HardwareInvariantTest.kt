@@ -976,8 +976,10 @@ class HardwareInvariantTest {
         fakePrefs.data["device_id"] = "DEV456"
         val fakeContext = FakeTestContext(fakePrefs)
 
-        UsageTrackerService.lastDispatchedOfflineEpoch.set(-1L)
         val epoch = 42L
+        GuardianAccessibilityService.isScreenOnState = false
+        GuardianAccessibilityService.telemetryEpoch.set(epoch)
+        UsageTrackerService.lastDispatchedOfflineEpoch.set(-1L)
 
         val job1 = UsageTrackerService.sendUrgentOfflineStatus(fakeContext, epoch)
         assertTrue("First dispatch for epoch $epoch must launch a Job", job1 != null)
@@ -989,6 +991,7 @@ class HardwareInvariantTest {
         // Clean up
         UsageTrackerService.cancelActiveOfflineCalls()
         UsageTrackerService.lastDispatchedOfflineEpoch.set(-1L)
+        GuardianAccessibilityService.isScreenOnState = true
     }
 
     @Test
@@ -4457,6 +4460,121 @@ class HardwareInvariantTest {
         assertTrue("Both threads must finish within timeout", completed)
         assertEquals("activeAppLock must serialize execution: t1 must completely finish before t2 starts",
             listOf("t1_start", "t1_end", "t2_start", "t2_end"), executionOrder)
+    }
+
+    @Test
+    fun testScreenOffInterleavedWithScreenOnLifecycleRaceStrictlyPreventsStaleOfflineOverwrite() {
+        // Red-Team Karl Popper Falsification Test Mandated by OpenAI Codex:
+        // Cưỡng bức thứ tự race condition giữa 2 luồng:
+        // Luồng 1 (SCREEN_OFF) bắt đầu -> bị tạm dừng (pauseLatch) -> Luồng 2 (SCREEN_ON) hoàn thành trọn vẹn -> Luồng 1 tiếp tục.
+        // Bắt buộc chứng minh:
+        // 1. Luồng 2 (SCREEN_ON) thiết lập isScreenOnState = true và telemetryEpoch mới.
+        // 2. Luồng 1 khi tiếp tục KHÔNG ĐƯỢC PHÉP ghi đè trạng thái ONLINE bằng offline telemetry cũ.
+        // 3. sendUrgentOfflineStatus và executeOfflineGuarded triệt tiêu fail-closed mọi offline HTTP call cho stale epoch.
+        val fakePrefs = FakeSharedPreferences()
+        fakePrefs.data["paired_code"] = "CVA-TEST"
+        fakePrefs.data["device_id"] = "TEST_DEV_RACE"
+        fakePrefs.data["is_device_online"] = true
+        val context = FakeTestContext(fakePrefs)
+
+        // Khởi tạo trạng thái ban đầu: Thiết bị ONLINE, epoch = 10
+        GuardianAccessibilityService.telemetryEpoch.set(10L)
+        GuardianAccessibilityService.isScreenOnState = true
+
+        val pauseLatch = java.util.concurrent.CountDownLatch(1)
+        val screenOnFinishedLatch = java.util.concurrent.CountDownLatch(1)
+        val testFinishedLatch = java.util.concurrent.CountDownLatch(2)
+
+        val offlineHttpDispatched = java.util.concurrent.atomic.AtomicBoolean(false)
+
+        // Thread 1: SCREEN_OFF event
+        val tScreenOff = Thread {
+            try {
+                // Đang chuẩn bị xử lý SCREEN_OFF nhưng bị pause/preempt trước khi dispatch offline
+                pauseLatch.await()
+
+                // Khi resume, giả định nhận được epoch cũ 10 (hoặc cố gắng phát offline cho epoch 10)
+                val staleEpoch = 10L
+                val job = UsageTrackerService.sendUrgentOfflineStatus(context, staleEpoch)
+                if (job != null) {
+                    offlineHttpDispatched.set(true)
+                }
+            } finally {
+                testFinishedLatch.countDown()
+            }
+        }
+
+        // Thread 2: SCREEN_ON event
+        val tScreenOn = Thread {
+            try {
+                // Chờ một chút để tScreenOff sẵn sàng
+                Thread.sleep(20)
+                synchronized(GuardianAccessibilityService.hardwareTransitionLock) {
+                    GuardianAccessibilityService.isScreenOnState = true
+                    GuardianAccessibilityService.telemetryEpoch.incrementAndGet() // 11
+                    UsageTrackerService.lastDispatchedOfflineEpoch.set(-1L)
+                    UsageTrackerService.cancelActiveOfflineCalls()
+                    fakePrefs.data["is_device_online"] = true
+                }
+                screenOnFinishedLatch.countDown()
+                // Bây giờ giải phóng Thread 1 tiếp tục chạy
+                pauseLatch.countDown()
+            } finally {
+                testFinishedLatch.countDown()
+            }
+        }
+
+        tScreenOff.start()
+        tScreenOn.start()
+
+        val completed = testFinishedLatch.await(3, java.util.concurrent.TimeUnit.SECONDS)
+        assertTrue("Cả 2 luồng lifecycle race phải kết thúc an toàn trong 3s", completed)
+
+        // Kiểm tra bất biến:
+        assertEquals("Trạng thái phần cứng bắt buộc phải là ONLINE sau khi SCREEN_ON chạy", true, GuardianAccessibilityService.isScreenOnState)
+        assertEquals("telemetryEpoch bắt buộc phải là 11 (không bị stale epoch của Thread 1 ghi đè)", 11L, GuardianAccessibilityService.telemetryEpoch.get())
+        assertFalse("Offline job/HTTP request cho stale epoch 10 bắt buộc phải bị từ chối fail-closed", offlineHttpDispatched.get())
+        assertEquals("is_device_online trong preferences bắt buộc phải được bảo toàn là true (không bị offline ghi đè)", true, fakePrefs.data["is_device_online"])
+    }
+
+    @Test
+    fun testHardwareTransitionLockGuaranteesAtomicStateTransition() {
+        // Verification: Proves hardwareTransitionLock serializes state transitions
+        val lock = GuardianAccessibilityService.hardwareTransitionLock
+        assertNotNull("hardwareTransitionLock must not be null", lock)
+
+        val order = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val latch1 = java.util.concurrent.CountDownLatch(1)
+        val done = java.util.concurrent.CountDownLatch(2)
+
+        val t1 = Thread {
+            latch1.await()
+            synchronized(GuardianAccessibilityService.hardwareTransitionLock) {
+                order.add("off_start")
+                Thread.sleep(40)
+                order.add("off_end")
+            }
+            done.countDown()
+        }
+
+        val t2 = Thread {
+            latch1.await()
+            Thread.sleep(10)
+            synchronized(GuardianAccessibilityService.hardwareTransitionLock) {
+                order.add("on_start")
+                order.add("on_end")
+            }
+            done.countDown()
+        }
+
+        t1.start()
+        t2.start()
+        latch1.countDown()
+
+        val finished = done.await(3, java.util.concurrent.TimeUnit.SECONDS)
+        assertTrue("Both threads must complete within timeout", finished)
+        assertEquals("hardwareTransitionLock must serialize screen transition",
+            listOf("off_start", "off_end", "on_start", "on_end"), order)
     }
 
     private class FakeTestContext(

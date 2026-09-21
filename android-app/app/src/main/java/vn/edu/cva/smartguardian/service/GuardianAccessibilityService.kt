@@ -35,6 +35,7 @@ class GuardianAccessibilityService : AccessibilityService() {
 
         val telemetryEpoch = java.util.concurrent.atomic.AtomicLong(0L)
         internal val sessionLock = Any()
+        internal val hardwareTransitionLock = Any()
 
         val BANK_PACKAGES = setOf(
             "com.vcb",                    // Vietcombank
@@ -338,118 +339,130 @@ class GuardianAccessibilityService : AccessibilityService() {
     }
 
     fun handleScreenOff(): Long {
-        // 1. NGAY LẬP TỨC và ĐỒNG BỘ: Ngắt cờ phần cứng, hủy heartbeat, tăng epoch duy nhất và ngắt socket mạng online in-flight
-        isScreenOnState = false
-        heartbeatJob?.cancel()
-        val currentEpoch = telemetryEpoch.incrementAndGet()
-        UsageTrackerService.foregroundGeneration.incrementAndGet() // Triệt tiêu ngay lập tức mọi foreground telemetry in-flight
-        UsageTrackerService.cancelActiveOnlineCalls()
+        return synchronized(hardwareTransitionLock) {
+            val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
+            val km = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+            val isHardwareStillOff = (pm?.isInteractive != true || km?.isKeyguardLocked == true)
+            if (!isHardwareStillOff) {
+                Log.w("GuardianAccess", "Hủy bỏ handleScreenOff: Thiết bị đã trở lại Online trước khi chiếm lock!")
+                return@synchronized telemetryEpoch.get()
+            }
 
-        // 2. Chụp snapshot và reset biến bộ nhớ RAM ngay lập tức dưới sessionLock TRƯỚC MỌI THAO TÁC I/O HOẶC SERVICE
-        val now = System.currentTimeMillis()
-        val (closedPkg, closedStart) = synchronized(sessionLock) {
-            val pkg = currentForegroundPackage
-            val start = currentForegroundStartTime
-            currentForegroundPackage = ""
-            currentForegroundStartTime = 0L
-            lastActivePackage = "SCREEN_OFF"
-            lastActiveUploadTimestamp = now
-            Pair(pkg, start)
-        }
-        val sessionToken = if (closedPkg.isNotEmpty() && closedStart > 0L) "${closedPkg}_${closedStart}" else ""
+            // 1. NGAY LẬP TỨC và ĐỒNG BỘ NGUYÊN TỬ: Ngắt cờ phần cứng, hủy heartbeat, tăng epoch và generation
+            isScreenOnState = false
+            heartbeatJob?.cancel()
+            val currentEpoch = telemetryEpoch.incrementAndGet()
+            UsageTrackerService.foregroundGeneration.incrementAndGet() // Triệt tiêu ngay lập tức mọi foreground telemetry in-flight
+            UsageTrackerService.cancelActiveOnlineCalls()
 
-        // 3. Chốt phiên polling độc lập (dispatches I/O to background coroutine)
-        UsageTrackerService.closePolledSession(applicationContext, "SCREEN_OFF")
+            // 2. Chụp snapshot và reset biến bộ nhớ RAM ngay lập tức dưới sessionLock TRƯỚC MỌI THAO TÁC I/O HOẶC SERVICE
+            val now = System.currentTimeMillis()
+            val (closedPkg, closedStart) = synchronized(sessionLock) {
+                val pkg = currentForegroundPackage
+                val start = currentForegroundStartTime
+                currentForegroundPackage = ""
+                currentForegroundStartTime = 0L
+                lastActivePackage = "SCREEN_OFF"
+                lastActiveUploadTimestamp = now
+                Pair(pkg, start)
+            }
+            val sessionToken = if (closedPkg.isNotEmpty() && closedStart > 0L) "${closedPkg}_${closedStart}" else ""
 
-        // 4. Fast-path offline: Gửi ngay lập tức bản tin ngắt kết nối khẩn cấp lên Firebase
-        UsageTrackerService.sendUrgentOfflineStatus(this, currentEpoch)
+            // 3. Chốt phiên polling độc lập (dispatches I/O to background coroutine)
+            UsageTrackerService.closePolledSession(applicationContext, "SCREEN_OFF")
 
-        // 4. Bất biến kế toán: Ghi nhận thời lượng phiên sử dụng ĐỘC LẬP (kèm session token chống duplicate)
-        if (closedPkg.isNotEmpty() && closedStart > 0L && now - closedStart >= 1000L && sessionToken.isNotEmpty()) {
-            val sessionDuration = now - closedStart
-            serviceScope.launch(Dispatchers.IO) {
-                if (telemetryEpoch.get() == currentEpoch) {
-                    UsageTrackerService.recordAppSession(applicationContext, closedPkg, sessionDuration, sessionToken, currentEpoch)
+            // 4. Fast-path offline: Gửi ngay lập tức bản tin ngắt kết nối khẩn cấp lên Firebase
+            UsageTrackerService.sendUrgentOfflineStatus(this, currentEpoch)
+
+            // 5. Bất biến kế toán: Ghi nhận thời lượng phiên sử dụng ĐỘC LẬP (kèm session token chống duplicate)
+            if (closedPkg.isNotEmpty() && closedStart > 0L && now - closedStart >= 1000L && sessionToken.isNotEmpty()) {
+                val sessionDuration = now - closedStart
+                serviceScope.launch(Dispatchers.IO) {
+                    if (telemetryEpoch.get() == currentEpoch) {
+                        UsageTrackerService.recordAppSession(applicationContext, closedPkg, sessionDuration, sessionToken, currentEpoch)
+                    }
                 }
             }
-        }
 
-        // 5. Telemetry offline state persistence: Áp dụng stale fencing riêng biệt cho trạng thái telemetry
-        serviceScope.launch(Dispatchers.IO) {
-            // FENCING BẤT BIẾN: Chỉ áp dụng hủy cập nhật trạng thái offline nếu màn hình đã bật lại
-            if (telemetryEpoch.get() != currentEpoch || isScreenOnState) {
-                Log.w("GuardianAccess", "Hủy bỏ screen off persist: Phát hiện SCREEN_ON trước khi ghi đĩa (currentEpoch=$currentEpoch, latestEpoch=${telemetryEpoch.get()})")
-                return@launch
-            }
+            // 6. Telemetry offline state persistence: Áp dụng stale fencing riêng biệt cho trạng thái telemetry
+            serviceScope.launch(Dispatchers.IO) {
+                // FENCING BẤT BIẾN: Chỉ áp dụng hủy cập nhật trạng thái offline nếu màn hình đã bật lại
+                if (telemetryEpoch.get() != currentEpoch || isScreenOnState) {
+                    Log.w("GuardianAccess", "Hủy bỏ screen off persist: Phát hiện SCREEN_ON trước khi ghi đĩa (currentEpoch=$currentEpoch, latestEpoch=${telemetryEpoch.get()})")
+                    return@launch
+                }
 
-            val prefs = try { getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE) } catch (e: Exception) { null }
-            val lastEpoch = prefs?.getLong("last_written_epoch", -1L) ?: -1L
-            if (currentEpoch >= lastEpoch) {
-                prefs?.edit()
-                    ?.putLong("last_written_epoch", currentEpoch)
-                    ?.putBoolean("is_device_online", false)
-                    ?.putString("last_foreground_pkg", "")
-                    ?.putLong("last_foreground_start", 0L)
-                    ?.apply()
+                val prefs = try { getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE) } catch (e: Exception) { null }
+                val lastEpoch = prefs?.getLong("last_written_epoch", -1L) ?: -1L
+                if (currentEpoch >= lastEpoch) {
+                    prefs?.edit()
+                        ?.putLong("last_written_epoch", currentEpoch)
+                        ?.putBoolean("is_device_online", false)
+                        ?.putString("last_foreground_pkg", "")
+                        ?.putLong("last_foreground_start", 0L)
+                        ?.apply()
+                }
             }
+            currentEpoch
         }
-        return currentEpoch
     }
 
     fun handleScreenOn(): Long {
-        val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
-        val km = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
-        val isHardwareOnline = (pm?.isInteractive == true && km?.isKeyguardLocked != true)
+        return synchronized(hardwareTransitionLock) {
+            val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
+            val km = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+            val isHardwareOnline = (pm?.isInteractive == true && km?.isKeyguardLocked != true)
 
-        if (!isHardwareOnline) {
-            isScreenOnState = false
-            heartbeatJob?.cancel()
-            Log.d("GuardianAccess", "handleScreenOn: Thiết bị chưa online hoàn toàn (isInteractive=${pm?.isInteractive}, isKeyguardLocked=${km?.isKeyguardLocked}) -> Chưa kích hoạt heartbeat")
-            return telemetryEpoch.get()
-        }
-
-        // Bất biến chuyển trạng thái phần cứng (Hardware State Transition Invariant - Codex Mandate):
-        // Mọi lần chuyển phần cứng OFFLINE -> ONLINE bắt buộc phải incrementAndGet() dưới state transition nguyên tử!
-        val currentEpoch = telemetryEpoch.incrementAndGet()
-        isScreenOnState = true
-        UsageTrackerService.lastDispatchedOfflineEpoch.set(-1L)
-        UsageTrackerService.cancelActiveOfflineCalls()
-        startPeriodicHeartbeat()
-
-        val currentPkg = try {
-            val root = rootInActiveWindow
-            val p = root?.packageName?.toString()?.trim()
-            if (!p.isNullOrEmpty() && p != applicationContext.packageName) p else null
-        } catch (e: Exception) {
-            Log.w("GuardianAccess", "Error inspecting rootInActiveWindow on screen on: ${e.message}")
-            null
-        }
-
-        serviceScope.launch(Dispatchers.IO) {
-            val (uploadAction, actionGen) = UsageTrackerService.telemetryMutex.withLock {
-                if (!isScreenOnState || telemetryEpoch.get() != currentEpoch) {
-                    return@withLock Pair(null, -1L)
-                }
-                synchronized(sessionLock) {
-                    lastActivePackage = ""
-                    currentForegroundPackage = ""
-                    currentForegroundStartTime = 0L
-                }
-
-                val act = if (currentPkg != null) {
-                    handleWindowStateChangedLocked(currentPkg, currentEpoch)
-                } else {
-                    null
-                }
-                Pair(act, UsageTrackerService.foregroundGeneration.get())
+            if (!isHardwareOnline) {
+                isScreenOnState = false
+                heartbeatJob?.cancel()
+                Log.d("GuardianAccess", "handleScreenOn: Thiết bị chưa online hoàn toàn (isInteractive=${pm?.isInteractive}, isKeyguardLocked=${km?.isKeyguardLocked}) -> Chưa kích hoạt heartbeat")
+                return@synchronized telemetryEpoch.get()
             }
-            if (uploadAction != null && actionGen != -1L) {
-                if (UsageTrackerService.foregroundGeneration.get() == actionGen && isScreenOnState && telemetryEpoch.get() == currentEpoch) {
-                    uploadAction.invoke()
+
+            // Bất biến chuyển trạng thái phần cứng (Hardware State Transition Invariant - Codex Mandate):
+            // Mọi lần chuyển phần cứng OFFLINE -> ONLINE bắt buộc phải incrementAndGet() dưới state transition nguyên tử!
+            val currentEpoch = telemetryEpoch.incrementAndGet()
+            isScreenOnState = true
+            UsageTrackerService.lastDispatchedOfflineEpoch.set(-1L)
+            UsageTrackerService.cancelActiveOfflineCalls()
+            startPeriodicHeartbeat()
+
+            val currentPkg = try {
+                val root = rootInActiveWindow
+                val p = root?.packageName?.toString()?.trim()
+                if (!p.isNullOrEmpty() && p != applicationContext.packageName) p else null
+            } catch (e: Exception) {
+                Log.w("GuardianAccess", "Error inspecting rootInActiveWindow on screen on: ${e.message}")
+                null
+            }
+
+            serviceScope.launch(Dispatchers.IO) {
+                val (uploadAction, actionGen) = UsageTrackerService.telemetryMutex.withLock {
+                    if (!isScreenOnState || telemetryEpoch.get() != currentEpoch) {
+                        return@withLock Pair(null, -1L)
+                    }
+                    synchronized(sessionLock) {
+                        lastActivePackage = ""
+                        currentForegroundPackage = ""
+                        currentForegroundStartTime = 0L
+                    }
+
+                    val act = if (currentPkg != null) {
+                        handleWindowStateChangedLocked(currentPkg, currentEpoch)
+                    } else {
+                        null
+                    }
+                    Pair(act, UsageTrackerService.foregroundGeneration.get())
+                }
+                if (uploadAction != null && actionGen != -1L) {
+                    if (UsageTrackerService.foregroundGeneration.get() == actionGen && isScreenOnState && telemetryEpoch.get() == currentEpoch) {
+                        uploadAction.invoke()
+                    }
                 }
             }
+            currentEpoch
         }
-        return currentEpoch
     }
 
     private fun startPeriodicHeartbeat() {

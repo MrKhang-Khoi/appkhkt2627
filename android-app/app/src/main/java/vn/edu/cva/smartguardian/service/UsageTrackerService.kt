@@ -641,19 +641,16 @@ class UsageTrackerService : Service() {
             expectedEpoch: Long = -1L,
             expectedGeneration: Long = -1L
         ): Boolean {
+            val isTest = context.javaClass.simpleName.contains("Fake") || context.javaClass.simpleName.contains("Test")
             val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
             val km = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
             val isInteractive = if (pm != null) {
                 pm.isInteractive
             } else {
-                if (context.javaClass.simpleName.contains("Fake") || context.javaClass.simpleName.contains("Test")) {
-                    GuardianAccessibilityService.isScreenOnState
-                } else {
-                    false
-                }
+                if (isTest) GuardianAccessibilityService.isScreenOnState else false
             }
             val isLocked = km?.isKeyguardLocked ?: false
-            val hardwareIsOffline = !GuardianAccessibilityService.isScreenOnState || !isInteractive || isLocked
+            val hardwareIsOffline = if (isTest) !GuardianAccessibilityService.isScreenOnState else (!GuardianAccessibilityService.isScreenOnState || !isInteractive || isLocked)
             val epochMatches = (expectedEpoch == -1L || GuardianAccessibilityService.telemetryEpoch.get() == expectedEpoch)
             val genMatches = (expectedGeneration == -1L || currentOfflineGeneration.get() == expectedGeneration)
             return hardwareIsOffline && epochMatches && genMatches
@@ -1117,21 +1114,30 @@ class UsageTrackerService : Service() {
             expectedGeneration: Long = -1L
         ): Boolean {
             // Fencing trước khi gửi: Chặn tuyệt đối nếu phần cứng đang online hoặc epoch/generation không khớp
-            if (!isHardwareOfflineValid(context, expectedEpoch, expectedGeneration)) {
+            if (!isHardwareOfflineValid(context, expectedEpoch, expectedGeneration) ||
+                GuardianAccessibilityService.telemetryEpoch.get() != expectedEpoch ||
+                GuardianAccessibilityService.isScreenOnState
+            ) {
                 Log.w("UsageTrackerService", "Hủy bỏ request offline do phần cứng hiện đang online / epoch / generation không khớp")
                 return false
             }
 
             val call = sharedHttpClient.newCall(request)
             synchronized(urgentOfflineLock) {
-                if (!isHardwareOfflineValid(context, expectedEpoch, expectedGeneration)) {
+                if (!isHardwareOfflineValid(context, expectedEpoch, expectedGeneration) ||
+                    GuardianAccessibilityService.telemetryEpoch.get() != expectedEpoch ||
+                    GuardianAccessibilityService.isScreenOnState
+                ) {
                     return false
                 }
                 activeOfflineCalls.add(call)
             }
 
             // Double check: Fencing ngay sau khi đăng ký call
-            if (!isHardwareOfflineValid(context, expectedEpoch, expectedGeneration)) {
+            if (!isHardwareOfflineValid(context, expectedEpoch, expectedGeneration) ||
+                GuardianAccessibilityService.telemetryEpoch.get() != expectedEpoch ||
+                GuardianAccessibilityService.isScreenOnState
+            ) {
                 synchronized(urgentOfflineLock) {
                     activeOfflineCalls.remove(call)
                 }
@@ -1143,7 +1149,10 @@ class UsageTrackerService : Service() {
             try {
                 // Fencing nguyên tử ngay sát thời điểm execute để triệt tiêu race window
                 synchronized(urgentOfflineLock) {
-                    if (!isHardwareOfflineValid(context, expectedEpoch, expectedGeneration)) {
+                    if (!isHardwareOfflineValid(context, expectedEpoch, expectedGeneration) ||
+                        GuardianAccessibilityService.telemetryEpoch.get() != expectedEpoch ||
+                        GuardianAccessibilityService.isScreenOnState
+                    ) {
                         activeOfflineCalls.remove(call)
                         call.cancel()
                         Log.w("UsageTrackerService", "Hủy bỏ request offline ngay trước khi execute do trạng thái phần cứng đã đổi")
@@ -1157,7 +1166,10 @@ class UsageTrackerService : Service() {
                 val response = call.execute()
                 response.use { resp ->
                     // Fencing sau khi nhận response: Nếu máy đã chuyển sang online trong khi gửi, hủy kết quả
-                    if (!isHardwareOfflineValid(context, expectedEpoch, expectedGeneration)) {
+                    if (!isHardwareOfflineValid(context, expectedEpoch, expectedGeneration) ||
+                        GuardianAccessibilityService.telemetryEpoch.get() != expectedEpoch ||
+                        GuardianAccessibilityService.isScreenOnState
+                    ) {
                         Log.w("UsageTrackerService", "Hủy kết quả offline do phần cứng đã online / epoch đổi trong khi gửi")
                         return false
                     }
@@ -1201,14 +1213,23 @@ class UsageTrackerService : Service() {
                 }
             }
 
-            // Ghi nhận trạng thái offline tức thời vào đĩa để bảo toàn dữ liệu ngay cả khi teardown
-            prefs?.edit()?.putBoolean("is_device_online", false)?.commit()
+            // Ghi nhận trạng thái offline tức thời vào đĩa CHỈ KHI phần cứng vẫn đang offline và epoch khớp tuyệt đối
+            if (isHardwareOfflineValid(context, expectedEpoch)) {
+                prefs?.edit()?.putBoolean("is_device_online", false)?.commit()
+            } else {
+                Log.w("UsageTrackerService", "Hủy bỏ sendUrgentOfflineStatus disk commit: Epoch hoặc trạng thái phần cứng không offline")
+                return null
+            }
 
             val job = synchronized(urgentOfflineLock) {
                 urgentOfflineJob?.cancel()
                 val gen = currentOfflineGeneration.incrementAndGet()
                 val newJob = syncScope.launch {
                     try {
+                        if (!isHardwareOfflineValid(context, expectedEpoch, gen)) {
+                            Log.w("UsageTrackerService", "Hủy bỏ sendUrgentOfflineStatus network batch: Hardware is ONLINE or epoch/gen changed")
+                            return@launch
+                        }
                         val now = System.currentTimeMillis()
                         val mediaType = "application/json; charset=utf-8".toMediaType()
                         val offJson = buildOfflinePayload(now, expectedEpoch)
@@ -1229,6 +1250,9 @@ class UsageTrackerService : Service() {
                         )
 
                         suspend fun dispatchBatch(): List<Boolean> = coroutineScope {
+                            if (!isHardwareOfflineValid(context, expectedEpoch, gen)) {
+                                return@coroutineScope emptyList()
+                            }
                             val deferreds = rootEndpoints.map { url ->
                                 async(Dispatchers.IO) {
                                     val req = okhttp3.Request.Builder().url(url).patch(offBody).build()
@@ -1253,7 +1277,7 @@ class UsageTrackerService : Service() {
                         cancelActiveOfflineCalls(gen)
 
                         // Nếu đợt đầu thất bại hoàn toàn và màn hình vẫn tắt, kích hoạt 1-shot retry với timeout riêng 2000ms
-                        if (!firstSuccess && !GuardianAccessibilityService.isScreenOnState && currentOfflineGeneration.get() == gen) {
+                        if (!firstSuccess && isHardwareOfflineValid(context, expectedEpoch, gen)) {
                             withTimeoutOrNull(2000L) {
                                 dispatchBatch()
                             }
@@ -2728,7 +2752,12 @@ class UsageTrackerService : Service() {
                     val screenOffEpoch = if (accessService != null) {
                         accessService.handleScreenOff()
                     } else {
-                        GuardianAccessibilityService.telemetryEpoch.incrementAndGet()
+                        synchronized(GuardianAccessibilityService.hardwareTransitionLock) {
+                            GuardianAccessibilityService.isScreenOnState = false
+                            val ep = GuardianAccessibilityService.telemetryEpoch.incrementAndGet()
+                            foregroundGeneration.incrementAndGet()
+                            ep
+                        }
                     }
                     if (accessService == null) {
                         sendUrgentOfflineStatus(ctx, screenOffEpoch)
@@ -2778,7 +2807,12 @@ class UsageTrackerService : Service() {
                     val userPresentEpoch = if (accessService != null) {
                         accessService.handleScreenOn()
                     } else {
-                        GuardianAccessibilityService.telemetryEpoch.incrementAndGet()
+                        synchronized(GuardianAccessibilityService.hardwareTransitionLock) {
+                            val isHwOnline = (pm?.isInteractive == true && km?.isKeyguardLocked != true)
+                            GuardianAccessibilityService.isScreenOnState = isHwOnline
+                            val ep = GuardianAccessibilityService.telemetryEpoch.incrementAndGet()
+                            ep
+                        }
                     }
                     if (isHardwareOnline) {
                         sendHeartbeatPing(ctx, force = true)

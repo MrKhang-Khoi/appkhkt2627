@@ -332,13 +332,17 @@ if (fs.existsSync(guardianAccessFile) && fs.existsSync(usageTrackerFile) && fs.e
     utCode.includes(`isPutActiveApp && resp.code ${EQ2} 412`) &&
     testCode.includes('testReversedArrivalOrderWithCasPreservesLatestForegroundStateOnServer');
 
+  const hasHardwareTransitionLock = gaCode.includes('val hardwareTransitionLock = Any()') &&
+    gaCode.includes('synchronized(hardwareTransitionLock)');
+
   if (!hasVolatileScreen || !hasTelemetryEpoch || !hasSyncScreenOff || !hasConcurrentCallSet ||
       !hasUrgentOffline || !hasSingleEpochScreenOff || !hasSingleEpochScreenOn || !noEarlyRejection ||
       !hasSessionDeduplication || !hasZeroRawClose || !webActivityGuarded || !collectAndSaveGuarded ||
       !testsDirectProduction || !hasPreMutationGuard || !hasHardwareBootCheck || !hasLastWrittenEpochGuard ||
       !hasHomeBeforeForegroundCheck || !hasNoRunBlockingInDestroy || !hasDoubleCheckInExecuteOnline ||
       !noUnsynchronizedPrefsWrite || !hasStaleScreenOffFencing || !hasKeyguardStrictLockCheck ||
-      !hasStatsLock || !hasSessionLock || !hasForegroundGeneration || !testsLifecycleRace || !hasCasProtection) {
+      !hasStatsLock || !hasSessionLock || !hasForegroundGeneration || !testsLifecycleRace || !hasCasProtection ||
+      !hasHardwareTransitionLock) {
     console.error('\x1b[31m%s\x1b[0m', '❌ LỖI BẤT BIẾN PHẦN CỨNG: Vi phạm một trong các tiêu chuẩn an toàn:');
     console.error({
       hasVolatileScreen, hasTelemetryEpoch, hasSyncScreenOff, hasConcurrentCallSet,
@@ -347,7 +351,7 @@ if (fs.existsSync(guardianAccessFile) && fs.existsSync(usageTrackerFile) && fs.e
       hasPreMutationGuard, hasHardwareBootCheck, hasLastWrittenEpochGuard,
       hasHomeBeforeForegroundCheck, hasNoRunBlockingInDestroy, hasDoubleCheckInExecuteOnline,
       noUnsynchronizedPrefsWrite, hasStaleScreenOffFencing, hasKeyguardStrictLockCheck,
-      hasStatsLock, hasForegroundGeneration, testsLifecycleRace, hasCasProtection
+      hasStatsLock, hasForegroundGeneration, testsLifecycleRace, hasCasProtection, hasHardwareTransitionLock
     });
     process.exit(1);
   }
@@ -874,7 +878,9 @@ try {
     'testUnifiedHeartbeatRateLimiterEnforcesMinimum60SecondsInterval',
     'testAccessibilityEventStormDoesNotSpamHeartbeat',
     'testCas412FailsClosedWhenServerBodyIsEmptyOrMissingGeneration',
-    'testActiveAppLockSerializesConcurrentPutRequests'
+    'testActiveAppLockSerializesConcurrentPutRequests',
+    'testScreenOffInterleavedWithScreenOnLifecycleRaceStrictlyPreventsStaleOfflineOverwrite',
+    'testHardwareTransitionLockGuaranteesAtomicStateTransition'
   ];
 
   for (const testName of requiredProductionFeatureTests) {

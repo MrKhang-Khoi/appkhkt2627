@@ -1,23 +1,22 @@
 {
-  "versionCode": 37,
-  "versionName": "1.3.7",
-  "latestVersionCode": 37,
-  "latestVersionName": "1.3.7",
+  "versionCode": 38,
+  "versionName": "1.3.8",
+  "latestVersionCode": 38,
+  "latestVersionName": "1.3.8",
   "minSupportedVersion": 1,
   "isForceUpdate": false,
   "fileSize": "5.87 MB",
-  "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.3.7.apk",
-  "apkFallbackUrl": "https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/CVA-SmartGuardian-v1.3.7.apk",
-  "sha256": "21C5C78734A0B64379243E4511852D847E9A8EF4413E789F422F3E18C1613A20",
+  "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.3.8.apk",
+  "apkFallbackUrl": "https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/CVA-SmartGuardian-v1.3.8.apk",
+  "sha256": "386D55AD941C2210690770571491C1EE01248E916E3D3C33BB09F6669ACA1010",
   "changelog": [
-    "Tuần tự hóa tuyệt đối đột biến active_app bằng activeAppLock, triệt tiêu hoàn toàn race condition và CAS collision giữa các coroutine đồng thời.",
-    "Quy chuẩn Fail-Closed nghiêm ngặt trên phản hồi HTTP 412: Hủy bỏ ngay lập tức nếu dữ liệu node trên server thiếu thế hệ (serverGen <= 0L) hoặc thế hệ server mới hơn/bằng (serverGen >= expectedGen).",
-    "Triệt tiêu hoàn toàn tái sử dụng epoch cũ khi bật màn hình (Hardware Transition Invariant): Mọi lần chuyển đổi trạng thái phần cứng OFFLINE <-> ONLINE đều tăng epoch nguyên tử.",
-    "Bổ sung trường generation và foregroundGeneration đồng thời trong payload active_app và heartbeat, bảo đảm tương thích tuyệt đối.",
-    "Xóa bộ nhớ đệm ETag (lastKnownETags.clear()) khi tăng thế hệ để ngăn chặn tái sử dụng ETag của thế hệ cũ."
+    "Thiết lập khóa chuyển đổi trạng thái phần cứng nguyên tử (hardwareTransitionLock) đồng bộ hóa hoàn toàn handleScreenOff() và handleScreenOn(), triệt tiêu race condition.",
+    "Cơ chế gating ngoại tuyến fail-closed (isHardwareOfflineValid) chặt chẽ trong sendUrgentOfflineStatus và executeOfflineGuarded, ngăn chặn rò rỉ ngoại tuyến khi máy đã bật sáng.",
+    "Bảo vệ epoch và generation tuyệt đối, tự động hủy bỏ các batch phát telemetry ngoại tuyến cũ khi xảy ra cạnh tranh vòng đời.",
+    "Tuần tự hóa activeAppLock và xử lý fail-closed trên HTTP 412 CAS concurrency."
   ],
-  "releaseNotes": "Bản phát hành v1.3.7: Tuần tự hóa active_app bằng activeAppLock, xử lý fail-closed khi gặp HTTP 412, và bất biến chuyển đổi trạng thái phần cứng nguyên tử không tái sử dụng epoch cũ.",
-  "updatedAt": 1790000000000,
-  "size": 6153651,
+  "releaseNotes": "Bản phát hành v1.3.8: Tích hợp hardwareTransitionLock nguyên tử, bảo vệ fail-closed ngoại tuyến isHardwareOfflineValid, và triệt tiêu xung đột vòng đời màn hình.",
+  "updatedAt": 1789995837504,
+  "size": 6154643,
   "releaseDate": "2026-09-21"
 }
