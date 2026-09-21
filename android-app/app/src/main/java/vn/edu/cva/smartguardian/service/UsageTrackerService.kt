@@ -237,41 +237,78 @@ class UsageTrackerService : Service() {
         val lastHeartbeatSentTimestamp = java.util.concurrent.atomic.AtomicLong(0L)
         const val MIN_HEARTBEAT_INTERVAL_MS = 60_000L
 
+        internal val onlineCallLock = Any()
         internal val onlineCallRegistry = java.util.concurrent.ConcurrentHashMap<okhttp3.Call, TrackedCallRecord>()
         internal val offlineCallRegistry = java.util.concurrent.ConcurrentHashMap<okhttp3.Call, TrackedCallRecord>()
         internal val activeOnlineCalls = java.util.concurrent.ConcurrentHashMap.newKeySet<okhttp3.Call>()
         internal val activeOfflineCalls = java.util.concurrent.ConcurrentHashMap.newKeySet<okhttp3.Call>()
 
-        internal fun registerOnlineCall(call: okhttp3.Call, epoch: Long = -1L, generation: Long = -1L): TrackedCallRecord {
-            val record = TrackedCallRecord(call, epoch, generation)
-            onlineCallRegistry[call] = record
-            activeOnlineCalls.add(call)
-            return record
+        internal fun registerOnlineCall(
+            call: okhttp3.Call,
+            epoch: Long = -1L,
+            generation: Long = -1L,
+            context: Context? = null
+        ): TrackedCallRecord? {
+            synchronized(onlineCallLock) {
+                if (context != null) {
+                    if (!isHardwareOnlineValid(context, epoch) ||
+                        (generation != -1L && foregroundGeneration.get() != generation) ||
+                        !GuardianAccessibilityService.isScreenOnState
+                    ) {
+                        try { call.cancel() } catch (e: Exception) {}
+                        return null
+                    }
+                }
+                val record = TrackedCallRecord(call, epoch, generation)
+                onlineCallRegistry[call] = record
+                activeOnlineCalls.add(call)
+                return record
+            }
         }
 
         internal fun unregisterOnlineCall(call: okhttp3.Call, record: TrackedCallRecord? = null) {
-            if (record != null) {
-                onlineCallRegistry.remove(call, record)
-            } else {
-                onlineCallRegistry.remove(call)
+            synchronized(onlineCallLock) {
+                if (record != null) {
+                    onlineCallRegistry.remove(call, record)
+                } else {
+                    onlineCallRegistry.remove(call)
+                }
+                activeOnlineCalls.remove(call)
             }
-            activeOnlineCalls.remove(call)
         }
 
-        internal fun registerOfflineCall(call: okhttp3.Call, epoch: Long = -1L, generation: Long = -1L): TrackedCallRecord {
-            val record = TrackedCallRecord(call, epoch, generation)
-            offlineCallRegistry[call] = record
-            activeOfflineCalls.add(call)
-            return record
+        internal fun registerOfflineCall(
+            call: okhttp3.Call,
+            epoch: Long = -1L,
+            generation: Long = -1L,
+            context: Context? = null
+        ): TrackedCallRecord? {
+            synchronized(urgentOfflineLock) {
+                if (context != null) {
+                    if (!isHardwareOfflineValid(context, epoch, generation) ||
+                        GuardianAccessibilityService.telemetryEpoch.get() != epoch ||
+                        GuardianAccessibilityService.isScreenOnState
+                    ) {
+                        try { call.cancel() } catch (e: Exception) {}
+                        return null
+                    }
+                }
+                val record = TrackedCallRecord(call, epoch, generation)
+                offlineCallRegistry[call] = record
+                activeOfflineCalls.add(call)
+                return record
+            }
         }
 
         internal fun unregisterOfflineCall(call: okhttp3.Call, record: TrackedCallRecord? = null) {
-            if (record != null) {
-                offlineCallRegistry.remove(call, record)
-            } else {
-                offlineCallRegistry.remove(call)
+            synchronized(urgentOfflineLock) {
+                if (record != null) {
+                    offlineCallRegistry.remove(call, record)
+                } else {
+                    offlineCallRegistry.remove(call)
+                }
+                activeOfflineCalls.remove(call)
             }
-            activeOfflineCalls.remove(call)
         }
         val isHeartbeatInFlight = java.util.concurrent.atomic.AtomicBoolean(false)
         val foregroundGeneration = java.util.concurrent.atomic.AtomicLong(0L)
@@ -707,35 +744,28 @@ class UsageTrackerService : Service() {
         }
 
         fun cancelActiveOnlineCalls() {
-            try {
-                // Hủy nguyên tử theo registry record qua remove(key, expectedRecord)
-                val snapshot = java.util.ArrayList(onlineCallRegistry.entries)
-                for (entry in snapshot) {
-                    val call = entry.key
-                    val record = entry.value
-                    if (onlineCallRegistry.remove(call, record)) {
-                        activeOnlineCalls.remove(call)
+            synchronized(onlineCallLock) {
+                try {
+                    val callsToCancel = java.util.ArrayList<okhttp3.Call>()
+                    callsToCancel.addAll(onlineCallRegistry.keys)
+                    for (call in activeOnlineCalls) {
+                        if (!callsToCancel.contains(call)) {
+                            callsToCancel.add(call)
+                        }
+                    }
+                    onlineCallRegistry.clear()
+                    activeOnlineCalls.clear()
+
+                    for (call in callsToCancel) {
                         try {
-                            record.call.cancel()
+                            call.cancel()
                         } catch (e: Exception) {
                             Log.w("UsageTrackerService", "online call.cancel error: ${e.message}")
                         }
                     }
+                } catch (e: Exception) {
+                    Log.w("UsageTrackerService", "cancelActiveOnlineCalls error: ${e.message}")
                 }
-                // Hủy triệt để các call được add trực tiếp vào activeOnlineCalls (tương thích backward tests)
-                val remaining = java.util.ArrayList(activeOnlineCalls)
-                for (call in remaining) {
-                    if (activeOnlineCalls.remove(call)) {
-                        onlineCallRegistry.remove(call)
-                        try {
-                            call.cancel()
-                        } catch (e: Exception) {
-                            Log.w("UsageTrackerService", "remaining online call.cancel error: ${e.message}")
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                Log.w("UsageTrackerService", "cancelActiveOnlineCalls error: ${e.message}")
             }
         }
 
@@ -795,30 +825,27 @@ class UsageTrackerService : Service() {
                         urgentOfflineJob?.cancel()
                         urgentOfflineJob = null
                     }
-                    val snapshot = java.util.ArrayList(offlineCallRegistry.entries)
-                    for (entry in snapshot) {
-                        val call = entry.key
-                        val record = entry.value
-                        if (targetGeneration == -1L || record.generation == targetGeneration) {
-                            if (offlineCallRegistry.remove(call, record)) {
-                                activeOfflineCalls.remove(call)
-                                try {
-                                    record.call.cancel()
-                                } catch (e: Exception) {
-                                    Log.w("UsageTrackerService", "offline call.cancel error: ${e.message}")
-                                }
-                            }
+                    val callsToCancel = java.util.ArrayList<okhttp3.Call>()
+                    val it = offlineCallRegistry.entries.iterator()
+                    while (it.hasNext()) {
+                        val entry = it.next()
+                        if (targetGeneration == -1L || entry.value.generation == targetGeneration) {
+                            callsToCancel.add(entry.key)
+                            activeOfflineCalls.remove(entry.key)
+                            it.remove()
                         }
                     }
-                    val remaining = java.util.ArrayList(activeOfflineCalls)
-                    for (call in remaining) {
-                        if (activeOfflineCalls.remove(call)) {
-                            offlineCallRegistry.remove(call)
-                            try {
-                                call.cancel()
-                            } catch (e: Exception) {
-                                Log.w("UsageTrackerService", "remaining offline call.cancel error: ${e.message}")
-                            }
+                    for (call in activeOfflineCalls) {
+                        if (!callsToCancel.contains(call)) {
+                            callsToCancel.add(call)
+                        }
+                    }
+                    activeOfflineCalls.clear()
+                    for (call in callsToCancel) {
+                        try {
+                            call.cancel()
+                        } catch (e: Exception) {
+                            Log.w("UsageTrackerService", "offline call.cancel error: ${e.message}")
                         }
                     }
                 } catch (e: Exception) {
@@ -934,11 +961,9 @@ class UsageTrackerService : Service() {
                 .header("X-Firebase-ETag", "true")
                 .build()
             val preGetCall = sharedHttpClient.newCall(preGetReq)
-            val callRecord = registerOnlineCall(preGetCall, expectedEpoch, expectedGen)
-
-            if (!isHardwareOnlineValid(context, expectedEpoch) || (expectedGen != -1L && foregroundGeneration.get() != expectedGen)) {
-                unregisterOnlineCall(preGetCall, callRecord)
-                preGetCall.cancel()
+            val callRecord = registerOnlineCall(preGetCall, expectedEpoch, expectedGen, context)
+            if (callRecord == null || preGetCall.isCanceled()) {
+                if (callRecord != null) unregisterOnlineCall(preGetCall, callRecord)
                 return Pair(null, false)
             }
 
@@ -1018,19 +1043,9 @@ class UsageTrackerService : Service() {
             }
 
             val call = sharedHttpClient.newCall(request)
-            val callRecord = registerOnlineCall(call, expectedEpoch, expectedGen)
-
-            // Double check: Fencing ngay sau khi đăng ký call để triệt tiêu race condition nếu màn hình tắt trong tích tắc trước đó
-            if (!isHardwareOnlineValid(context, expectedEpoch)) {
-                unregisterOnlineCall(call, callRecord)
-                call.cancel()
-                Log.w("UsageTrackerService", "Hủy bỏ request online ngay sau khi đăng ký do phần cứng đã ngắt")
-                return false
-            }
-            if (expectedGen != -1L && foregroundGeneration.get() != expectedGen) {
-                unregisterOnlineCall(call, callRecord)
-                call.cancel()
-                Log.w("UsageTrackerService", "Hủy bỏ request online ngay sau khi đăng ký do stale foreground generation ($expectedGen != ${foregroundGeneration.get()})")
+            val callRecord = registerOnlineCall(call, expectedEpoch, expectedGen, context)
+            if (callRecord == null || call.isCanceled()) {
+                if (callRecord != null) unregisterOnlineCall(call, callRecord)
                 return false
             }
 
@@ -1082,18 +1097,9 @@ class UsageTrackerService : Service() {
                 .build()
 
             val call = sharedHttpClient.newCall(effectiveRequest)
-            val callRecord = registerOnlineCall(call, expectedEpoch, expectedGen)
-
-            if (!isHardwareOnlineValid(context, expectedEpoch)) {
-                unregisterOnlineCall(call, callRecord)
-                call.cancel()
-                Log.w("UsageTrackerService", "Hủy bỏ active_app sau khi đăng ký do phần cứng đã ngắt")
-                return false
-            }
-            if (expectedGen != -1L && foregroundGeneration.get() != expectedGen) {
-                unregisterOnlineCall(call, callRecord)
-                call.cancel()
-                Log.w("UsageTrackerService", "Hủy bỏ active_app sau khi đăng ký do stale foreground generation ($expectedGen != ${foregroundGeneration.get()})")
+            val callRecord = registerOnlineCall(call, expectedEpoch, expectedGen, context)
+            if (callRecord == null || call.isCanceled()) {
+                if (callRecord != null) unregisterOnlineCall(call, callRecord)
                 return false
             }
 
@@ -1112,7 +1118,11 @@ class UsageTrackerService : Service() {
                             .header("X-Firebase-ETag", "true")
                             .build()
                         val getCall = sharedHttpClient.newCall(getReq)
-                        val getRecord = registerOnlineCall(getCall, expectedEpoch, expectedGen)
+                        val getRecord = registerOnlineCall(getCall, expectedEpoch, expectedGen, context)
+                        if (getRecord == null || getCall.isCanceled()) {
+                            if (getRecord != null) unregisterOnlineCall(getCall, getRecord)
+                            return false
+                        }
                         val (serverGen, freshEtag) = try {
                             val getResp = getCall.execute()
                             getResp.use { gResp ->
@@ -1152,7 +1162,11 @@ class UsageTrackerService : Service() {
                                 .header("if-match", freshEtag)
                                 .build()
                             val retryCall = sharedHttpClient.newCall(retryReq)
-                            val retryRecord = registerOnlineCall(retryCall, expectedEpoch, expectedGen)
+                            val retryRecord = registerOnlineCall(retryCall, expectedEpoch, expectedGen, context)
+                            if (retryRecord == null || retryCall.isCanceled()) {
+                                if (retryRecord != null) unregisterOnlineCall(retryCall, retryRecord)
+                                return false
+                            }
                             try {
                                 val retryResp = retryCall.execute()
                                 retryResp.use { rResp ->
@@ -1204,16 +1218,9 @@ class UsageTrackerService : Service() {
             if (expectedGen != -1L && foregroundGeneration.get() != expectedGen) return null
 
             val call = sharedHttpClient.newCall(request)
-            val callRecord = registerOnlineCall(call, expectedEpoch, expectedGen)
-
-            if (!isHardwareOnlineValid(context, expectedEpoch)) {
-                unregisterOnlineCall(call, callRecord)
-                call.cancel()
-                return null
-            }
-            if (expectedGen != -1L && foregroundGeneration.get() != expectedGen) {
-                unregisterOnlineCall(call, callRecord)
-                call.cancel()
+            val callRecord = registerOnlineCall(call, expectedEpoch, expectedGen, context)
+            if (callRecord == null || call.isCanceled()) {
+                if (callRecord != null) unregisterOnlineCall(call, callRecord)
                 return null
             }
 
@@ -1258,17 +1265,9 @@ class UsageTrackerService : Service() {
                 .build()
 
             val call = sharedHttpClient.newCall(effectiveRequest)
-            val callRecord = registerOnlineCall(call, expectedEpoch, expectedGen)
-
-            if (!isHardwareOnlineValid(context, expectedEpoch)) {
-                unregisterOnlineCall(call, callRecord)
-                call.cancel()
-                Log.w("UsageTrackerService", "Hủy bỏ request online http ngay sau khi đăng ký do phần cứng đã ngắt")
-                return null
-            }
-            if (expectedGen != -1L && foregroundGeneration.get() != expectedGen) {
-                unregisterOnlineCall(call, callRecord)
-                call.cancel()
+            val callRecord = registerOnlineCall(call, expectedEpoch, expectedGen, context)
+            if (callRecord == null || call.isCanceled()) {
+                if (callRecord != null) unregisterOnlineCall(call, callRecord)
                 return null
             }
 
@@ -1287,7 +1286,11 @@ class UsageTrackerService : Service() {
                             .header("X-Firebase-ETag", "true")
                             .build()
                         val getCall = sharedHttpClient.newCall(getReq)
-                        val getRecord = registerOnlineCall(getCall, expectedEpoch, expectedGen)
+                        val getRecord = registerOnlineCall(getCall, expectedEpoch, expectedGen, context)
+                        if (getRecord == null || getCall.isCanceled()) {
+                            if (getRecord != null) unregisterOnlineCall(getCall, getRecord)
+                            return null
+                        }
                         val (serverGen, freshEtag, bodyStr) = try {
                             val getResp = getCall.execute()
                             getResp.use { gResp ->
@@ -1362,27 +1365,9 @@ class UsageTrackerService : Service() {
             }
 
             val call = sharedHttpClient.newCall(request)
-            var callRecord: TrackedCallRecord? = null
-            synchronized(urgentOfflineLock) {
-                if (!isHardwareOfflineValid(context, expectedEpoch, expectedGeneration) ||
-                    GuardianAccessibilityService.telemetryEpoch.get() != expectedEpoch ||
-                    GuardianAccessibilityService.isScreenOnState
-                ) {
-                    return false
-                }
-                callRecord = registerOfflineCall(call, expectedEpoch, expectedGeneration)
-            }
-
-            // Double check: Fencing ngay sau khi đăng ký call
-            if (!isHardwareOfflineValid(context, expectedEpoch, expectedGeneration) ||
-                GuardianAccessibilityService.telemetryEpoch.get() != expectedEpoch ||
-                GuardianAccessibilityService.isScreenOnState
-            ) {
-                synchronized(urgentOfflineLock) {
-                    unregisterOfflineCall(call, callRecord)
-                }
-                call.cancel()
-                Log.w("UsageTrackerService", "Hủy bỏ request offline ngay sau khi đăng ký do phần cứng đã online")
+            val callRecord = registerOfflineCall(call, expectedEpoch, expectedGeneration, context)
+            if (callRecord == null || call.isCanceled()) {
+                if (callRecord != null) unregisterOfflineCall(call, callRecord)
                 return false
             }
 
@@ -1391,15 +1376,12 @@ class UsageTrackerService : Service() {
                 synchronized(urgentOfflineLock) {
                     if (!isHardwareOfflineValid(context, expectedEpoch, expectedGeneration) ||
                         GuardianAccessibilityService.telemetryEpoch.get() != expectedEpoch ||
-                        GuardianAccessibilityService.isScreenOnState
+                        GuardianAccessibilityService.isScreenOnState ||
+                        call.isCanceled()
                     ) {
                         unregisterOfflineCall(call, callRecord)
                         call.cancel()
                         Log.w("UsageTrackerService", "Hủy bỏ request offline ngay trước khi execute do trạng thái phần cứng đã đổi")
-                        return false
-                    }
-                    if (call.isCanceled()) {
-                        unregisterOfflineCall(call, callRecord)
                         return false
                     }
                 }

@@ -183,7 +183,7 @@ class HardwareInvariantTest {
         val doneLatch = CountDownLatch(threadCount)
 
         // Pre-create shared calls to simulate in-flight responses completing
-        val sharedCalls = java.util.concurrent.ConcurrentHashMap<Int, Pair<Call, UsageTrackerService.TrackedCallRecord>>()
+        val sharedCalls = java.util.concurrent.ConcurrentHashMap<Int, Pair<Call, UsageTrackerService.TrackedCallRecord?>>()
 
         // Thread 1: Continuous registerOnlineCall for epoch1/gen1
         val t1 = Thread {
@@ -264,6 +264,50 @@ class HardwareInvariantTest {
         UsageTrackerService.cancelActiveOnlineCalls()
         assertEquals("activeOnlineCalls must be completely clean", 0, UsageTrackerService.activeOnlineCalls.size)
         assertEquals("onlineCallRegistry must be completely clean", 0, UsageTrackerService.onlineCallRegistry.size)
+    }
+
+    @Test
+    fun testAdversarialCallRegistryAtomicInterleaving() {
+        val client = OkHttpClient()
+        val request = Request.Builder().url("https://127.0.0.1:20128/adversarial_call").build()
+
+        for (iter in 1..200) {
+            UsageTrackerService.activeOnlineCalls.clear()
+            UsageTrackerService.onlineCallRegistry.clear()
+
+            val call = client.newCall(request)
+            val barrier = java.util.concurrent.CyclicBarrier(2)
+            val registerDone = CountDownLatch(1)
+            val cancelDone = CountDownLatch(1)
+            var record: UsageTrackerService.TrackedCallRecord? = null
+
+            val regThread = Thread {
+                barrier.await()
+                record = UsageTrackerService.registerOnlineCall(call, 100L, 1L)
+                registerDone.countDown()
+            }
+
+            val cancelThread = Thread {
+                barrier.await()
+                UsageTrackerService.cancelActiveOnlineCalls()
+                cancelDone.countDown()
+            }
+
+            regThread.start()
+            cancelThread.start()
+
+            assertTrue(registerDone.await(5, TimeUnit.SECONDS))
+            assertTrue(cancelDone.await(5, TimeUnit.SECONDS))
+
+            // Post-condition verification:
+            // Either cancel ran AFTER register (so call was registered then canceled and cleared)
+            // Or cancel ran BEFORE register (so register added it after cancel)
+            // But when cancelActiveOnlineCalls() runs, it MUST cancel the call and clear both collections
+            UsageTrackerService.cancelActiveOnlineCalls()
+            assertTrue("Call must be canceled", call.isCanceled())
+            assertEquals("activeOnlineCalls must be 0", 0, UsageTrackerService.activeOnlineCalls.size)
+            assertEquals("onlineCallRegistry must be 0", 0, UsageTrackerService.onlineCallRegistry.size)
+        }
     }
 
     @Test
