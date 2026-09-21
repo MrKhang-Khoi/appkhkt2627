@@ -2494,17 +2494,37 @@ class MainActivity : AppCompatActivity() {
                 val activeBg = R.drawable.bg_tab_active
                 val inactiveBg = R.drawable.bg_tab_inactive
 
+                val socialColor = if (selectedTab == "SOCIAL") Color.WHITE else Color.parseColor("#94A3B8")
                 tabDialogSocial.setBackgroundResource(if (selectedTab == "SOCIAL") activeBg else inactiveBg)
-                tabDialogSocial.setTextColor(if (selectedTab == "SOCIAL") Color.WHITE else Color.parseColor("#94A3B8"))
+                tabDialogSocial.setTextColor(socialColor)
+                androidx.core.widget.TextViewCompat.setCompoundDrawableTintList(
+                    tabDialogSocial,
+                    android.content.res.ColorStateList.valueOf(socialColor)
+                )
 
+                val studyColor = if (selectedTab == "STUDY") Color.WHITE else Color.parseColor("#94A3B8")
                 tabDialogStudy.setBackgroundResource(if (selectedTab == "STUDY") activeBg else inactiveBg)
-                tabDialogStudy.setTextColor(if (selectedTab == "STUDY") Color.WHITE else Color.parseColor("#94A3B8"))
+                tabDialogStudy.setTextColor(studyColor)
+                androidx.core.widget.TextViewCompat.setCompoundDrawableTintList(
+                    tabDialogStudy,
+                    android.content.res.ColorStateList.valueOf(studyColor)
+                )
 
+                val gameColor = if (selectedTab == "GAME") Color.WHITE else Color.parseColor("#94A3B8")
                 tabDialogGame.setBackgroundResource(if (selectedTab == "GAME") activeBg else inactiveBg)
-                tabDialogGame.setTextColor(if (selectedTab == "GAME") Color.WHITE else Color.parseColor("#94A3B8"))
+                tabDialogGame.setTextColor(gameColor)
+                androidx.core.widget.TextViewCompat.setCompoundDrawableTintList(
+                    tabDialogGame,
+                    android.content.res.ColorStateList.valueOf(gameColor)
+                )
 
+                val allColor = if (selectedTab == "ALL") Color.WHITE else Color.parseColor("#94A3B8")
                 tabDialogAll.setBackgroundResource(if (selectedTab == "ALL") activeBg else inactiveBg)
-                tabDialogAll.setTextColor(if (selectedTab == "ALL") Color.WHITE else Color.parseColor("#94A3B8"))
+                tabDialogAll.setTextColor(allColor)
+                androidx.core.widget.TextViewCompat.setCompoundDrawableTintList(
+                    tabDialogAll,
+                    android.content.res.ColorStateList.valueOf(allColor)
+                )
 
                 renderAppList()
             }
