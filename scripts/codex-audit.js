@@ -339,6 +339,10 @@ if (fs.existsSync(guardianAccessFile) && fs.existsSync(usageTrackerFile) && fs.e
   const urgentOfflineOutsideLock = handleScreenOffCode.indexOf('ScreenOffTransition(') !== -1 &&
     handleScreenOffCode.indexOf('ScreenOffTransition(') < handleScreenOffCode.indexOf('UsageTrackerService.sendUrgentOfflineStatus(this, currentEpoch)');
 
+  const handleScreenOnCode = gaCode.substring(gaCode.indexOf('fun handleScreenOn(): Long'));
+  const persistOnlineOutsideLock = handleScreenOnCode.indexOf('ScreenOnTransition(') !== -1 &&
+    handleScreenOnCode.indexOf('ScreenOnTransition(') < handleScreenOnCode.indexOf('UsageTrackerService.persistDeviceOnlineState(applicationContext, currentEpoch)');
+
   const hasDiskStateLock = utCode.includes('internal val diskStateLock = Any()') &&
     utCode.includes('fun persistDeviceOfflineState(') &&
     utCode.includes('fun persistDeviceOnlineState(') &&
@@ -352,7 +356,7 @@ if (fs.existsSync(guardianAccessFile) && fs.existsSync(usageTrackerFile) && fs.e
       !hasHomeBeforeForegroundCheck || !hasNoRunBlockingInDestroy || !hasDoubleCheckInExecuteOnline ||
       !noUnsynchronizedPrefsWrite || !hasStaleScreenOffFencing || !hasKeyguardStrictLockCheck ||
       !hasStatsLock || !hasSessionLock || !hasForegroundGeneration || !testsLifecycleRace || !hasCasProtection ||
-      !hasHardwareTransitionLock || !urgentOfflineOutsideLock || !hasDiskStateLock) {
+      !hasHardwareTransitionLock || !urgentOfflineOutsideLock || !persistOnlineOutsideLock || !hasDiskStateLock) {
     console.error('\x1b[31m%s\x1b[0m', '❌ LỖI BẤT BIẾN PHẦN CỨNG: Vi phạm một trong các tiêu chuẩn an toàn:');
     console.error({
       hasVolatileScreen, hasTelemetryEpoch, hasSyncScreenOff, hasConcurrentCallSet,
@@ -362,7 +366,7 @@ if (fs.existsSync(guardianAccessFile) && fs.existsSync(usageTrackerFile) && fs.e
       hasHomeBeforeForegroundCheck, hasNoRunBlockingInDestroy, hasDoubleCheckInExecuteOnline,
       noUnsynchronizedPrefsWrite, hasStaleScreenOffFencing, hasKeyguardStrictLockCheck,
       hasStatsLock, hasForegroundGeneration, testsLifecycleRace, hasCasProtection, hasHardwareTransitionLock,
-      urgentOfflineOutsideLock, hasDiskStateLock
+      urgentOfflineOutsideLock, persistOnlineOutsideLock, hasDiskStateLock
     });
     process.exit(1);
   }
@@ -896,7 +900,8 @@ try {
     'testActiveAppLockSerializesConcurrentPutRequests',
     'testScreenOffInterleavedWithScreenOnLifecycleRaceStrictlyPreventsStaleOfflineOverwrite',
     'testHardwareTransitionLockGuaranteesAtomicStateTransition',
-    'testOfflineCheckPausedBeforeDiskCommitAbortsWhenOnlineTransitionIntervenes'
+    'testOfflineCheckPausedBeforeDiskCommitAbortsWhenOnlineTransitionIntervenes',
+    'testScreenOffTransitionsImmediatelyWithoutWaitingForScreenOnDiskIo'
   ];
 
   for (const testName of requiredProductionFeatureTests) {

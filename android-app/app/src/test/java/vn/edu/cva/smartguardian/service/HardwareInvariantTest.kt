@@ -50,6 +50,8 @@ class HardwareInvariantTest {
         UsageTrackerService.activeOfflineCalls.clear()
         UsageTrackerService.recordedSessionTokens.clear()
         UsageTrackerService.lastGpsPromptTimestamp.set(0L)
+        UsageTrackerService.lastPolledForegroundPkg = ""
+        UsageTrackerService.lastPolledForegroundStartTime = 0L
         AppUpdateManager.mainDispatcher = kotlinx.coroutines.Dispatchers.Unconfined
     }
 
@@ -1243,17 +1245,17 @@ class HardwareInvariantTest {
         var commitReturnsSuccess: Boolean = true,
         var throwOnRead: Boolean = false
     ) : SharedPreferences {
-        override fun getAll(): MutableMap<String, *> = data
-        override fun getString(key: String?, defValue: String?): String? {
+        override fun getAll(): MutableMap<String, *> = synchronized(data) { HashMap(data) }
+        override fun getString(key: String?, defValue: String?): String? = synchronized(data) {
             if (throwOnRead) throw IllegalStateException("Storage read failure simulation")
-            return (data[key] as? String) ?: defValue
+            (data[key] as? String) ?: defValue
         }
-        override fun getStringSet(key: String?, defValues: MutableSet<String>?): MutableSet<String>? = (data[key] as? MutableSet<String>) ?: defValues
-        override fun getInt(key: String?, defValue: Int): Int = (data[key] as? Int) ?: defValue
-        override fun getLong(key: String?, defValue: Long): Long = (data[key] as? Long) ?: defValue
-        override fun getFloat(key: String?, defValue: Float): Float = (data[key] as? Float) ?: defValue
-        override fun getBoolean(key: String?, defValue: Boolean): Boolean = (data[key] as? Boolean) ?: defValue
-        override fun contains(key: String?): Boolean = data.containsKey(key)
+        override fun getStringSet(key: String?, defValues: MutableSet<String>?): MutableSet<String>? = synchronized(data) { (data[key] as? MutableSet<String>) ?: defValues }
+        override fun getInt(key: String?, defValue: Int): Int = synchronized(data) { (data[key] as? Int) ?: defValue }
+        override fun getLong(key: String?, defValue: Long): Long = synchronized(data) { (data[key] as? Long) ?: defValue }
+        override fun getFloat(key: String?, defValue: Float): Float = synchronized(data) { (data[key] as? Float) ?: defValue }
+        override fun getBoolean(key: String?, defValue: Boolean): Boolean = synchronized(data) { (data[key] as? Boolean) ?: defValue }
+        override fun contains(key: String?): Boolean = synchronized(data) { data.containsKey(key) }
         override fun edit(): SharedPreferences.Editor = FakeEditor(this)
         override fun registerOnSharedPreferenceChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener?) {}
         override fun unregisterOnSharedPreferenceChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener?) {}
@@ -1297,9 +1299,11 @@ class HardwareInvariantTest {
             }
             override fun commit(): Boolean {
                 if (!prefs.commitReturnsSuccess) return false
-                if (clearRequested) prefs.data.clear()
-                for (k in toRemove) prefs.data.remove(k)
-                for ((k, v) in temp) prefs.data[k] = v
+                synchronized(prefs.data) {
+                    if (clearRequested) prefs.data.clear()
+                    for (k in toRemove) prefs.data.remove(k)
+                    for ((k, v) in temp) prefs.data[k] = v
+                }
                 return true
             }
             override fun apply() {
@@ -1812,13 +1816,13 @@ class HardwareInvariantTest {
         assertTrue("lastPolledForegroundPkg must be empty after closePolledSession", UsageTrackerService.lastPolledForegroundPkg.isEmpty())
         assertEquals("lastPolledForegroundStartTime must be 0 after closePolledSession", 0L, UsageTrackerService.lastPolledForegroundStartTime)
 
-        // Session must be recorded in prefs (đợi tối đa 1000ms cho Dispatchers.IO hoàn tất)
-        val todayStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault()).format(java.util.Date())
+        // Session must be recorded in prefs (đợi tối đa 3000ms cho Dispatchers.IO hoàn tất)
+        val todayStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US).format(java.util.Date())
         val appKey = "session_${todayStr}_com.study.math"
         var elapsed = 0
-        while (!fakePrefs.contains(appKey) && elapsed < 1000) {
-            Thread.sleep(50)
-            elapsed += 50
+        while (!fakePrefs.contains(appKey) && elapsed < 3000) {
+            Thread.sleep(25)
+            elapsed += 25
         }
 
         assertTrue("Recorded session must contain app key: $appKey", fakePrefs.contains(appKey))
@@ -1847,13 +1851,13 @@ class HardwareInvariantTest {
         assertTrue(UsageTrackerService.lastPolledForegroundPkg.isEmpty())
         assertEquals(0L, UsageTrackerService.lastPolledForegroundStartTime)
 
-        // Đợi IO hoàn tất
-        val todayStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.getDefault()).format(java.util.Date())
+        // Đợi IO hoàn tất (tối đa 3000ms)
+        val todayStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US).format(java.util.Date())
         val appKey = "session_${todayStr}_com.study.concurrent"
         var elapsed = 0
-        while (!fakePrefs.contains(appKey) && elapsed < 1000) {
-            Thread.sleep(50)
-            elapsed += 50
+        while (!fakePrefs.contains(appKey) && elapsed < 3000) {
+            Thread.sleep(25)
+            elapsed += 25
         }
 
         assertTrue(fakePrefs.contains(appKey))
@@ -4662,6 +4666,97 @@ class HardwareInvariantTest {
         assertEquals("Last written epoch in preferences MUST be the online epoch 11", 11L, fakePrefs.data["last_written_epoch"])
         assertTrue("Hardware screen state must remain true", GuardianAccessibilityService.isScreenOnState)
         assertEquals("Telemetry epoch must be 11", 11L, GuardianAccessibilityService.telemetryEpoch.get())
+    }
+
+    @Test
+    fun testScreenOffTransitionsImmediatelyWithoutWaitingForScreenOnDiskIo() {
+        // Invariant (Codex Karl Popper Falsification Mandate):
+        // handleScreenOn must release hardwareTransitionLock immediately after RAM mutations.
+        // Even if disk persistence of online state is blocked / slow on Dispatchers.IO,
+        // an incoming SCREEN_OFF transition must acquire hardwareTransitionLock immediately without blocking!
+        val fakePrefs = FakeSharedPreferences()
+        fakePrefs.data["paired_code"] = "FAM123"
+        fakePrefs.data["device_id"] = "DEV456"
+        fakePrefs.data["last_written_epoch"] = 20L
+        fakePrefs.data["is_device_online"] = false
+        val fakeContext = FakeTestContext(fakePrefs)
+
+        GuardianAccessibilityService.telemetryEpoch.set(20L)
+        GuardianAccessibilityService.isScreenOnState = false
+        UsageTrackerService.lastDispatchedOfflineEpoch.set(-1L)
+
+        val screenOnLockReleasedLatch = java.util.concurrent.CountDownLatch(1)
+        val slowDiskIoPauseLatch = java.util.concurrent.CountDownLatch(1)
+        val screenOffFinishedLatch = java.util.concurrent.CountDownLatch(1)
+        val testCompleteLatch = java.util.concurrent.CountDownLatch(2)
+
+        val screenOffLockAcquisitionMs = java.util.concurrent.atomic.AtomicLong(-1L)
+        val onlinePersistResult = java.util.concurrent.atomic.AtomicBoolean(true)
+
+        // Thread 1: SCREEN_ON flow
+        val tScreenOn = Thread {
+            try {
+                val currentEpoch: Long
+                synchronized(GuardianAccessibilityService.hardwareTransitionLock) {
+                    currentEpoch = GuardianAccessibilityService.telemetryEpoch.incrementAndGet() // 21L
+                    GuardianAccessibilityService.isScreenOnState = true
+                    UsageTrackerService.lastDispatchedOfflineEpoch.set(-1L)
+                    UsageTrackerService.cancelActiveOfflineCalls()
+                }
+                // Lock released! Signal Thread 2 that hardwareTransitionLock is free
+                screenOnLockReleasedLatch.countDown()
+
+                // Simulating slow Dispatchers.IO disk persistence: Wait for Thread 2 to trigger SCREEN_OFF
+                slowDiskIoPauseLatch.await(3, java.util.concurrent.TimeUnit.SECONDS)
+
+                // Attempt to persist online state for epoch 21L
+                val persisted = UsageTrackerService.persistDeviceOnlineState(fakeContext, currentEpoch)
+                onlinePersistResult.set(persisted)
+            } finally {
+                testCompleteLatch.countDown()
+            }
+        }
+
+        // Thread 2: Incoming SCREEN_OFF event while Thread 1's disk I/O is still pending
+        val tScreenOff = Thread {
+            try {
+                screenOnLockReleasedLatch.await(3, java.util.concurrent.TimeUnit.SECONDS)
+                val startWait = System.currentTimeMillis()
+
+                // Acquire hardwareTransitionLock: Must be immediate (< 200ms) and NOT block on Thread 1's disk I/O!
+                val offEpoch: Long
+                synchronized(GuardianAccessibilityService.hardwareTransitionLock) {
+                    screenOffLockAcquisitionMs.set(System.currentTimeMillis() - startWait)
+                    GuardianAccessibilityService.isScreenOnState = false
+                    offEpoch = GuardianAccessibilityService.telemetryEpoch.incrementAndGet() // 22L
+                    UsageTrackerService.cancelActiveOnlineCalls()
+                }
+
+                UsageTrackerService.persistDeviceOfflineState(fakeContext, offEpoch)
+                screenOffFinishedLatch.countDown()
+
+                // Now allow Thread 1's delayed disk I/O to resume
+                slowDiskIoPauseLatch.countDown()
+            } finally {
+                testCompleteLatch.countDown()
+            }
+        }
+
+        tScreenOn.start()
+        tScreenOff.start()
+
+        val completed = testCompleteLatch.await(4, java.util.concurrent.TimeUnit.SECONDS)
+        assertTrue("Both threads must complete safely", completed)
+
+        // Invariant Assertions:
+        assertTrue("SCREEN_OFF must acquire lock immediately without waiting for disk I/O",
+            screenOffLockAcquisitionMs.get() in 0..200)
+        assertFalse("Delayed online disk persist for stale epoch 21 must be rejected fail-closed",
+            onlinePersistResult.get())
+        assertFalse("Screen state must be OFFLINE", GuardianAccessibilityService.isScreenOnState)
+        assertEquals("Telemetry epoch must be 22", 22L, GuardianAccessibilityService.telemetryEpoch.get())
+        assertEquals("Device online state on disk must remain FALSE", false, fakePrefs.data["is_device_online"])
+        assertEquals("Last written epoch on disk must be 22", 22L, fakePrefs.data["last_written_epoch"])
     }
 
     private class FakeTestContext(

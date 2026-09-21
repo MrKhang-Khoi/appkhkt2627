@@ -31,6 +31,12 @@ internal data class ScreenOffTransition(
     val proceed: Boolean
 )
 
+internal data class ScreenOnTransition(
+    val currentEpoch: Long,
+    val currentPkg: String?,
+    val proceed: Boolean
+)
+
 class GuardianAccessibilityService : AccessibilityService() {
 
     companion object {
@@ -420,7 +426,7 @@ class GuardianAccessibilityService : AccessibilityService() {
     }
 
     fun handleScreenOn(): Long {
-        return synchronized(hardwareTransitionLock) {
+        val transition = synchronized(hardwareTransitionLock) {
             val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
             val km = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
             val isHardwareOnline = (pm?.isInteractive == true && km?.isKeyguardLocked != true)
@@ -429,7 +435,7 @@ class GuardianAccessibilityService : AccessibilityService() {
                 isScreenOnState = false
                 heartbeatJob?.cancel()
                 Log.d("GuardianAccess", "handleScreenOn: Thiết bị chưa online hoàn toàn (isInteractive=${pm?.isInteractive}, isKeyguardLocked=${km?.isKeyguardLocked}) -> Chưa kích hoạt heartbeat")
-                return@synchronized telemetryEpoch.get()
+                return@synchronized ScreenOnTransition(telemetryEpoch.get(), null, false)
             }
 
             // Bất biến chuyển trạng thái phần cứng (Hardware State Transition Invariant - Codex Mandate):
@@ -438,7 +444,6 @@ class GuardianAccessibilityService : AccessibilityService() {
             isScreenOnState = true
             UsageTrackerService.lastDispatchedOfflineEpoch.set(-1L)
             UsageTrackerService.cancelActiveOfflineCalls()
-            UsageTrackerService.persistDeviceOnlineState(applicationContext, currentEpoch)
             startPeriodicHeartbeat()
 
             val currentPkg = try {
@@ -450,32 +455,46 @@ class GuardianAccessibilityService : AccessibilityService() {
                 null
             }
 
-            serviceScope.launch(Dispatchers.IO) {
-                val (uploadAction, actionGen) = UsageTrackerService.telemetryMutex.withLock {
-                    if (!isScreenOnState || telemetryEpoch.get() != currentEpoch) {
-                        return@withLock Pair(null, -1L)
-                    }
-                    synchronized(sessionLock) {
-                        lastActivePackage = ""
-                        currentForegroundPackage = ""
-                        currentForegroundStartTime = 0L
-                    }
+            ScreenOnTransition(currentEpoch, currentPkg, true)
+        }
 
-                    val act = if (currentPkg != null) {
-                        handleWindowStateChangedLocked(currentPkg, currentEpoch)
-                    } else {
-                        null
-                    }
-                    Pair(act, UsageTrackerService.foregroundGeneration.get())
+        if (!transition.proceed) {
+            return transition.currentEpoch
+        }
+
+        val currentEpoch = transition.currentEpoch
+        val currentPkg = transition.currentPkg
+
+        // Dispatch disk persistence sang Dispatchers.IO HOÀN TOÀN NGOÀI hardwareTransitionLock
+        serviceScope.launch(Dispatchers.IO) {
+            UsageTrackerService.persistDeviceOnlineState(applicationContext, currentEpoch)
+        }
+
+        serviceScope.launch(Dispatchers.IO) {
+            val (uploadAction, actionGen) = UsageTrackerService.telemetryMutex.withLock {
+                if (!isScreenOnState || telemetryEpoch.get() != currentEpoch) {
+                    return@withLock Pair(null, -1L)
                 }
-                if (uploadAction != null && actionGen != -1L) {
-                    if (UsageTrackerService.foregroundGeneration.get() == actionGen && isScreenOnState && telemetryEpoch.get() == currentEpoch) {
-                        uploadAction.invoke()
-                    }
+                synchronized(sessionLock) {
+                    lastActivePackage = ""
+                    currentForegroundPackage = ""
+                    currentForegroundStartTime = 0L
+                }
+
+                val act = if (currentPkg != null) {
+                    handleWindowStateChangedLocked(currentPkg, currentEpoch)
+                } else {
+                    null
+                }
+                Pair(act, UsageTrackerService.foregroundGeneration.get())
+            }
+            if (uploadAction != null && actionGen != -1L) {
+                if (UsageTrackerService.foregroundGeneration.get() == actionGen && isScreenOnState && telemetryEpoch.get() == currentEpoch) {
+                    uploadAction.invoke()
                 }
             }
-            currentEpoch
         }
+        return currentEpoch
     }
 
     private fun startPeriodicHeartbeat() {

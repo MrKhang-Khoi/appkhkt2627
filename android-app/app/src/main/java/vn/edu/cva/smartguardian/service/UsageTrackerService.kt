@@ -751,10 +751,21 @@ class UsageTrackerService : Service() {
                     return false
                 }
 
-                return prefs.edit()
+                val success = prefs.edit()
                     .putLong("last_written_epoch", targetEpoch)
                     .putBoolean("is_device_online", true)
                     .commit()
+
+                // Post-write check: Xác nhận phần cứng không bị chuyển sang offline trong lúc commit()
+                if (GuardianAccessibilityService.telemetryEpoch.get() != targetEpoch || !isHardwareOnlineValid(context, targetEpoch)) {
+                    Log.w("UsageTrackerService", "Phát hiện race condition sau commit online: Thiết bị đã chuyển offline")
+                    if (!GuardianAccessibilityService.isScreenOnState) {
+                        prefs.edit().putBoolean("is_device_online", false).commit()
+                    }
+                    return false
+                }
+
+                return success
             }
         }
 
