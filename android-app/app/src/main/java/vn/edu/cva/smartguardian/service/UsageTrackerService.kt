@@ -512,7 +512,12 @@ class UsageTrackerService : Service() {
                         // 1. Chống bẫy DoS/OOM: Giới hạn kích thước thô tối đa 64 KB
                         if (rawJson.length > 64 * 1024) {
                             Log.w("UsageTrackerService", "persisted_session_tokens_json vượt giới hạn 64KB (${rawJson.length} bytes), loại bỏ để chống OOM")
-                            prefs.edit().remove("persisted_session_tokens_json").commit()
+                            val removed = prefs.edit().remove("persisted_session_tokens_json").commit()
+                            if (!removed) {
+                                Log.e("UsageTrackerService", "LỖI AN TOÀN: Không thể xóa persisted_session_tokens_json độc hại khỏi SharedPreferences!")
+                                isSessionTokensRestored.set(false)
+                                return false
+                            }
                             isSessionTokensRestored.set(true)
                             return true
                         }

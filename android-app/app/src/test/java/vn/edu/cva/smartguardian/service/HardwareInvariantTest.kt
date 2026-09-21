@@ -5118,6 +5118,17 @@ class HardwareInvariantTest {
         assertTrue("Oversized payload must be safely handled without throwing OOM", resultOversized)
         assertNull("Oversized poison key must be removed from SharedPreferences", fakePrefs.data["persisted_session_tokens_json"])
         assertEquals("recordedSessionTokens must remain empty after dropping oversized payload", 0, UsageTrackerService.recordedSessionTokens.size)
+
+        // 3. Test payload > 64KB when commit fails (Disk I/O failure): Must fail closed and not mark restored
+        UsageTrackerService.recordedSessionTokens.clear()
+        UsageTrackerService.isSessionTokensRestored.set(false)
+        val failingPrefs = FakeSharedPreferences(commitReturnsSuccess = false)
+        val failingContext = FakeTestContext(failingPrefs)
+        failingPrefs.data["persisted_session_tokens_json"] = oversizedJson
+
+        val resultFailingCommit = UsageTrackerService.restorePersistedSessionTokens(failingContext)
+        assertFalse("Must return false when commit fails to remove oversized poison pill", resultFailingCommit)
+        assertFalse("Restore flag must remain false on commit failure to allow retry", UsageTrackerService.isSessionTokensRestored.get())
     }
 
     private class FakeTestContext(
