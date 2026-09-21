@@ -5169,6 +5169,9 @@ class HardwareInvariantTest {
     fun testResolveCurrentForegroundPackagePrefersLastForegroundPkg() {
         val fakePrefs = FakeSharedPreferences(commitReturnsSuccess = true)
         val fakeContext = FakeTestContext(fakePrefs)
+        val freshTime = System.currentTimeMillis() - 2000L
+        fakePrefs.data["last_foreground_start"] = freshTime
+        fakePrefs.data["last_active_timestamp"] = freshTime
         fakePrefs.data["last_foreground_pkg"] = "com.google.android.youtube"
         fakePrefs.data["last_active_package"] = "com.facebook.katana"
 
@@ -5180,6 +5183,9 @@ class HardwareInvariantTest {
     fun testResolveCurrentForegroundPackageFallsBackToLastActivePackageWhenForegroundEmpty() {
         val fakePrefs = FakeSharedPreferences(commitReturnsSuccess = true)
         val fakeContext = FakeTestContext(fakePrefs)
+        val freshTime = System.currentTimeMillis() - 2000L
+        fakePrefs.data["last_foreground_start"] = 0L
+        fakePrefs.data["last_active_timestamp"] = freshTime
         fakePrefs.data["last_foreground_pkg"] = ""
         fakePrefs.data["last_active_package"] = "com.ss.android.ugc.trill"
 
@@ -5191,6 +5197,9 @@ class HardwareInvariantTest {
     fun testResolveCurrentForegroundPackageRejectsScreenOff() {
         val fakePrefs = FakeSharedPreferences(commitReturnsSuccess = true)
         val fakeContext = FakeTestContext(fakePrefs)
+        val freshTime = System.currentTimeMillis() - 2000L
+        fakePrefs.data["last_foreground_start"] = freshTime
+        fakePrefs.data["last_active_timestamp"] = freshTime
         fakePrefs.data["last_foreground_pkg"] = "SCREEN_OFF"
         fakePrefs.data["last_active_package"] = "SCREEN_OFF"
 
@@ -5202,22 +5211,57 @@ class HardwareInvariantTest {
     fun testResolveCurrentForegroundPackageRejectsBankAppAndMasksAsProtected() {
         val fakePrefs = FakeSharedPreferences(commitReturnsSuccess = true)
         val fakeContext = FakeTestContext(fakePrefs)
+        val freshTime = System.currentTimeMillis() - 2000L
+        fakePrefs.data["last_foreground_start"] = freshTime
+        fakePrefs.data["last_active_timestamp"] = freshTime
 
         // 1. When last_foreground_pkg is a bank app (e.g., com.vcb)
         fakePrefs.data["last_foreground_pkg"] = "com.vcb"
         fakePrefs.data["last_active_package"] = "com.vcb"
         val resolvedBank1 = UsageTrackerService.resolveCurrentForegroundPackage(fakeContext, fakePrefs)
         assertEquals("BANK_APP_PROTECTED", resolvedBank1)
-        assertEquals("", fakePrefs.data["last_foreground_pkg"])
-        assertEquals("", fakePrefs.data["last_active_package"])
 
         // 2. When last_active_package is a bank app (e.g., com.mbmobile)
         fakePrefs.data["last_foreground_pkg"] = ""
         fakePrefs.data["last_active_package"] = "com.mbmobile"
         val resolvedBank2 = UsageTrackerService.resolveCurrentForegroundPackage(fakeContext, fakePrefs)
         assertEquals("BANK_APP_PROTECTED", resolvedBank2)
-        assertEquals("", fakePrefs.data["last_foreground_pkg"])
-        assertEquals("", fakePrefs.data["last_active_package"])
+    }
+
+    @Test
+    fun testResolveCurrentForegroundPackageRejectsStaleTimestamp() {
+        val fakePrefs = FakeSharedPreferences(commitReturnsSuccess = true)
+        val fakeContext = FakeTestContext(fakePrefs)
+        // Red-Team Karl Popper Falsification:
+        // When last_foreground_start is 60 seconds old (> 30s limit),
+        // resolveCurrentForegroundPackage MUST reject the stale package and fail-closed to ""
+        val staleTime = System.currentTimeMillis() - 60_000L
+        fakePrefs.data["last_foreground_start"] = staleTime
+        fakePrefs.data["last_active_timestamp"] = staleTime
+        fakePrefs.data["last_foreground_pkg"] = "com.google.android.youtube"
+        fakePrefs.data["last_active_package"] = "com.facebook.katana"
+
+        val resolved = UsageTrackerService.resolveCurrentForegroundPackage(fakeContext, fakePrefs)
+        assertEquals("Stale foreground package (>30s) must be rejected", "", resolved)
+    }
+
+    @Test
+    fun testResolveCurrentForegroundPackageRejectsWhenScreenOff() {
+        val fakePrefs = FakeSharedPreferences(commitReturnsSuccess = true)
+        val fakeContext = FakeTestContext(fakePrefs)
+        val freshTime = System.currentTimeMillis() - 2000L
+        fakePrefs.data["last_foreground_start"] = freshTime
+        fakePrefs.data["last_active_timestamp"] = freshTime
+        fakePrefs.data["last_foreground_pkg"] = "com.google.android.youtube"
+
+        val originalScreenOn = GuardianAccessibilityService.isScreenOnState
+        try {
+            GuardianAccessibilityService.isScreenOnState = false
+            val resolved = UsageTrackerService.resolveCurrentForegroundPackage(fakeContext, fakePrefs)
+            assertEquals("Hardware invariant fence: screen off must return empty foreground", "", resolved)
+        } finally {
+            GuardianAccessibilityService.isScreenOnState = originalScreenOn
+        }
     }
 
     @Test

@@ -1463,29 +1463,46 @@ class UsageTrackerService : Service() {
             }
         }
 
+        const val MAX_FOREGROUND_FRESHNESS_MS = 30_000L
+
         internal fun resolveCurrentForegroundPackage(context: Context, prefs: SharedPreferences): String {
+            val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+            val km = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+            val isInteractive = pm?.isInteractive ?: true
+            val isLocked = km?.isKeyguardLocked ?: false
+            val isHardwareOnline = GuardianAccessibilityService.isScreenOnState && isInteractive && !isLocked
+
+            // Fail-closed 1: Phần cứng không trực tuyến -> TUYỆT ĐỐI không trả về foreground package
+            if (!isHardwareOnline) {
+                return ""
+            }
+
+            val now = System.currentTimeMillis()
+            val fgStart = prefs.getLong("last_foreground_start", 0L)
+            val activeTs = prefs.getLong("last_active_timestamp", 0L)
+            val fgTimestamp = fgStart.coerceAtLeast(activeTs)
+            val isTimestampFresh = fgTimestamp > 0L && fgTimestamp <= now && (now - fgTimestamp) <= MAX_FOREGROUND_FRESHNESS_MS
+
             val storedForeground = prefs.getString("last_foreground_pkg", "") ?: ""
-            if (storedForeground.isNotEmpty() && storedForeground != "SCREEN_OFF") {
+            if (storedForeground.isNotEmpty() && storedForeground != "SCREEN_OFF" && isTimestampFresh) {
                 if (GuardianAccessibilityService.isBankPackage(storedForeground)) {
-                    prefs.edit().putString("last_foreground_pkg", "").putString("last_active_package", "").apply()
                     return "BANK_APP_PROTECTED"
                 }
                 return storedForeground
             }
             val storedActive = prefs.getString("last_active_package", "") ?: ""
-            if (storedActive.isNotEmpty() && storedActive != "SCREEN_OFF") {
+            if (storedActive.isNotEmpty() && storedActive != "SCREEN_OFF" && isTimestampFresh) {
                 if (GuardianAccessibilityService.isBankPackage(storedActive)) {
-                    prefs.edit().putString("last_foreground_pkg", "").putString("last_active_package", "").apply()
                     return "BANK_APP_PROTECTED"
                 }
                 return storedActive
             }
-            // Fallback: Quét sự kiện UsageStatsManager 30 giây gần nhất để lấy đúng app tiền cảnh
+
+            // Fallback: Quét sự kiện UsageStatsManager trong cửa sổ tối đa 15 giây gần nhất
             return try {
                 val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
                 if (usm != null) {
-                    val now = System.currentTimeMillis()
-                    val events = usm.queryEvents(now - 30_000L, now)
+                    val events = usm.queryEvents(now - 15_000L, now)
                     val event = android.app.usage.UsageEvents.Event()
                     var latestPkg = ""
                     var latestTime = 0L
@@ -1494,7 +1511,7 @@ class UsageTrackerService : Service() {
                         if (event.eventType == android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED ||
                             event.eventType == android.app.usage.UsageEvents.Event.MOVE_TO_FOREGROUND
                         ) {
-                            if (event.timeStamp >= latestTime) {
+                            if (event.timeStamp in latestTime..now) {
                                 latestTime = event.timeStamp
                                 latestPkg = event.packageName ?: ""
                             }
@@ -1502,13 +1519,8 @@ class UsageTrackerService : Service() {
                     }
                     if (latestPkg.isNotEmpty() && latestPkg != "SCREEN_OFF") {
                         if (GuardianAccessibilityService.isBankPackage(latestPkg)) {
-                            prefs.edit().putString("last_foreground_pkg", "").putString("last_active_package", "").apply()
                             "BANK_APP_PROTECTED"
                         } else {
-                            prefs.edit()
-                                .putString("last_foreground_pkg", latestPkg)
-                                .putString("last_active_package", latestPkg)
-                                .apply()
                             latestPkg
                         }
                     } else {
@@ -1553,6 +1565,7 @@ class UsageTrackerService : Service() {
                 ?: "UNKNOWN"
 
             val callEpoch = GuardianAccessibilityService.telemetryEpoch.get()
+            val callGen = foregroundGeneration.get()
 
             syncScope.launch(Dispatchers.IO) {
                 try {
@@ -1563,9 +1576,10 @@ class UsageTrackerService : Service() {
                         val stillInteractive = pm?.isInteractive ?: false
                         val stillLocked = km?.isKeyguardLocked ?: false
 
-                        // Kiểm tra nguyên tử tính hợp lệ phần cứng ngay bên trong mutex
+                        // Kiểm tra nguyên tử tính hợp lệ phần cứng và generation ngay bên trong mutex
                         if (!GuardianAccessibilityService.isScreenOnState || !stillInteractive || stillLocked ||
-                            GuardianAccessibilityService.telemetryEpoch.get() != callEpoch
+                            GuardianAccessibilityService.telemetryEpoch.get() != callEpoch ||
+                            foregroundGeneration.get() != callGen
                         ) {
                             return@withLock null
                         }
