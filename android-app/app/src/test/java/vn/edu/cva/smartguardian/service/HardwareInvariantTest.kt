@@ -3549,7 +3549,11 @@ class HardwareInvariantTest {
 
         override fun close() {
             running = false
-            try { serverSocket.close() } catch (e: Exception) {}
+            try {
+                serverSocket.close()
+            } catch (e: Exception) {
+                System.err.println("CasTestServer close exception: ${e.message}")
+            }
         }
     }
 
