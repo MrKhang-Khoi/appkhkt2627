@@ -64,6 +64,12 @@ class UsageTrackerService : Service() {
         val timestamp: Long
     )
 
+    data class RawUsageEvent(
+        val packageName: String,
+        val eventType: Int,
+        val timeStamp: Long
+    )
+
     object LocationProtocol {
         const val COMMAND_LOCATE_NOW = "locate_now"
         const val STATUS_PENDING = "PENDING"
@@ -1464,8 +1470,42 @@ class UsageTrackerService : Service() {
         }
 
         const val MAX_FOREGROUND_FRESHNESS_MS = 30_000L
+        const val USAGE_STATS_FALLBACK_WINDOW_MS = 30_000L
 
-        internal fun resolveCurrentForegroundPackage(context: Context, prefs: SharedPreferences): String {
+        internal fun parseLatestForegroundPackageFromEvents(
+            events: Sequence<RawUsageEvent>,
+            now: Long = System.currentTimeMillis(),
+            windowMs: Long = USAGE_STATS_FALLBACK_WINDOW_MS
+        ): String {
+            val minTime = now - windowMs
+            var latestPkg = ""
+            var latestTime = 0L
+            for (event in events) {
+                if (event.eventType == android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED ||
+                    event.eventType == android.app.usage.UsageEvents.Event.MOVE_TO_FOREGROUND
+                ) {
+                    if (event.timeStamp in minTime..now && event.timeStamp >= latestTime) {
+                        latestTime = event.timeStamp
+                        latestPkg = event.packageName
+                    }
+                }
+            }
+            return if (latestPkg.isNotEmpty() && latestPkg != "SCREEN_OFF") {
+                if (GuardianAccessibilityService.isBankPackage(latestPkg)) {
+                    "BANK_APP_PROTECTED"
+                } else {
+                    latestPkg
+                }
+            } else {
+                ""
+            }
+        }
+
+        internal fun resolveCurrentForegroundPackage(
+            context: Context,
+            prefs: SharedPreferences,
+            simulatedEvents: List<RawUsageEvent>? = null
+        ): String {
             val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
             val km = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
             val isInteractive = pm?.isInteractive ?: true
@@ -1498,34 +1538,23 @@ class UsageTrackerService : Service() {
                 return storedActive
             }
 
-            // Fallback: Quét sự kiện UsageStatsManager trong cửa sổ tối đa 15 giây gần nhất
+            // Fallback: Quét sự kiện UsageStatsManager trong cửa sổ tối thiểu 30 giây gần nhất theo SPEC
+            if (simulatedEvents != null) {
+                return parseLatestForegroundPackageFromEvents(simulatedEvents.asSequence(), now, USAGE_STATS_FALLBACK_WINDOW_MS)
+            }
+
             return try {
                 val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
                 if (usm != null) {
-                    val events = usm.queryEvents(now - 15_000L, now)
-                    val event = android.app.usage.UsageEvents.Event()
-                    var latestPkg = ""
-                    var latestTime = 0L
-                    while (events.hasNextEvent()) {
-                        events.getNextEvent(event)
-                        if (event.eventType == android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED ||
-                            event.eventType == android.app.usage.UsageEvents.Event.MOVE_TO_FOREGROUND
-                        ) {
-                            if (event.timeStamp in latestTime..now) {
-                                latestTime = event.timeStamp
-                                latestPkg = event.packageName ?: ""
-                            }
+                    val events = usm.queryEvents(now - USAGE_STATS_FALLBACK_WINDOW_MS, now)
+                    val rawEventsSequence = sequence {
+                        val event = android.app.usage.UsageEvents.Event()
+                        while (events.hasNextEvent()) {
+                            events.getNextEvent(event)
+                            yield(RawUsageEvent(event.packageName ?: "", event.eventType, event.timeStamp))
                         }
                     }
-                    if (latestPkg.isNotEmpty() && latestPkg != "SCREEN_OFF") {
-                        if (GuardianAccessibilityService.isBankPackage(latestPkg)) {
-                            "BANK_APP_PROTECTED"
-                        } else {
-                            latestPkg
-                        }
-                    } else {
-                        ""
-                    }
+                    parseLatestForegroundPackageFromEvents(rawEventsSequence, now, USAGE_STATS_FALLBACK_WINDOW_MS)
                 } else {
                     ""
                 }
@@ -1604,15 +1633,21 @@ class UsageTrackerService : Service() {
 
                             val lastPkg = resolveCurrentForegroundPackage(context, prefs)
                             val isBank = GuardianAccessibilityService.isBankPackage(lastPkg) || lastPkg == "BANK_APP_PROTECTED"
-                            val isStaleOrScreenOff = lastPkg.isEmpty() || lastPkg == "SCREEN_OFF"
+                            val isHome = lastPkg == "HOME" || GuardianAccessibilityService.isDefaultLauncher(context, lastPkg)
+                            val isScreenOff = lastPkg == "SCREEN_OFF"
                             val currentActivePkg = when {
                                 isBank -> "BANK_APP_PROTECTED"
-                                !isStaleOrScreenOff -> lastPkg
-                                else -> "HOME"
+                                isHome -> "HOME"
+                                isScreenOff -> "SCREEN_OFF"
+                                lastPkg.isNotEmpty() -> lastPkg
+                                else -> "UNKNOWN"
                             }
                             val currentActiveName = when {
                                 isBank -> "Ứng dụng Ngân hàng / Ví điện tử (Được bảo vệ)"
-                                !isStaleOrScreenOff -> {
+                                isHome -> "Màn hình chính"
+                                isScreenOff -> "Màn hình tắt"
+                                currentActivePkg == "UNKNOWN" -> "Thiết bị đang hoạt động"
+                                else -> {
                                     try {
                                         val appInfo = context.packageManager.getApplicationInfo(lastPkg, 0)
                                         context.packageManager.getApplicationLabel(appInfo).toString()
@@ -1620,16 +1655,19 @@ class UsageTrackerService : Service() {
                                         prefs.getString("app_name_$lastPkg", lastPkg) ?: lastPkg
                                     }
                                 }
-                                else -> "Màn hình chính / Thiết bị đang hoạt động"
                             }
                             val currentCategory = when {
                                 isBank -> "BANK_APP_PROTECTED"
                                 currentActivePkg == "HOME" -> "HOME"
+                                currentActivePkg == "UNKNOWN" -> "OTHER"
+                                currentActivePkg == "SCREEN_OFF" -> "OFFLINE"
                                 else -> prefs.getString("app_cat_$currentActivePkg", "OTHER") ?: "OTHER"
                             }
                             val currentCategoryLabel = when {
                                 isBank -> "Bảo vệ tài chính"
-                                currentActivePkg == "HOME" -> "Trực tuyến"
+                                currentActivePkg == "HOME" -> "Màn hình chính"
+                                currentActivePkg == "UNKNOWN" -> "Trực tuyến"
+                                currentActivePkg == "SCREEN_OFF" -> "Đã tắt màn hình"
                                 else -> prefs.getString("app_cat_label_$currentActivePkg", "Đang mở") ?: "Đang mở"
                             }
                             val activeFallback = JSONObject().apply {
@@ -3347,15 +3385,21 @@ class UsageTrackerService : Service() {
                                 put("lastHeartbeat", now)
                                 val lastPkg = resolveCurrentForegroundPackage(context, prefs)
                                 val isBank = GuardianAccessibilityService.isBankPackage(lastPkg) || lastPkg == "BANK_APP_PROTECTED"
-                                val isStaleOrScreenOff = lastPkg.isEmpty() || lastPkg == "SCREEN_OFF"
+                                val isHome = lastPkg == "HOME" || GuardianAccessibilityService.isDefaultLauncher(context, lastPkg)
+                                val isScreenOff = lastPkg == "SCREEN_OFF"
                                 val currentActivePkg = when {
                                     isBank -> "BANK_APP_PROTECTED"
-                                    !isStaleOrScreenOff -> lastPkg
-                                    else -> "HOME"
+                                    isHome -> "HOME"
+                                    isScreenOff -> "SCREEN_OFF"
+                                    lastPkg.isNotEmpty() -> lastPkg
+                                    else -> "UNKNOWN"
                                 }
                                 val currentActiveName = when {
                                     isBank -> "Ứng dụng Ngân hàng / Ví điện tử (Được bảo vệ)"
-                                    !isStaleOrScreenOff -> {
+                                    isHome -> "Màn hình chính"
+                                    isScreenOff -> "Màn hình tắt"
+                                    currentActivePkg == "UNKNOWN" -> "Thiết bị đang hoạt động"
+                                    else -> {
                                         try {
                                             val appInfo = context.packageManager.getApplicationInfo(lastPkg, 0)
                                             context.packageManager.getApplicationLabel(appInfo).toString()
@@ -3363,16 +3407,19 @@ class UsageTrackerService : Service() {
                                             prefs.getString("app_name_$lastPkg", lastPkg) ?: lastPkg
                                         }
                                     }
-                                    else -> "Màn hình chính / Thiết bị đang hoạt động"
                                 }
                                 val currentCategory = when {
                                     isBank -> "BANK_APP_PROTECTED"
                                     currentActivePkg == "HOME" -> "HOME"
+                                    currentActivePkg == "UNKNOWN" -> "OTHER"
+                                    currentActivePkg == "SCREEN_OFF" -> "OFFLINE"
                                     else -> prefs.getString("app_cat_$currentActivePkg", "OTHER") ?: "OTHER"
                                 }
                                 val currentCategoryLabel = when {
                                     isBank -> "Bảo vệ tài chính"
-                                    currentActivePkg == "HOME" -> "Trực tuyến"
+                                    currentActivePkg == "HOME" -> "Màn hình chính"
+                                    currentActivePkg == "UNKNOWN" -> "Trực tuyến"
+                                    currentActivePkg == "SCREEN_OFF" -> "Đã tắt màn hình"
                                     else -> prefs.getString("app_cat_label_$currentActivePkg", "Đang mở") ?: "Đang mở"
                                 }
                                 val activeFallback = JSONObject().apply {

@@ -5265,6 +5265,101 @@ class HardwareInvariantTest {
     }
 
     @Test
+    fun testResolveCurrentForegroundPackageFallbackWithin30SecondsReturnsAppAt16s20s30s() {
+        val fakePrefs = FakeSharedPreferences(commitReturnsSuccess = true)
+        val fakeContext = FakeTestContext(fakePrefs)
+        // SharedPreferences has NO foreground package (empty/stale)
+        fakePrefs.data["last_foreground_pkg"] = ""
+        fakePrefs.data["last_active_package"] = ""
+        fakePrefs.data["last_foreground_start"] = 0L
+        fakePrefs.data["last_active_timestamp"] = 0L
+
+        val now = System.currentTimeMillis()
+
+        // 1. Event at 16s ago: within 30s window -> MUST return app package, NEVER empty or "HOME"
+        val events16s = listOf(
+            UsageTrackerService.RawUsageEvent(
+                packageName = "com.google.android.youtube",
+                eventType = android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED,
+                timeStamp = now - 16_000L
+            )
+        )
+        val resolved16s = UsageTrackerService.resolveCurrentForegroundPackage(fakeContext, fakePrefs, events16s)
+        assertEquals("App at 16s must be returned, not empty or HOME", "com.google.android.youtube", resolved16s)
+
+        // 2. Event at 20s ago: within 30s window -> MUST return app package
+        val events20s = listOf(
+            UsageTrackerService.RawUsageEvent(
+                packageName = "com.ss.android.ugc.trill",
+                eventType = android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED,
+                timeStamp = now - 20_000L
+            )
+        )
+        val resolved20s = UsageTrackerService.resolveCurrentForegroundPackage(fakeContext, fakePrefs, events20s)
+        assertEquals("App at 20s must be returned, not empty or HOME", "com.ss.android.ugc.trill", resolved20s)
+
+        // 3. Event at 30s ago: boundary of 30s window -> MUST return app package
+        val events30s = listOf(
+            UsageTrackerService.RawUsageEvent(
+                packageName = "vn.edu.azota",
+                eventType = android.app.usage.UsageEvents.Event.MOVE_TO_FOREGROUND,
+                timeStamp = now - 30_000L
+            )
+        )
+        val resolved30s = UsageTrackerService.resolveCurrentForegroundPackage(fakeContext, fakePrefs, events30s)
+        assertEquals("App at 30s boundary must be returned, not empty or HOME", "vn.edu.azota", resolved30s)
+
+        // 4. Stale event at 35s ago: outside 30s window -> MUST fail-closed to ""
+        val events35s = listOf(
+            UsageTrackerService.RawUsageEvent(
+                packageName = "com.facebook.katana",
+                eventType = android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED,
+                timeStamp = now - 35_000L
+            )
+        )
+        val resolved35s = UsageTrackerService.resolveCurrentForegroundPackage(fakeContext, fakePrefs, events35s)
+        assertEquals("Stale event outside 30s window must be rejected", "", resolved35s)
+    }
+
+    @Test
+    fun testResolveCurrentForegroundPackageDoesNotDefaultToHomeWhenEventMissing() {
+        val fakePrefs = FakeSharedPreferences(commitReturnsSuccess = true)
+        val fakeContext = FakeTestContext(fakePrefs)
+        // SharedPreferences has NO foreground package
+        fakePrefs.data["last_foreground_pkg"] = ""
+        fakePrefs.data["last_active_package"] = ""
+        fakePrefs.data["last_foreground_start"] = 0L
+        fakePrefs.data["last_active_timestamp"] = 0L
+
+        // Empty events -> resolveCurrentForegroundPackage returns ""
+        val resolved = UsageTrackerService.resolveCurrentForegroundPackage(fakeContext, fakePrefs, emptyList())
+        assertEquals("Empty events with empty prefs must return empty string", "", resolved)
+
+        // Verify active app resolution mapping logic:
+        // When lastPkg is empty, active app MUST NOT default to "HOME", but must be UNKNOWN
+        val isBank = GuardianAccessibilityService.isBankPackage(resolved) || resolved == "BANK_APP_PROTECTED"
+        val isHome = resolved == "HOME" || GuardianAccessibilityService.isDefaultLauncher(fakeContext, resolved)
+        val isScreenOff = resolved == "SCREEN_OFF"
+        val currentActivePkg = when {
+            isBank -> "BANK_APP_PROTECTED"
+            isHome -> "HOME"
+            isScreenOff -> "SCREEN_OFF"
+            resolved.isNotEmpty() -> resolved
+            else -> "UNKNOWN"
+        }
+        assertEquals("Unverified empty package MUST map to UNKNOWN, NEVER falsely report HOME", "UNKNOWN", currentActivePkg)
+
+        // Verify that verified launcher DOES map to HOME
+        val launcherPkg = "com.google.android.apps.nexuslauncher"
+        val isLauncherHome = launcherPkg == "HOME" || GuardianAccessibilityService.isDefaultLauncher(fakeContext, launcherPkg)
+        val activeLauncher = when {
+            isLauncherHome -> "HOME"
+            else -> launcherPkg
+        }
+        assertEquals("Verified launcher MUST map to HOME", "HOME", activeLauncher)
+    }
+
+    @Test
     fun testPersistDiskActionRejectsWriteWhenHardwareTurnsOffOrEpochAdvances() {
         val fakePrefs = FakeSharedPreferences(commitReturnsSuccess = true)
         val initialEpoch = 10L

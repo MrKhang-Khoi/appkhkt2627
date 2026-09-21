@@ -95,6 +95,22 @@ class GuardianAccessibilityService : AccessibilityService() {
         }
 
         @JvmStatic
+        fun isDefaultLauncher(context: Context, packageName: String?): Boolean {
+            if (packageName.isNullOrEmpty() || packageName == "SCREEN_OFF") return false
+            if (packageName == "HOME") return true
+            return try {
+                val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+                val resolveInfo = context.packageManager.resolveActivity(intent, 0)
+                resolveInfo?.activityInfo?.packageName == packageName ||
+                        packageName.contains("launcher", ignoreCase = true) ||
+                        packageName.contains("home", ignoreCase = true)
+            } catch (e: Exception) {
+                packageName.contains("launcher", ignoreCase = true) ||
+                        packageName.contains("home", ignoreCase = true)
+            }
+        }
+
+        @JvmStatic
         fun evaluateForegroundEvidence(
             activeRootPkg: String?,
             usageStatsLastResumedPkg: String?,
@@ -920,15 +936,7 @@ class GuardianAccessibilityService : AccessibilityService() {
     }
 
     private fun isDefaultLauncher(packageName: String): Boolean {
-        return try {
-            val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
-            val resolveInfo = packageManager.resolveActivity(intent, 0)
-            resolveInfo?.activityInfo?.packageName == packageName ||
-                    packageName.contains("launcher") ||
-                    packageName.contains("home")
-        } catch (e: Exception) {
-            false
-        }
+        return Companion.isDefaultLauncher(this, packageName)
     }
 
     private fun getBrowserName(packageName: String): String {
