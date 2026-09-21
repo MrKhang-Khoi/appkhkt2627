@@ -1096,7 +1096,13 @@ async function runAudit() {
     }
   }
   const apkStat = fs.statSync(localApkPath);
-  artifactFreshnessReport = `Physical Compiler Proof: assembleRelease output APK (size: ${(apkStat.size / (1024 * 1024)).toFixed(2)} MB, mtime: ${new Date(apkMtime).toISOString()}) is strictly newer than all ${changedAndroidFiles.length} modified source files. Output-metadata.json confirmed versionCode=${versionJson.versionCode}, versionName=${versionJson.versionName}. Git HEAD commit: ${headCommit || 'HEAD'}.`;
+  let currentHeadCommit = 'HEAD';
+  try {
+    currentHeadCommit = execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim();
+  } catch (err) {
+    // ignore
+  }
+  artifactFreshnessReport = `Physical Compiler Proof: assembleRelease output APK (size: ${(apkStat.size / (1024 * 1024)).toFixed(2)} MB, mtime: ${new Date(apkMtime).toISOString()}) is strictly newer than all ${changedAndroidFiles.length} modified source files. Output-metadata.json confirmed versionCode=${versionJson.versionCode}, versionName=${versionJson.versionName}. Git HEAD commit: ${currentHeadCommit}.`;
   console.log('\x1b[32m%s\x1b[0m', `✅ ${artifactFreshnessReport}`);
 
   // Khử nhạy cảm (sanitization) toàn bộ secrets hoặc API keys khỏi diff và prompt
