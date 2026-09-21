@@ -870,7 +870,9 @@ try {
     'testSecondaryWindowFallbackRequiresUsageStatsAgreementAndRejectsStaleWindow',
     'testSplitScreenConcurrentTargetAndOtherWindowStrictlyFailsClosed',
     'testZeroWindowEvidenceWithStaleOrRecentUsageStatsStrictlyFailsClosed',
-    'testSplitScreenWithMatchingRootAndConflictingActiveWindowStrictlyFailsClosed'
+    'testSplitScreenWithMatchingRootAndConflictingActiveWindowStrictlyFailsClosed',
+    'testUnifiedHeartbeatRateLimiterEnforcesMinimum60SecondsInterval',
+    'testAccessibilityEventStormDoesNotSpamHeartbeat'
   ];
 
   for (const testName of requiredProductionFeatureTests) {

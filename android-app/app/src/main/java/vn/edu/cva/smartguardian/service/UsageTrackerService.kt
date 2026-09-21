@@ -212,6 +212,7 @@ class UsageTrackerService : Service() {
         val telemetryMutex = Mutex()
         internal val statsLock = Any()
         val lastHeartbeatSentTimestamp = java.util.concurrent.atomic.AtomicLong(0L)
+        const val MIN_HEARTBEAT_INTERVAL_MS = 60_000L
 
         internal val activeOnlineCalls = java.util.concurrent.ConcurrentHashMap.newKeySet<okhttp3.Call>()
         internal val activeOfflineCalls = java.util.concurrent.ConcurrentHashMap.newKeySet<okhttp3.Call>()
@@ -1187,8 +1188,8 @@ class UsageTrackerService : Service() {
             if (pairedCode.isEmpty()) return
 
             val now = System.currentTimeMillis()
-            if (!force && now - lastHeartbeatSentTimestamp.get() < 10_000L) {
-                return // Debounce 10s bảo vệ sơ bộ: Tránh queue coroutine dồn dập
+            if (!force && now - lastHeartbeatSentTimestamp.get() < MIN_HEARTBEAT_INTERVAL_MS) {
+                return // Unified 60s rate limiter: Ngăn chặn hoàn toàn heartbeat bão hòa mạng
             }
 
             // Atomic in-flight guard: Triệt tiêu hoàn toàn race condition tạo nhiều batch heartbeat đồng thời
@@ -1218,9 +1219,9 @@ class UsageTrackerService : Service() {
                             return@withLock null
                         }
 
-                        // Debounce nguyên tử bên trong Mutex: Loại bỏ hoàn toàn race condition
+                        // Rate limiter nguyên tử bên trong Mutex: Loại bỏ hoàn toàn race condition
                         val lastSent = lastHeartbeatSentTimestamp.get()
-                        if (!force && lockNow - lastSent < 10_000L) {
+                        if (!force && lockNow - lastSent < MIN_HEARTBEAT_INTERVAL_MS) {
                             return@withLock null
                         }
 
@@ -2661,18 +2662,6 @@ class UsageTrackerService : Service() {
                     }
                     if (isHardwareOnline) {
                         sendHeartbeatPing(ctx, force = true)
-                    }
-
-                    // Bù đắp Keyguard latency race: gửi lại sau 500ms và 1500ms khi Keyguard đã mở khóa hoàn toàn
-                    syncScope.launch {
-                        delay(500L)
-                        if (GuardianAccessibilityService.isScreenOnState) {
-                            sendHeartbeatPing(ctx, force = true)
-                        }
-                        delay(1000L)
-                        if (GuardianAccessibilityService.isScreenOnState) {
-                            sendHeartbeatPing(ctx, force = false)
-                        }
                     }
                 }
                 Intent.ACTION_SCREEN_ON -> {

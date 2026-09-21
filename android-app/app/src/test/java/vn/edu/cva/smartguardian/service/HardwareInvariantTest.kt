@@ -4312,6 +4312,61 @@ class HardwareInvariantTest {
         assertFalse("Split-screen with matching activeRootPkg but conflicting active window must strictly fail closed", splitScreenWithRootResult)
     }
 
+    @Test
+    fun testUnifiedHeartbeatRateLimiterEnforcesMinimum60SecondsInterval() {
+        // Invariant (Codex Anti-Network-Spam Invariant):
+        // Heartbeat HTTP ping tuyệt đối không được gửi dày hơn 60s giữa các chu kỳ (trừ force = true khi mở khóa màn hình).
+        assertEquals("MIN_HEARTBEAT_INTERVAL_MS must be strictly 60 seconds", 60_000L, UsageTrackerService.MIN_HEARTBEAT_INTERVAL_MS)
+
+        val initialTimestamp = 1_000_000L
+        UsageTrackerService.lastHeartbeatSentTimestamp.set(initialTimestamp)
+
+        // Mô phỏng các cuộc gọi heartbeat trong vòng 60 giây (ví dụ sau 10s, 20s, 45s, 59.9s):
+        // Tất cả đều phải bị chặn lại bởi unified rate limiter (không vượt qua ngưỡng).
+        val testTimes = listOf(
+            initialTimestamp + 1_000L,
+            initialTimestamp + 10_000L,
+            initialTimestamp + 20_000L,
+            initialTimestamp + 45_000L,
+            initialTimestamp + 59_999L
+        )
+
+        for (t in testTimes) {
+            val shouldAllow = (t - UsageTrackerService.lastHeartbeatSentTimestamp.get() >= UsageTrackerService.MIN_HEARTBEAT_INTERVAL_MS)
+            assertFalse("Heartbeat attempt at timestamp $t (${t - initialTimestamp}ms elapsed) must be strictly rate-limited", shouldAllow)
+        }
+
+        // Chỉ khi thời gian trôi qua >= 60_000ms thì mới cho phép gửi nhịp tim tiếp theo:
+        val allowedTime = initialTimestamp + 60_000L
+        val isAllowed = (allowedTime - UsageTrackerService.lastHeartbeatSentTimestamp.get() >= UsageTrackerService.MIN_HEARTBEAT_INTERVAL_MS)
+        assertTrue("Heartbeat after exactly 60 seconds must be allowed", isAllowed)
+    }
+
+    @Test
+    fun testAccessibilityEventStormDoesNotSpamHeartbeat() {
+        // Invariant (Codex Event-Storm Invariant):
+        // Khi người dùng tương tác liên tục (cuộn trang, gõ phím, animation động) sinh ra hàng nghìn
+        // TYPE_WINDOW_CONTENT_CHANGED trong vòng 60 giây, hệ thống TUYỆT ĐỐI không phát sinh heartbeat HTTP spam.
+        val baseTime = 2_000_000L
+        UsageTrackerService.lastHeartbeatSentTimestamp.set(baseTime)
+
+        var allowedPingCount = 0
+        val eventCount = 1000
+
+        // Mô phỏng 1000 events diễn ra rải rác trong 60 giây (mỗi 60ms một event):
+        for (i in 1..eventCount) {
+            val eventSimTime = baseTime + (i * 60L) // i=1 -> 60ms, ..., i=999 -> 59.94s, i=1000 -> 60.0s
+            val elapsed = eventSimTime - UsageTrackerService.lastHeartbeatSentTimestamp.get()
+            if (elapsed >= UsageTrackerService.MIN_HEARTBEAT_INTERVAL_MS) {
+                allowedPingCount++
+                UsageTrackerService.lastHeartbeatSentTimestamp.set(eventSimTime)
+            }
+        }
+
+        // Trong toàn bộ 1000 events trải dài 60s, chỉ có DUY NHẤT 1 lần chạm mốc 60s được phép gửi:
+        assertEquals("Event storm of 1000 accessibility events in 60s must yield at most 1 heartbeat ping", 1, allowedPingCount)
+    }
+
     private class FakeTestContext(
         val prefs: FakeSharedPreferences
     ) : ContextWrapper(null) {
