@@ -67,6 +67,8 @@ if (shortCommit) {
 if (headCommit) {
   candidateUrls.push(`https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/${headCommit}/apk/CVA-SmartGuardian-v${vJson.versionName}.apk`);
   candidateUrls.push(`https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/${headCommit}/apk/app-release.apk`);
+  candidateUrls.push(`https://api.github.com/repos/MrKhang-Khoi/appkhkt2627/contents/apk/CVA-SmartGuardian-v${vJson.versionName}.apk?ref=${headCommit}`);
+  candidateUrls.push(`https://api.github.com/repos/MrKhang-Khoi/appkhkt2627/contents/apk/app-release.apk?ref=${headCommit}`);
 }
 candidateUrls.push(`https://api.github.com/repos/MrKhang-Khoi/appkhkt2627/contents/apk/CVA-SmartGuardian-v${vJson.versionName}.apk?ref=main`);
 candidateUrls.push('https://api.github.com/repos/MrKhang-Khoi/appkhkt2627/contents/apk/app-release.apk?ref=main');
