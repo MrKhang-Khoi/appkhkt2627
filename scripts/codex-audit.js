@@ -75,10 +75,10 @@ try {
   diffTarget = 'Thay đổi mã nguồn văn bản (Uncommitted text source changes)';
 
   if (!diff) {
-    const commitBinaryStatus = execSync('git diff --name-status HEAD~1 HEAD', { encoding: 'utf8' }).trim();
-    const commitTextDiff = execSync('git diff HEAD~1 HEAD -- ":!*.apk" ":!*.png" ":!*.jpg" ":!*.jpeg"', { encoding: 'utf8' }).trim();
+    const commitBinaryStatus = execSync('git diff --name-status HEAD~3 HEAD', { encoding: 'utf8' }).trim();
+    const commitTextDiff = execSync('git diff HEAD~3 HEAD -- ":!*.apk" ":!*.png" ":!*.jpg" ":!*.jpeg"', { encoding: 'utf8' }).trim();
     diff = `[COMMITTED REPOSITORY ARTIFACTS IN THIS RELEASE]:\n${commitBinaryStatus}\n\n${commitTextDiff}`.trim();
-    diffTarget = 'Commit gần nhất (HEAD~1 -> HEAD: ' + execSync('git log -1 --pretty=%h', { encoding: 'utf8' }).trim() + ')';
+    diffTarget = 'Đợt phát hành hiện tại (HEAD~3 -> HEAD: ' + execSync('git log -1 --pretty=%h', { encoding: 'utf8' }).trim() + ')';
   }
 } catch (e) {
   console.error('\x1b[31m%s\x1b[0m', '❌ LỖI: Không thể đọc git diff: ' + e.message);
