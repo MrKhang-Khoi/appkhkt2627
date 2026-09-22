@@ -1,22 +1,22 @@
 {
-  "versionCode": 42,
-  "versionName": "1.4.2",
-  "latestVersionCode": 42,
-  "latestVersionName": "1.4.2",
+  "versionCode": 43,
+  "versionName": "1.4.3",
+  "latestVersionCode": 43,
+  "latestVersionName": "1.4.3",
   "minSupportedVersion": 1,
   "isForceUpdate": false,
-  "fileSize": "5.90 MB",
-  "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.4.2.apk",
-  "apkFallbackUrl": "https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/CVA-SmartGuardian-v1.4.2.apk",
-  "sha256": "03B6AD6CF07DAD7F6285AEC82A33DD5F8957CD8886F8CFBFADBB2D60407E9401",
+  "fileSize": "5.91 MB",
+  "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.4.3.apk",
+  "apkFallbackUrl": "https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/CVA-SmartGuardian-v1.4.3.apk",
+  "sha256": "02CA490F6B02B9D367D16B6CCAFF508E0C89A75D8C633C5D8A95FD828D3CE173",
   "changelog": [
-    "Kế thừa chuẩn Google Maps & Zenly (Fresh GPS Invariant): Tọa độ vệ tinh chỉ dùng nếu trong vòng 30s; giữ active satellite lock tối đa 10s để chốt tọa độ thực tế của giây hiện tại, triệt tiêu hoàn toàn tọa độ cache cũ.",
-    "Kế thừa chuẩn Life360 (Movement-Triggered Updates): Thiết lập tiến trình lắng nghe di chuyển ngầm > 30m. Hễ con di chuyển ra khỏi vị trí cũ > 30m, máy con tự động chốt và đẩy GPS mới lên hệ thống, phụ huynh mở máy là thấy vị trí thời gian thực.",
-    "Tối ưu hóa Giao diện Bảng Quản Lý: Tinh gọn nút bấm thành '🔄 Vị Trí' và '🗺️ Bản Đồ' chống tràn chữ; loại bỏ dòng phiên bản trùng lặp; thu gọn chip mã gia đình trên một hàng không bị rớt icon.",
-    "Độ ổn định cao: Đạt 146/146 bài kiểm thử tự động phần cứng, bảo vệ 100% thời lượng pin và an toàn số."
+    "Tích hợp Động Cơ AI Dự Báo Nguy Cơ Nghiện Số & Rối Loạn Chú Ý (Edge AI / TinyML): Mô hình mạng nơ-ron học sâu MLP (6 -> 16 -> 8 -> 3) kế thừa thang đo chuẩn quốc tế SAS-SV (Kwon et al., PLOS ONE) và IAT (Dr. Kimberly Young), suy luận on-device siêu tốc < 2ms, bảo mật quyền riêng tư 100% không gửi dữ liệu thô lên mạng.",
+    "Chỉ Số Cân Bằng Số (Digital Wellbeing Index - DWI 0-100): Phân loại chính xác 3 cấp độ nguy cơ (🌿 Cân Bằng, ⚠️ Cảnh Báo, 🚨 Nguy Cơ Cao) và tự động chỉ ra yếu tố rủi ro nổi trội (thức khuya dùng máy, nghiện mạng xã hội, chuyển ứng dụng liên tục).",
+    "Thẻ AI Sức Khỏe Số trên Giao Diện Học Sinh & Phụ Huynh: Hiển thị điểm số DWI, khuyến nghị sư phạm cá nhân hóa và nút kích hoạt '⏱️ Chế Độ Tập Trung Pomodoro (25 Phút)' giúp học sinh rèn luyện kỹ năng tự quản lý số.",
+    "Vượt qua toàn diện 151/151 bài kiểm thử tự động phần cứng, bảo vệ 100% thời lượng pin và an toàn số."
   ],
-  "releaseNotes": "Bản cập nhật v1.4.2: Tích hợp chuẩn định vị Zenly/Life360 theo dõi thời gian thực khi di chuyển >30m, chốt vệ tinh GPS tức thì trong 10s, và tinh gọn giao diện vị trí.",
-  "updatedAt": 1790067600000,
+  "releaseNotes": "Bản cập nhật v1.4.3: Đột phá tính năng AI Dự Báo Nguy Cơ Nghiện Số (Edge AI / TinyML) chuẩn quốc tế SAS-SV/IAT, thẻ DWI sức khỏe số và chế độ học tập Pomodoro.",
+  "updatedAt": 1790070000000,
   "releaseDate": "2026-09-22",
-  "sizeBytes": 6185396
+  "sizeBytes": 6195025
 }

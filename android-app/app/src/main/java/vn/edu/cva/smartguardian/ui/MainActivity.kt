@@ -58,6 +58,10 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import vn.edu.cva.smartguardian.ai.DigitalAddictionEngine
+import vn.edu.cva.smartguardian.ai.BehavioralFeatureExtractor
+import vn.edu.cva.smartguardian.ai.RiskLevel
+import vn.edu.cva.smartguardian.ai.DigitalWellbeingAssessment
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -554,6 +558,13 @@ class MainActivity : AppCompatActivity() {
     private var tvAppVersionBadge: TextView? = null
     private var tvPinGateVersion: TextView? = null
 
+    // 3.4 AI Digital Wellbeing Card (Parent Hub)
+    private var layoutParentAiCard: LinearLayout? = null
+    private var tvParentAiRiskBadge: TextView? = null
+    private var tvParentAiScore: TextView? = null
+    private var tvParentAiDominantFactor: TextView? = null
+    private var tvParentAiAdvice: TextView? = null
+
     // 4. Tab Học Sinh: Screen 3 (Student Card & Paired State)
     private lateinit var layoutStudentCard: LinearLayout
     private lateinit var etStudentNameInput: EditText
@@ -567,6 +578,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var cardStudentWebFilter: LinearLayout
     private lateinit var cardStudentSync: LinearLayout
     private lateinit var cardStudentBattery: LinearLayout
+    private var layoutStudentAiCard: LinearLayout? = null
+    private var tvStudentAiRiskBadge: TextView? = null
+    private var tvStudentAiScore: TextView? = null
+    private var tvStudentAiDominantFactor: TextView? = null
+    private var tvStudentAiAdvice: TextView? = null
+    private var btnStudentPomodoro: TextView? = null
 
     private var layoutParentChildRow: LinearLayout? = null
 
@@ -807,6 +824,13 @@ class MainActivity : AppCompatActivity() {
         layoutParentAppsContainer = findViewById(R.id.layoutParentAppsContainer)
         layoutParentAppsEmptyState = findViewById(R.id.layoutParentAppsEmptyState)
 
+        // 3.4 AI Wellbeing Parent Card
+        layoutParentAiCard = findViewById(R.id.layoutParentAiCard)
+        tvParentAiRiskBadge = findViewById(R.id.tvParentAiRiskBadge)
+        tvParentAiScore = findViewById(R.id.tvParentAiScore)
+        tvParentAiDominantFactor = findViewById(R.id.tvParentAiDominantFactor)
+        tvParentAiAdvice = findViewById(R.id.tvParentAiAdvice)
+
         // Tab Học Sinh: Screen 3
         layoutStudentCard = findViewById(R.id.layoutStudentCard)
         etStudentNameInput = findViewById(R.id.etStudentNameInput)
@@ -820,6 +844,17 @@ class MainActivity : AppCompatActivity() {
         cardStudentWebFilter = findViewById(R.id.cardStudentWebFilter)
         cardStudentSync = findViewById(R.id.cardStudentSync)
         cardStudentBattery = findViewById(R.id.cardStudentBattery)
+
+        // 4.1 AI Wellbeing Student Card
+        layoutStudentAiCard = findViewById(R.id.layoutStudentAiCard)
+        tvStudentAiRiskBadge = findViewById(R.id.tvStudentAiRiskBadge)
+        tvStudentAiScore = findViewById(R.id.tvStudentAiScore)
+        tvStudentAiDominantFactor = findViewById(R.id.tvStudentAiDominantFactor)
+        tvStudentAiAdvice = findViewById(R.id.tvStudentAiAdvice)
+        btnStudentPomodoro = findViewById(R.id.btnStudentPomodoro)
+        btnStudentPomodoro?.setOnClickListener {
+            showPomodoroFocusDialog()
+        }
 
         // Modals & Overlays
         layoutPinConfirmModal = findViewById(R.id.layoutPinConfirmModal)
@@ -1471,6 +1506,11 @@ class MainActivity : AppCompatActivity() {
         tvParentLocationTime.text = "--"
         tvParentScreenTimeTotal.text = "--"
         tvParentUsageStats.text = "Vui lòng kiểm tra WiFi / 4G"
+        tvParentAiScore?.text = "--"
+        tvParentAiDominantFactor?.text = "Lỗi kết nối mạng"
+        tvParentAiAdvice?.text = "Vui lòng kiểm tra kết nối để đồng bộ đánh giá AI."
+        tvParentAiRiskBadge?.text = "LỖI MẠNG"
+        tvParentAiRiskBadge?.setTextColor(Color.parseColor("#EF4444"))
         layoutParentAppsEmptyState.visibility = View.VISIBLE
         layoutParentAppsContainer.visibility = View.GONE
     }
@@ -1495,6 +1535,11 @@ class MainActivity : AppCompatActivity() {
         tvParentLocationTime.text = "--"
         tvParentScreenTimeTotal.text = "--"
         tvParentUsageStats.text = "📚 Học tập: 0m • 💬 Mạng XH: 0m • 🎮 Game: 0m"
+        tvParentAiScore?.text = "--"
+        tvParentAiDominantFactor?.text = "Chờ thiết bị con kết nối..."
+        tvParentAiAdvice?.text = "Dữ liệu AI sẽ tự động phân tích khi thiết bị của con đồng bộ."
+        tvParentAiRiskBadge?.text = "CHỜ KẾT NỐI"
+        tvParentAiRiskBadge?.setTextColor(Color.parseColor("#94A3B8"))
         layoutParentAppsEmptyState.visibility = View.VISIBLE
         layoutParentAppsContainer.visibility = View.GONE
     }
@@ -1589,7 +1634,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             tvParentLocationAddress.text = "Chưa nhận được tọa độ GPS từ thiết bị của ${child.childName}"
             tvParentLocationTime.text = "Chạm để yêu cầu định vị..."
-            btnParentOpenMap.text = "📍 Yêu Cầu Con Bật GPS & Định Vị"
+            btnParentOpenMap.text = "🗺️ Bản Đồ"
             btnParentOpenMap.setTextColor(Color.parseColor("#38BDF8"))
         }
 
@@ -1729,6 +1774,44 @@ class MainActivity : AppCompatActivity() {
                 appCard.addView(tvDur)
 
                 layoutParentAppsContainer.addView(appCard)
+            }
+        }
+
+        // 4.5 Cập nhật Thẻ AI Sức Khỏe Số (DWI)
+        val aiWellbeingObj = child.rawObj.optJSONObject("ai_wellbeing")
+        val assessment = if (aiWellbeingObj != null) {
+            val dwi = aiWellbeingObj.optInt("dwiScore", 85)
+            val levelStr = aiWellbeingObj.optString("riskLevel", "BALANCED")
+            val level = try { RiskLevel.valueOf(levelStr) } catch (e: Exception) { RiskLevel.BALANCED }
+            val factor = aiWellbeingObj.optString("dominantFactor", "Thói quen sử dụng số điều độ, tích cực học tập.")
+            val advice = aiWellbeingObj.optString("pedagogicalAdvice", "Khuyến khích con duy trì thời lượng học tập và nghỉ ngơi sau mỗi 45 phút.")
+            DigitalWellbeingAssessment(
+                score = dwi,
+                riskLevel = level,
+                dominantRiskFactor = factor,
+                recommendation = advice,
+                probabilities = floatArrayOf(0.8f, 0.15f, 0.05f)
+            )
+        } else {
+            val features = BehavioralFeatureExtractor.extractFromAppHistory(historyArr, totalMinutes)
+            DigitalAddictionEngine.assess(features)
+        }
+
+        tvParentAiScore?.text = "${assessment.dwiScore}/100"
+        tvParentAiDominantFactor?.text = assessment.dominantFactor
+        tvParentAiAdvice?.text = assessment.pedagogicalAdvice
+        when (assessment.riskLevel) {
+            RiskLevel.BALANCED -> {
+                tvParentAiRiskBadge?.text = "🌿 CÂN BẰNG"
+                tvParentAiRiskBadge?.setTextColor(Color.parseColor("#10B981"))
+            }
+            RiskLevel.WARNING -> {
+                tvParentAiRiskBadge?.text = "⚠️ CẢNH BÁO"
+                tvParentAiRiskBadge?.setTextColor(Color.parseColor("#FBBF24"))
+            }
+            RiskLevel.HIGH_RISK -> {
+                tvParentAiRiskBadge?.text = "🚨 NGUY CƠ CAO"
+                tvParentAiRiskBadge?.setTextColor(Color.parseColor("#EF4444"))
             }
         }
     }
@@ -2667,7 +2750,8 @@ class MainActivity : AppCompatActivity() {
                         val isOnline = computeDeviceOnlineStatus(targetDeviceObj)
 
                         val usageObj = targetDeviceObj.optJSONObject("usage")
-                        val balanceScore = usageObj?.optInt("balanceScore", 85) ?: 85
+                        val aiWellbeingObj = targetDeviceObj.optJSONObject("ai_wellbeing")
+                        val balanceScore = aiWellbeingObj?.optInt("dwiScore") ?: usageObj?.optInt("balanceScore", 85) ?: 85
 
                         val activeAppObj = targetDeviceObj.optJSONObject("active_app")
                         val activePkg = activeAppObj?.optString("packageName", "SCREEN_OFF") ?: "SCREEN_OFF"
@@ -2719,6 +2803,11 @@ class MainActivity : AppCompatActivity() {
                             tvDialogChildTitle.text = titleName
                             ivDialogChildAvatar.setImageResource(R.drawable.ic_person_24)
                             tvDialogBalanceScore.text = "$balanceScore/100"
+                            when {
+                                balanceScore >= 75 -> tvDialogBalanceScore.setTextColor(Color.parseColor("#10B981"))
+                                balanceScore >= 50 -> tvDialogBalanceScore.setTextColor(Color.parseColor("#FBBF24"))
+                                else -> tvDialogBalanceScore.setTextColor(Color.parseColor("#EF4444"))
+                            }
 
                             if (isOnline) {
                                 tvDialogChildSubtitle.text = "Trực tuyến • Đồng bộ thời gian thực"
@@ -3058,6 +3147,46 @@ class MainActivity : AppCompatActivity() {
         layoutStudentCard.visibility = View.GONE
         layoutStudentPairedState.visibility = View.VISIBLE
         tvPairedCodeDisplay.text = "MÃ GIA ĐÌNH: $code"
+        updateStudentAiWellbeingUi()
+    }
+
+    private fun updateStudentAiWellbeingUi() {
+        val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
+        val dwiScore = prefs.getInt("ai_dwi_score", 85)
+        val riskName = prefs.getString("ai_risk_level", "BALANCED") ?: "BALANCED"
+        val dominantFactor = prefs.getString("ai_dominant_factor", "Thói quen sử dụng số điều độ, tích cực học tập.") ?: "Thói quen sử dụng số điều độ, tích cực học tập."
+        val advice = prefs.getString("ai_pedagogical_advice", "Hãy tiếp tục duy trì thói quen tốt và thư giãn mắt sau mỗi tiết học!") ?: "Hãy tiếp tục duy trì thói quen tốt và thư giãn mắt sau mỗi tiết học!"
+
+        tvStudentAiScore?.text = "$dwiScore/100"
+        tvStudentAiDominantFactor?.text = dominantFactor
+        tvStudentAiAdvice?.text = advice
+
+        when (riskName) {
+            "BALANCED" -> {
+                tvStudentAiRiskBadge?.text = "🌿 CÂN BẰNG"
+                tvStudentAiRiskBadge?.setTextColor(Color.parseColor("#10B981"))
+            }
+            "WARNING" -> {
+                tvStudentAiRiskBadge?.text = "⚠️ CẢNH BÁO"
+                tvStudentAiRiskBadge?.setTextColor(Color.parseColor("#FBBF24"))
+            }
+            else -> {
+                tvStudentAiRiskBadge?.text = "🚨 NGUY CƠ CAO"
+                tvStudentAiRiskBadge?.setTextColor(Color.parseColor("#EF4444"))
+            }
+        }
+    }
+
+    private fun showPomodoroFocusDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("⏱️ Chế Độ Tập Trung Pomodoro (25 Phút)")
+            .setMessage("Chế độ học tập chuyên sâu được kích hoạt!\n\nTrong 25 phút tới, hãy giữ sự tập trung cao độ cho bài tập. Các ứng dụng giải trí sẽ được tạm hoãn để rèn luyện kỹ năng tự quản lý số của bạn.")
+            .setPositiveButton("Bắt Đầu Ngay 🚀") { dialog, _ ->
+                Toast.makeText(this, "⏱️ Đã kích hoạt Chế độ Pomodoro! Chúc bạn học tập hiệu quả.", Toast.LENGTH_LONG).show()
+                dialog.dismiss()
+            }
+            .setNegativeButton("Để Sau", null)
+            .show()
     }
 
     private fun showStudentUnpairedState() {

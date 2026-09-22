@@ -3569,13 +3569,36 @@ class UsageTrackerService : Service() {
                                 pm?.isInteractive == true &&
                                 km?.isKeyguardLocked != true
 
+                        val totalTodayMinutes = totalScreenTimeMs / 60000
+                        val aiFeatures = vn.edu.cva.smartguardian.ai.BehavioralFeatureExtractor.extractFromAppHistory(appHistoryJsonArray, totalTodayMinutes)
+                        val aiResult = vn.edu.cva.smartguardian.ai.DigitalAddictionEngine.assess(aiFeatures)
+                        val aiJson = JSONObject().apply {
+                            put("dwiScore", aiResult.dwiScore)
+                            put("riskLevel", aiResult.riskLevel.name)
+                            put("riskLabel", aiResult.riskLevel.label)
+                            put("riskDescription", aiResult.riskLevel.description)
+                            put("dominantFactor", aiResult.dominantFactor)
+                            put("pedagogicalAdvice", aiResult.pedagogicalAdvice)
+                            put("assessedAt", now)
+                        }
+
+                        prefs.edit().apply {
+                            putInt("ai_dwi_score", aiResult.dwiScore)
+                            putString("ai_risk_level", aiResult.riskLevel.name)
+                            putString("ai_risk_label", aiResult.riskLevel.label)
+                            putString("ai_dominant_factor", aiResult.dominantFactor)
+                            putString("ai_pedagogical_advice", aiResult.pedagogicalAdvice)
+                            putLong("ai_assessed_at", now)
+                            apply()
+                        }
+
                         val usageJson = JSONObject().apply {
                             put("studyTimeMinutes", (studyTimeMs / 60000).toInt())
                             put("gameTimeMinutes", (gameTimeMs / 60000).toInt())
                             put("socialTimeMinutes", (socialTimeMs / 60000).toInt())
                             put("utilityTimeMinutes", (utilityTimeMs / 60000).toInt())
                             put("totalScreenTimeMinutes", (totalScreenTimeMs / 60000).toInt())
-                            put("balanceScore", balanceScore)
+                            put("balanceScore", aiResult.dwiScore)
                             put("lastSync", now)
                             if (isOnlineNow) {
                                 put("lastHeartbeat", now)
@@ -3657,6 +3680,7 @@ class UsageTrackerService : Service() {
                             put("lastSync", now)
                             put("usage", usageJson)
                             put("app_history", appHistoryJsonArray)
+                            put("ai_wellbeing", aiJson)
                         }
                         val patchBody = devicePatch.toString().toRequestBody(mediaType)
                         val activeAppBody = effectiveActiveApp.toString().toRequestBody(mediaType)

@@ -6,6 +6,10 @@ import android.content.SharedPreferences
 import android.location.Location
 import vn.edu.cva.smartguardian.location.LocationHelper
 import vn.edu.cva.smartguardian.location.GuardianLocation
+import vn.edu.cva.smartguardian.ai.BehavioralFeatureVector
+import vn.edu.cva.smartguardian.ai.DigitalAddictionEngine
+import vn.edu.cva.smartguardian.ai.RiskLevel
+import vn.edu.cva.smartguardian.ai.BehavioralFeatureExtractor
 import okhttp3.Call
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -6101,6 +6105,86 @@ class HardwareInvariantTest {
         }
         UsageTrackerService.handleMovementLocationDisplacement(fakeCtx, bigMoveLoc)
         assertEquals(bigMoveLoc.latitude, UsageTrackerService.lastMovementPublishedLocation.get()?.latitude ?: 0.0, 0.0001)
+    }
+
+    @Test
+    fun testAiModelOutputRange() {
+        val vector = BehavioralFeatureVector(
+            nightUnlockCount = 1f,
+            maxContinuousMinutes = 35f,
+            entertainmentRatio = 0.3f,
+            switchingVelocity = 10f,
+            schoolHoursMinutes = 10f,
+            velocitySlope7d = 0.0f
+        )
+        val assessment = DigitalAddictionEngine.assess(vector)
+        assertTrue("DWI score must be between 0 and 100", assessment.score in 0..100)
+        assertNotNull(assessment.dominantRiskFactor)
+        assertNotNull(assessment.recommendation)
+        assertEquals(3, assessment.probabilities.size)
+    }
+
+    @Test
+    fun testHealthyStudentProfileClassification() {
+        val healthyStudent = BehavioralFeatureVector(
+            nightUnlockCount = 0f,
+            maxContinuousMinutes = 25f,
+            entertainmentRatio = 0.20f,
+            switchingVelocity = 5f,
+            schoolHoursMinutes = 0f,
+            velocitySlope7d = 0.0f
+        )
+        val assessment = DigitalAddictionEngine.assess(healthyStudent)
+        assertEquals(RiskLevel.BALANCED, assessment.riskLevel)
+        assertTrue("Healthy student must have DWI >= 75, got ${assessment.score}", assessment.score >= 75)
+    }
+
+    @Test
+    fun testNightHeavyAddictionProfileClassification() {
+        val addictedStudent = BehavioralFeatureVector(
+            nightUnlockCount = 6f,
+            maxContinuousMinutes = 150f,
+            entertainmentRatio = 0.85f,
+            switchingVelocity = 45f,
+            schoolHoursMinutes = 90f,
+            velocitySlope7d = 0.8f
+        )
+        val assessment = DigitalAddictionEngine.assess(addictedStudent)
+        assertEquals(RiskLevel.HIGH_RISK, assessment.riskLevel)
+        assertTrue("Addicted student must have DWI < 50, got ${assessment.score}", assessment.score < 50)
+        assertTrue("Dominant factor should detect night/continuous overuse", assessment.dominantRiskFactor.isNotEmpty())
+    }
+
+    @Test
+    fun testFeatureNormalizationBounds() {
+        val extremeVector = BehavioralFeatureVector(
+            nightUnlockCount = 50f,
+            maxContinuousMinutes = 500f,
+            entertainmentRatio = 2.5f,
+            switchingVelocity = 120f,
+            schoolHoursMinutes = 300f,
+            velocitySlope7d = 5.0f
+        )
+        val normalized = DigitalAddictionEngine.normalizeFeatures(extremeVector)
+        for (v in normalized) {
+            assertTrue("Normalized value must be in [0.0, 1.0], got $v", v in 0.0f..1.0f)
+        }
+    }
+
+    @Test
+    fun testSoftmaxProbabilitySum() {
+        val vector = BehavioralFeatureVector(
+            nightUnlockCount = 2f,
+            maxContinuousMinutes = 50f,
+            entertainmentRatio = 0.5f,
+            switchingVelocity = 20f,
+            schoolHoursMinutes = 20f,
+            velocitySlope7d = 0.1f
+        )
+        val normalized = DigitalAddictionEngine.normalizeFeatures(vector)
+        val probs = DigitalAddictionEngine.forwardPass(normalized)
+        val sum = probs.sum()
+        assertEquals(1.0f, sum, 0.001f)
     }
 
     private class FakeTestContext(

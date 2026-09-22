@@ -51,7 +51,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:background="@drawable/bg_score_pill"
-                    android:text="v1.4.1"
+                    android:text="v1.4.3"
                     android:textColor="#38BDF8"
                     android:textSize="11sp"
                     android:textStyle="bold"
@@ -279,7 +279,7 @@
                         android:id="@+id/tvPinGateVersion"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Phiên Bản v1.4.1 (Mới Nhất)"
+                        android:text="Phiên Bản v1.4.3 (Mới Nhất)"
                         android:textColor="#38BDF8"
                         android:textSize="11sp"
                         android:textStyle="bold"
@@ -959,6 +959,92 @@
                             android:textSize="11sp" />
                     </LinearLayout>
 
+                    <!-- 4.5. THẺ AI DỰ BÁO NGUY CƠ NGHIỆN SỐ (EDGE AI / TINYML DWI) -->
+                    <LinearLayout
+                        android:id="@+id/layoutParentAiCard"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_device_card"
+                        android:orientation="vertical"
+                        android:padding="14dp"
+                        android:layout_marginBottom="12dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginBottom="8dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="🤖 AI Sức Khỏe Số (DWI)"
+                                android:textColor="#F8FAFC"
+                                android:textSize="13sp"
+                                android:textStyle="bold"
+                                android:singleLine="true"
+                                android:ellipsize="end" />
+
+                            <TextView
+                                android:id="@+id/tvParentAiRiskBadge"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:background="@drawable/bg_score_pill"
+                                android:paddingLeft="8dp"
+                                android:paddingRight="8dp"
+                                android:paddingTop="3dp"
+                                android:paddingBottom="3dp"
+                                android:text="🌿 CÂN BẰNG"
+                                android:textColor="#10B981"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:singleLine="true"
+                                android:ellipsize="end" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginBottom="6dp">
+
+                            <TextView
+                                android:id="@+id/tvParentAiScore"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="85/100"
+                                android:textColor="#38BDF8"
+                                android:textSize="20sp"
+                                android:textStyle="bold"
+                                android:singleLine="true" />
+
+                            <TextView
+                                android:id="@+id/tvParentAiDominantFactor"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:layout_marginStart="10dp"
+                                android:text="Thói quen sử dụng số điều độ, cân đối học tập."
+                                android:textColor="#CBD5E1"
+                                android:textSize="12sp"
+                                android:maxLines="2"
+                                android:ellipsize="end" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/tvParentAiAdvice"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Khuyến khích con duy trì thời lượng học tập và nghỉ ngơi sau mỗi 45 phút."
+                            android:textColor="#94A3B8"
+                            android:textSize="11sp"
+                            android:maxLines="2"
+                            android:ellipsize="end" />
+                    </LinearLayout>
+
                     <!-- 5. HOẠT ĐỘNG GẦN ĐÂY CỦA CON: NẠP ĐỘNG DỮ LIỆU THẬT -->
                     <TextView
                         android:id="@+id/tvParentRecentAppsTitle"
@@ -1375,6 +1461,110 @@
                                 android:textColor="#38BDF8"
                                 android:textSize="10sp" />
                         </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- 2.5. THẺ AI ĐÁNH GIÁ SỨC KHỎE SỐ HỌC SINH (EDGE AI / TINYML DWI) -->
+                    <LinearLayout
+                        android:id="@+id/layoutStudentAiCard"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_device_card"
+                        android:orientation="vertical"
+                        android:padding="14dp"
+                        android:layout_marginBottom="14dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginBottom="8dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="🤖 AI Sức Khỏe Số (DWI)"
+                                android:textColor="#F8FAFC"
+                                android:textSize="13sp"
+                                android:textStyle="bold"
+                                android:singleLine="true"
+                                android:ellipsize="end" />
+
+                            <TextView
+                                android:id="@+id/tvStudentAiRiskBadge"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:background="@drawable/bg_score_pill"
+                                android:paddingLeft="8dp"
+                                android:paddingRight="8dp"
+                                android:paddingTop="3dp"
+                                android:paddingBottom="3dp"
+                                android:text="🌿 CÂN BẰNG"
+                                android:textColor="#10B981"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:singleLine="true"
+                                android:ellipsize="end" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginBottom="6dp">
+
+                            <TextView
+                                android:id="@+id/tvStudentAiScore"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="85/100"
+                                android:textColor="#38BDF8"
+                                android:textSize="20sp"
+                                android:textStyle="bold"
+                                android:singleLine="true" />
+
+                            <TextView
+                                android:id="@+id/tvStudentAiDominantFactor"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:layout_marginStart="10dp"
+                                android:text="Thói quen sử dụng số điều độ, tích cực học tập."
+                                android:textColor="#CBD5E1"
+                                android:textSize="12sp"
+                                android:maxLines="2"
+                                android:ellipsize="end" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/tvStudentAiAdvice"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Hãy tiếp tục duy trì thói quen tốt và thư giãn mắt sau mỗi tiết học!"
+                            android:textColor="#94A3B8"
+                            android:textSize="11sp"
+                            android:maxLines="2"
+                            android:ellipsize="end"
+                            android:layout_marginBottom="10dp" />
+
+                        <!-- NÚT BẬT CHẾ ĐỘ POMODORO TẬP TRUNG TỰ GIÁC -->
+                        <TextView
+                            android:id="@+id/btnStudentPomodoro"
+                            android:layout_width="match_parent"
+                            android:layout_height="48dp"
+                            android:minHeight="48dp"
+                            android:background="@drawable/bg_pill_button"
+                            android:text="⏱️ Chế Độ Tập Trung Pomodoro (25 Phút)"
+                            android:textColor="#FFFFFF"
+                            android:textSize="12sp"
+                            android:textStyle="bold"
+                            android:gravity="center"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:singleLine="true"
+                            android:ellipsize="end" />
                     </LinearLayout>
 
                     <!-- 3. HOẠT ĐỘNG HỌC TẬP AN TOÀN (LƯỚI 2 CỘT SQUIRCLE) -->
