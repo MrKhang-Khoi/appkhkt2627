@@ -1,21 +1,21 @@
 {
-  "versionCode": 40,
-  "versionName": "1.4.0",
-  "latestVersionCode": 40,
-  "latestVersionName": "1.4.0",
+  "versionCode": 41,
+  "versionName": "1.4.1",
+  "latestVersionCode": 41,
+  "latestVersionName": "1.4.1",
   "minSupportedVersion": 1,
   "isForceUpdate": false,
   "fileSize": "5.89 MB",
-  "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.4.0.apk",
-  "apkFallbackUrl": "https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/CVA-SmartGuardian-v1.4.0.apk",
-  "sha256": "0B9DCBE52C863556AB841619A5DECFD67BEE49DCA04CADB3FA9EC0170A49C460",
+  "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.4.1.apk",
+  "apkFallbackUrl": "https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/CVA-SmartGuardian-v1.4.1.apk",
+  "sha256": "E1C0235DB8044BA4A7FF55038D97A360DD49AEC4259343D91A332BB2DAC54858",
   "changelog": [
-    "BUG-FIX CRITICAL: Sửa triệt để lỗi Dashboard phụ huynh hiển thị ứng dụng cũ (TikTok) dù học sinh đã chuyển sang Facebook — Giảm chu kỳ cập nhật Dialog companion từ 60 giây xuống còn 3 giây.",
-    "BUG-FIX HIGH: Sửa triệt để lỗi nhận diện sai khi có cửa sổ nổi (Facebook Messenger bubble, Zalo bubble, YouTube PiP) — Bộ lọc thông minh loại trừ overlay/bubble dựa trên kích thước < 60% chiều cao màn hình.",
-    "Bảo toàn toàn bộ tính năng: VPN TUN, chặn web, nhịp tim 60s, kế toán phiên, bảo vệ ngân hàng, 100 Unit Tests PASS."
+    "Sửa triệt để lỗi hiển thị ứng dụng khi máy con đã tắt hoặc khóa màn hình — Tự động chuyển thẻ trạng thái sang 'Màn hình khóa / Màn hình tắt • ĐÃ KHÓA' và gán nhãn ĐÃ ĐÓNG cho toàn bộ ứng dụng.",
+    "Nâng cấp Định vị GPS thời gian thực: Thêm nút '🔄 Cập Nhật Vị Trí' chuyên dụng. Bố mẹ bấm nút là máy con lập tức chốt tọa độ vệ tinh và cập nhật ngay vị trí chính xác lên màn hình (kể cả khi máy con đang tắt màn hình trong cặp/túi quần).",
+    "Bảo toàn 100% tính năng: Kế toán thời gian sử dụng chuẩn Google, lọc web độc hại, bảo vệ app ngân hàng, 142 bài kiểm thử phần cứng đạt chuẩn."
   ],
-  "releaseNotes": "v1.4.0: Sửa 2 lỗi nhận diện ứng dụng tiền cảnh thời gian thực và lọc floating window/bubble sai.",
-  "updatedAt": 1790054520000,
+  "releaseNotes": "Bản cập nhật v1.4.1: Sửa lỗi hiển thị khi màn hình tắt/khóa máy và nâng cấp định vị GPS tức thời theo yêu cầu của phụ huynh.",
+  "updatedAt": 1790057790000,
   "releaseDate": "2026-09-22",
-  "sizeBytes": 6176355
+  "sizeBytes": 6178390
 }

@@ -307,10 +307,12 @@ class MainActivity : AppCompatActivity() {
             val activeApp = devObj.optJSONObject("active_app")
             val activePkg = activeApp?.optString("packageName", "") ?: ""
             val activeTimestamp = activeApp?.optLong("timestamp", 0L) ?: 0L
+            val isExplicitNotFg = activeApp?.has("isForeground") == true && !activeApp.optBoolean("isForeground", true)
 
-            // Stale SCREEN_OFF Guard: Chỉ coi là SCREEN_OFF nếu timestamp active_app mới hơn hoặc bằng (lastContact - 15000L)
+            // Stale SCREEN_OFF Guard: Chỉ coi là SCREEN_OFF nếu timestamp active_app mới hơn hoặc bằng (referenceContact - 15000L)
             // Nếu devObj có online=true và nhịp tim mới hơn sự kiện tắt màn hình > 15s, thì SCREEN_OFF là tàn dư từ phiên trước
-            val isScreenOffActive = activePkg == "SCREEN_OFF" && (activeTimestamp == 0L || activeTimestamp >= lastContact - 15000L)
+            val referenceContact = if (lastHeartbeat > 0L) lastHeartbeat else lastContact
+            val isScreenOffActive = (activePkg == "SCREEN_OFF" || isExplicitNotFg) && (activeTimestamp == 0L || activeTimestamp >= referenceContact - 15000L)
             if (isScreenOffActive) return false
 
             return true
@@ -537,6 +539,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var layoutParentLocationCard: LinearLayout
     private lateinit var tvParentLocationAddress: TextView
     private lateinit var tvParentLocationTime: TextView
+    private lateinit var btnParentRefreshLocation: TextView
     private lateinit var btnParentOpenMap: TextView
 
     // 3.3 Screen Time Thật & Real Apps
@@ -789,6 +792,7 @@ class MainActivity : AppCompatActivity() {
         layoutParentLocationCard = findViewById(R.id.layoutParentLocationCard)
         tvParentLocationAddress = findViewById(R.id.tvParentLocationAddress)
         tvParentLocationTime = findViewById(R.id.tvParentLocationTime)
+        btnParentRefreshLocation = findViewById(R.id.btnParentRefreshLocation)
         btnParentOpenMap = findViewById(R.id.btnParentOpenMap)
 
         // Screen Time & Real Apps
@@ -999,6 +1003,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         tvParentLocationTime.setOnClickListener {
+            val child = familyChildrenList.firstOrNull { it.deviceId == activeSelectedChildId }
+            if (child != null && currentFamilyCode.isNotEmpty()) {
+                requestChildLocation(currentFamilyCode, child.deviceId)
+            }
+        }
+
+        btnParentRefreshLocation.setOnClickListener {
             val child = familyChildrenList.firstOrNull { it.deviceId == activeSelectedChildId }
             if (child != null && currentFamilyCode.isNotEmpty()) {
                 requestChildLocation(currentFamilyCode, child.deviceId)
@@ -1713,80 +1724,119 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "Không xác định được mã gia đình hoặc thiết bị con!", Toast.LENGTH_SHORT).show()
             return
         }
-        Toast.makeText(this, "📍 Đang kiểm tra trạng thái định vị của con...", Toast.LENGTH_SHORT).show()
-        btnParentOpenMap.text = "⏳ Đang Chờ Con Bật GPS..."
+        Toast.makeText(this, "📍 Đang gửi tín hiệu yêu cầu định vị tới máy con...", Toast.LENGTH_SHORT).show()
+        btnParentRefreshLocation.text = "⏳ Đang Chốt Vị Trí..."
+        tvParentLocationTime.text = "Đang dò tìm..."
+        tvParentLocationAddress.text = "Đang gửi tín hiệu kích hoạt vệ tinh GPS..."
+
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                withTimeout(8000L) {
-                    val cmdUrl = UsageTrackerService.LocationProtocol.getCommandUrl(FIREBASE_RTDB_URL, familyCode, targetDeviceId)
-                    val dedicatedClient = firebaseClient.newBuilder()
-                        .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
-                        .readTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
-                        .writeTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
-                        .callTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
-                        .build()
+                val cmdUrl = UsageTrackerService.LocationProtocol.getCommandUrl(FIREBASE_RTDB_URL, familyCode, targetDeviceId)
+                val dedicatedClient = firebaseClient.newBuilder()
+                    .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                    .writeTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                    .callTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
+                    .build()
 
-                    // Bước 1: Inspect lệnh hiện tại để tránh ghi đè lệnh đang xử lý và thu thập ETag cho OCC
-                    val getReq = UsageTrackerService.LocationProtocol.buildGetCommandRequest(cmdUrl)
-                    val getResult = dedicatedClient.newCall(getReq).execute()
-                    val existingEtag = getResult.header("ETag")
-                    val existingBody = getResult.body?.string()
-                    getResult.close()
+                // Bước 1: Inspect lệnh hiện tại để thu thập ETag cho OCC
+                val getReq = UsageTrackerService.LocationProtocol.buildGetCommandRequest(cmdUrl)
+                val getResult = dedicatedClient.newCall(getReq).execute()
+                val existingEtag = getResult.header("ETag")
+                val existingBody = getResult.body?.string()
+                getResult.close()
 
-                    if (existingEtag.isNullOrBlank()) {
-                        withContext(Dispatchers.Main) {
-                            Toast.makeText(this@MainActivity, "Máy chủ không cấp ETag, vui lòng thử lại để đảm bảo an toàn OCC.", Toast.LENGTH_SHORT).show()
-                            btnParentOpenMap.text = "📍 Yêu Cầu Con Bật GPS & Định Vị"
-                        }
-                        return@withTimeout
-                    }
-
-                    val now = System.currentTimeMillis()
-                    if (!existingBody.isNullOrEmpty() && existingBody != "null") {
-                        val json = JSONObject(existingBody)
-                        val status = json.optString("status", "")
-                        val reqAt = json.optLong("requestedAt", 0L)
-                        if (UsageTrackerService.LocationProtocol.isCommandActiveAndRecent(status, reqAt, now)) {
-                            withContext(Dispatchers.Main) {
-                                Toast.makeText(this@MainActivity, "📍 Đang xử lý yêu cầu định vị gần nhất, vui lòng chờ...", Toast.LENGTH_SHORT).show()
-                                btnParentOpenMap.text = "⏳ Đang Chờ Con Bật GPS..."
-                            }
-                            return@withTimeout
-                        }
-                    }
-
-                    // Bước 2: Chuẩn bị payload PENDING và gửi Conditional PUT (OCC) với ETag bắt buộc
-                    val mediaType = "application/json; charset=utf-8".toMediaType()
-                    val cmdJson = JSONObject().apply {
-                        put("status", UsageTrackerService.LocationProtocol.STATUS_PENDING)
-                        put("requestedAt", now)
-                        put("requestedBy", "Phụ Huynh")
-                        put("message", "Phụ huynh đang yêu cầu định vị thiết bị.")
-                    }
-                    val body = cmdJson.toString().toRequestBody(mediaType)
-                    val putReq = UsageTrackerService.LocationProtocol.buildConditionalPutRequest(cmdUrl, existingEtag, body)
-
-                    val putResp = dedicatedClient.newCall(putReq).execute()
-                    val putCode = putResp.code
-                    val isSuccess = putResp.isSuccessful
-                    putResp.close()
-
+                if (existingEtag.isNullOrBlank()) {
                     withContext(Dispatchers.Main) {
-                        if (isSuccess) {
-                            Toast.makeText(this@MainActivity, "📍 Đã gửi tín hiệu yêu cầu GPS tới máy con!", Toast.LENGTH_SHORT).show()
-                        } else if (putCode == 412) {
+                        Toast.makeText(this@MainActivity, "Máy chủ bận, vui lòng thử lại.", Toast.LENGTH_SHORT).show()
+                        btnParentRefreshLocation.text = "🔄 Cập Nhật Vị Trí"
+                    }
+                    return@launch
+                }
+
+                val now = System.currentTimeMillis()
+
+                // Bước 2: Chuẩn bị payload PENDING và gửi Conditional PUT (OCC) với ETag bắt buộc
+                val mediaType = "application/json; charset=utf-8".toMediaType()
+                val cmdJson = JSONObject().apply {
+                    put("status", UsageTrackerService.LocationProtocol.STATUS_PENDING)
+                    put("requestedAt", now)
+                    put("requestedBy", "Phụ Huynh")
+                    put("message", "Phụ huynh đang yêu cầu định vị thiết bị.")
+                }
+                val body = cmdJson.toString().toRequestBody(mediaType)
+                val putReq = UsageTrackerService.LocationProtocol.buildConditionalPutRequest(cmdUrl, existingEtag, body)
+
+                val putResp = dedicatedClient.newCall(putReq).execute()
+                val putCode = putResp.code
+                val isSuccess = putResp.isSuccessful
+                putResp.close()
+
+                if (!isSuccess) {
+                    withContext(Dispatchers.Main) {
+                        if (putCode == 412) {
                             Toast.makeText(this@MainActivity, "Yêu cầu định vị xung đột, vui lòng thử lại.", Toast.LENGTH_SHORT).show()
-                            btnParentOpenMap.text = "📍 Yêu Cầu Con Bật GPS & Định Vị"
                         } else {
                             Toast.makeText(this@MainActivity, "Gửi yêu cầu thất bại! (Mã lỗi: $putCode)", Toast.LENGTH_SHORT).show()
-                            btnParentOpenMap.text = "📍 Yêu Cầu Con Bật GPS & Định Vị"
                         }
+                        btnParentRefreshLocation.text = "🔄 Cập Nhật Vị Trí"
                     }
+                    return@launch
+                }
+
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@MainActivity, "📡 Đã kết nối máy con! Đang chốt tọa độ thời gian thực...", Toast.LENGTH_SHORT).show()
+                    tvParentLocationAddress.text = "Máy con đang bật GPS và chốt vệ tinh..."
+                }
+
+                // Vòng lặp Polling thời gian thực: Lắng nghe kết quả từ Firebase mỗi 1.5 giây (tối đa 15 giây)
+                var isGotLocation = false
+                val pollStart = System.currentTimeMillis()
+                val locUrl = "${FIREBASE_RTDB_URL}/families/$familyCode/devices/$targetDeviceId/location.json"
+                val getLocReq = okhttp3.Request.Builder().url(locUrl).build()
+
+                while (System.currentTimeMillis() - pollStart < 16_000L) {
+                    delay(1500L)
+                    try {
+                        val locResp = dedicatedClient.newCall(getLocReq).execute()
+                        val locBody = locResp.body?.string()
+                        locResp.close()
+                        if (!locBody.isNullOrEmpty() && locBody != "null") {
+                            val locJson = JSONObject(locBody)
+                            val locTs = locJson.optLong("timestamp", 0L)
+                            val locLat = locJson.optDouble("latitude", 0.0)
+                            val locLng = locJson.optDouble("longitude", 0.0)
+                            val locAddr = locJson.optString("address", "")
+                            if (locTs >= now - 5000L && Math.abs(locLat) > 0.0001) {
+                                isGotLocation = true
+                                withContext(Dispatchers.Main) {
+                                    tvParentLocationAddress.text = if (locAddr.isNotEmpty()) locAddr else "Tọa độ: ${"%.4f".format(locLat)}, ${"%.4f".format(locLng)}"
+                                    tvParentLocationTime.text = "Vừa cập nhật 🔄"
+                                    btnParentRefreshLocation.text = "🔄 Cập Nhật Vị Trí"
+                                    btnParentOpenMap.text = "🗺️ Mở Bản Đồ"
+                                    Toast.makeText(this@MainActivity, "✅ Đã định vị chính xác vị trí của con trong thời gian thực!", Toast.LENGTH_LONG).show()
+                                }
+                                break
+                            }
+                        }
+                    } catch (e: Exception) {
+                        // Tiếp tục poll đợt kế
+                    }
+                }
+
+                withContext(Dispatchers.Main) {
+                    btnParentRefreshLocation.text = "🔄 Cập Nhật Vị Trí"
+                    btnParentOpenMap.text = "🗺️ Mở Bản Đồ"
+                    if (!isGotLocation) {
+                        Toast.makeText(this@MainActivity, "Đang chờ máy con bắt sóng vệ tinh, dữ liệu sẽ tự cập nhật khi chốt xong.", Toast.LENGTH_SHORT).show()
+                    }
+                    loadParentHubData(isBackgroundPoll = true)
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@MainActivity, "Lỗi mạng khi gửi yêu cầu GPS: ${e.message}", Toast.LENGTH_SHORT).show()
-                    btnParentOpenMap.text = "📍 Yêu Cầu Con Bật GPS & Định Vị"
+                    Toast.makeText(this@MainActivity, "Lỗi mạng khi định vị: ${e.message}", Toast.LENGTH_SHORT).show()
+                    btnParentRefreshLocation.text = "🔄 Cập Nhật Vị Trí"
+                    btnParentOpenMap.text = "🗺️ Mở Bản Đồ"
                 }
             }
         }
@@ -2630,7 +2680,7 @@ class MainActivity : AppCompatActivity() {
                                 val catLbl = appItem.optString("categoryLabel", "Ứng dụng")
                                 val durMin = appItem.optInt("durationMinutes", 1)
                                 val lastUsed = appItem.optLong("lastTimeUsed", 0L)
-                                val isThisAppOnline = activeIsFg && (pName == activePkg)
+                                val isThisAppOnline = isOnline && activeIsFg && (pName == activePkg) && (activePkg != "SCREEN_OFF")
 
                                 loadedApps.add(
                                     CompanionAppItem(

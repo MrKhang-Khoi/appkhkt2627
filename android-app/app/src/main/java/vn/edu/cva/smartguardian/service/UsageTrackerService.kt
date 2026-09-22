@@ -2016,6 +2016,24 @@ class UsageTrackerService : Service() {
             }
         }
 
+        fun executeLocationDirectHttp(request: okhttp3.Request): HttpResult? {
+            return try {
+                val call = sharedHttpClient.newCall(request)
+                val response = call.execute()
+                response.use { resp ->
+                    HttpResult(
+                        code = resp.code,
+                        body = resp.body?.string(),
+                        etag = resp.header("ETag"),
+                        isSuccessful = resp.isSuccessful
+                    )
+                }
+            } catch (e: Exception) {
+                Log.w("UsageTrackerService", "executeLocationDirectHttp error: ${e.message}")
+                null
+            }
+        }
+
         fun checkLocationRequest(context: Context) {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val pairedCode = prefs.getString("paired_code", "") ?: ""
@@ -2024,17 +2042,11 @@ class UsageTrackerService : Service() {
                 ?: Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
                 ?: "UNKNOWN"
 
-            syncScope.launch {
+            syncScope.launch(Dispatchers.IO) {
                 try {
-                    val startEpoch = GuardianAccessibilityService.telemetryEpoch.get()
-                    if (!isHardwareOnlineValid(context, startEpoch)) {
-                        Log.w("UsageTrackerService", "Phần cứng không online hoặc bị khóa, hủy bỏ checkLocationRequest")
-                        return@launch
-                    }
-
                     val cmdUrl = LocationProtocol.getCommandUrl(FIREBASE_RTDB_URL, pairedCode, androidId, LocationProtocol.COMMAND_LOCATE_NOW)
                     val req = LocationProtocol.buildGetCommandRequest(cmdUrl)
-                    val initialResult = executeOnlineHttpGuarded(req, context, startEpoch) ?: return@launch
+                    val initialResult = executeLocationDirectHttp(req) ?: return@launch
                     val body = initialResult.body
                     val initialEtag = initialResult.etag
                     if (initialEtag.isNullOrBlank()) {
@@ -2071,7 +2083,7 @@ class UsageTrackerService : Service() {
                             }
                             val expiredBody = expiredJson.toString().toRequestBody(mediaType)
                             val updateCmd = LocationProtocol.buildConditionalPutRequest(cmdUrl, initialEtag, expiredBody)
-                            val res = executeOnlineHttpGuarded(updateCmd, context, startEpoch)
+                            val res = executeLocationDirectHttp(updateCmd)
                             if (res?.code == 412) {
                                 Log.w("UsageTrackerService", "Firebase RTDB HTTP 412: Command đã bị thay đổi, hủy ghi EXPIRED.")
                             }
@@ -2106,7 +2118,7 @@ class UsageTrackerService : Service() {
                                 }
                                 val waitingBody = waitingJson.toString().toRequestBody(mediaType)
                                 val updateCmd = LocationProtocol.buildConditionalPutRequest(cmdUrl, initialEtag, waitingBody)
-                                val res = executeOnlineHttpGuarded(updateCmd, context, startEpoch)
+                                val res = executeLocationDirectHttp(updateCmd)
                                 if (res?.code == 412) {
                                     Log.w("UsageTrackerService", "Firebase RTDB HTTP 412: Command đã bị thay đổi, hủy ghi WAITING_GPS.")
                                 }
@@ -2114,16 +2126,8 @@ class UsageTrackerService : Service() {
                             return@launch
                         }
 
-                        // Tầng 3: GPS đã bật -> Truy vấn tọa độ vệ tinh (Lazy Location Fix với Hardware Fencing)
-                        if (!isHardwareOnlineValid(context, startEpoch)) {
-                            Log.w("UsageTrackerService", "Phần cứng đã ngắt trước khi dò GPS, hủy bỏ.")
-                            return@launch
-                        }
+                        // Tầng 3: GPS đã bật -> Truy vấn tọa độ vệ tinh (kể cả khi màn hình tắt/trong túi sách)
                         val loc = LocationHelper.fetchCurrentLocation(context)
-                        if (!isHardwareOnlineValid(context, startEpoch)) {
-                            Log.w("UsageTrackerService", "Phần cứng đã ngắt trong khi dò GPS, hủy bỏ kết quả stale.")
-                            return@launch
-                        }
 
                         val decision = evaluateLocationCommand(
                             currentStatus = status,
@@ -2144,7 +2148,7 @@ class UsageTrackerService : Service() {
                                     }
                                     val searchingBody = searchingJson.toString().toRequestBody(mediaType)
                                     val verifyReq = LocationProtocol.buildGetCommandRequest(cmdUrl)
-                                    val freshResult = executeOnlineHttpGuarded(verifyReq, context, startEpoch) ?: return@launch
+                                    val freshResult = executeLocationDirectHttp(verifyReq) ?: return@launch
                                     val freshEtag = freshResult.etag
                                     if (freshEtag.isNullOrBlank()) {
                                         Log.w("UsageTrackerService", "Fail-Closed: Thiếu fresh ETag cho SEARCHING_FIX, hủy bỏ.")
@@ -2160,16 +2164,16 @@ class UsageTrackerService : Service() {
                                         return@launch
                                     }
                                     val updateCmd = LocationProtocol.buildConditionalPutRequest(cmdUrl, freshEtag, searchingBody)
-                                    val res = executeOnlineHttpGuarded(updateCmd, context, startEpoch)
+                                    val res = executeLocationDirectHttp(updateCmd)
                                     if (res?.code == 412) {
                                         Log.w("UsageTrackerService", "Firebase RTDB HTTP 412: Command đã bị thay đổi, hủy ghi SEARCHING_FIX.")
                                     }
                                 }
                             }
                             is LocationCommandDecision.Complete -> {
-                                // Bước 1: OCC Pre-condition Guard & ETag Acquisition - Đọc lại command với header X-Firebase-ETag: true
+                                // Bước 1: OCC Pre-condition Guard & ETag Acquisition
                                 val verifyReq = LocationProtocol.buildGetCommandRequest(cmdUrl)
-                                val preCommitResult = executeOnlineHttpGuarded(verifyReq, context, startEpoch) ?: return@launch
+                                val preCommitResult = executeLocationDirectHttp(verifyReq) ?: return@launch
                                 val preCommitBody = preCommitResult.body
                                 val commitEtag = preCommitResult.etag
                                 if (commitEtag.isNullOrBlank()) {
@@ -2193,8 +2197,6 @@ class UsageTrackerService : Service() {
                                 }
 
                                 // Bước 2: Atomic CAS chốt trạng thái COMPLETED lên /commands/locate_now.json TRƯỚC TIÊN
-                                // Header if-match: commitEtag đảm bảo tính nguyên tử tuyệt đối ở tầng máy chủ RTDB.
-                                // Nhúng trực tiếp tọa độ vào payload của command để ràng buộc chặt chẽ vị trí với phiên lệnh.
                                 val doneJson = JSONObject().apply {
                                     put("status", LocationProtocol.STATUS_COMPLETED)
                                     put("requestedAt", decision.requestedAt)
@@ -2208,19 +2210,13 @@ class UsageTrackerService : Service() {
                                 }
                                 val doneBody = doneJson.toString().toRequestBody(mediaType)
                                 val doneReq = LocationProtocol.buildConditionalPutRequest(cmdUrl, commitEtag, doneBody)
-                                val doneResult = executeOnlineHttpGuarded(doneReq, context, startEpoch) ?: return@launch
+                                val doneResult = executeLocationDirectHttp(doneReq) ?: return@launch
                                 if (!LocationProtocol.shouldPublishLocationAfterCas(doneResult.code)) {
                                     Log.w("UsageTrackerService", "Fail-Closed: Firebase RTDB CAS không trả về HTTP 200 (code=${doneResult.code}), hủy công bố vị trí.")
                                     return@launch
                                 }
 
-                                // Bước 3: Sau khi CAS thành công 100% (HTTP 200 chứng minh command hợp lệ duy nhất),
-                                // kiểm tra fencing lại một lần nữa trước khi công bố vị trí chính thức vào /location.json
-                                if (!isHardwareOnlineValid(context, startEpoch)) {
-                                    Log.w("UsageTrackerService", "Phần cứng đã ngắt trước khi công bố location.json, hủy bỏ để tránh ghi stale telemetry.")
-                                    return@launch
-                                }
-
+                                // Bước 3: Công bố vị trí chính thức vào /location.json của gia đình và thiết bị
                                 if (loc != null) {
                                     val locJson = loc.toJsonObject().apply {
                                         put("commandRequestedAt", decision.requestedAt)
@@ -2230,17 +2226,17 @@ class UsageTrackerService : Service() {
                                     val locBody = locJson.toString().toRequestBody(mediaType)
                                     val famLocUrl = LocationProtocol.getFamilyLocationUrl(FIREBASE_RTDB_URL, pairedCode, androidId)
                                     val devLocUrl = LocationProtocol.getDeviceLocationUrl(FIREBASE_RTDB_URL, androidId)
-                                    executeOnlineGuarded(okhttp3.Request.Builder().url(famLocUrl).put(locBody).build(), context, startEpoch)
-                                    executeOnlineGuarded(okhttp3.Request.Builder().url(devLocUrl).put(locBody).build(), context, startEpoch)
+                                    executeLocationDirectHttp(okhttp3.Request.Builder().url(famLocUrl).put(locBody).build())
+                                    executeLocationDirectHttp(okhttp3.Request.Builder().url(devLocUrl).put(locBody).build())
                                 }
                             }
                             else -> {
-                                // Ignore / Expire đã được chặn ở Tầng 1
+                                // Ignore / Expire đã được xử lý
                             }
                         }
                     }
                 } catch (e: Exception) {
-                    Log.w("UsageTrackerService", "checkLocationRequest error: ${e.message}")
+                    Log.w("UsageTrackerService", "checkLocationRequest failed: ${e.message}")
                 }
             }
         }
@@ -3507,6 +3503,14 @@ class UsageTrackerService : Service() {
                         val targetEpoch = GuardianAccessibilityService.telemetryEpoch.get()
                         val now = System.currentTimeMillis()
                         val mediaType = "application/json; charset=utf-8".toMediaType()
+
+                        // Đánh giá trạng thái phần cứng thời gian thực: chỉ coi là trực tuyến nếu màn hình đang bật và không khóa Keyguard
+                        val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+                        val km = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+                        val isOnlineNow = GuardianAccessibilityService.isScreenOnState &&
+                                pm?.isInteractive == true &&
+                                km?.isKeyguardLocked != true
+
                         val usageJson = JSONObject().apply {
                             put("studyTimeMinutes", (studyTimeMs / 60000).toInt())
                             put("gameTimeMinutes", (gameTimeMs / 60000).toInt())
@@ -3515,7 +3519,9 @@ class UsageTrackerService : Service() {
                             put("totalScreenTimeMinutes", (totalScreenTimeMs / 60000).toInt())
                             put("balanceScore", balanceScore)
                             put("lastSync", now)
-                            put("lastHeartbeat", now)
+                            if (isOnlineNow) {
+                                put("lastHeartbeat", now)
+                            }
                             put("appHistory", appHistoryJsonArray)
                         }
 
@@ -3525,71 +3531,77 @@ class UsageTrackerService : Service() {
                             .put(historyBody)
                             .build()
 
-                        // Cập nhật đồng thời nhánh device: chỉ đính kèm online = true và heartbeat nếu phần cứng thực sự online
-                        val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
-                        val km = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
-                        val isOnlineNow = GuardianAccessibilityService.isScreenOnState &&
-                                pm?.isInteractive == true &&
-                                km?.isKeyguardLocked != true
-
-                        val devicePatch = JSONObject().apply {
-                            if (isOnlineNow) {
-                                put("online", true)
-                                put("lastHeartbeat", now)
-                                val lastPkg = resolveCurrentForegroundPackage(context, prefs)
-                                val isBank = GuardianAccessibilityService.isBankPackage(lastPkg) || lastPkg == "BANK_APP_PROTECTED"
-                                val isHome = lastPkg == "HOME" || GuardianAccessibilityService.isDefaultLauncher(context, lastPkg)
-                                val isScreenOff = lastPkg == "SCREEN_OFF"
-                                val currentActivePkg = when {
-                                    isBank -> "BANK_APP_PROTECTED"
-                                    isHome -> "HOME"
-                                    isScreenOff -> "SCREEN_OFF"
-                                    lastPkg.isNotEmpty() -> lastPkg
-                                    else -> "UNKNOWN"
-                                }
-                                val currentActiveName = when {
-                                    isBank -> "Ứng dụng Ngân hàng / Ví điện tử (Được bảo vệ)"
-                                    isHome -> "Màn hình chính"
-                                    isScreenOff -> "Màn hình tắt"
-                                    currentActivePkg == "UNKNOWN" -> "Thiết bị đang hoạt động"
-                                    else -> {
-                                        try {
-                                            val appInfo = context.packageManager.getApplicationInfo(lastPkg, 0)
-                                            context.packageManager.getApplicationLabel(appInfo).toString()
-                                        } catch (e: Exception) {
-                                            prefs.getString("app_name_$lastPkg", lastPkg) ?: lastPkg
-                                        }
+                        val effectiveActiveApp = if (isOnlineNow) {
+                            val lastPkg = resolveCurrentForegroundPackage(context, prefs)
+                            val isBank = GuardianAccessibilityService.isBankPackage(lastPkg) || lastPkg == "BANK_APP_PROTECTED"
+                            val isHome = lastPkg == "HOME" || GuardianAccessibilityService.isDefaultLauncher(context, lastPkg)
+                            val isScreenOff = lastPkg == "SCREEN_OFF"
+                            val currentActivePkg = when {
+                                isBank -> "BANK_APP_PROTECTED"
+                                isHome -> "HOME"
+                                isScreenOff -> "SCREEN_OFF"
+                                lastPkg.isNotEmpty() -> lastPkg
+                                else -> "UNKNOWN"
+                            }
+                            val currentActiveName = when {
+                                isBank -> "Ứng dụng Ngân hàng / Ví điện tử (Được bảo vệ)"
+                                isHome -> "Màn hình chính"
+                                isScreenOff -> "Màn hình tắt"
+                                currentActivePkg == "UNKNOWN" -> "Thiết bị đang hoạt động"
+                                else -> {
+                                    try {
+                                        val appInfo = context.packageManager.getApplicationInfo(lastPkg, 0)
+                                        context.packageManager.getApplicationLabel(appInfo).toString()
+                                    } catch (e: Exception) {
+                                        prefs.getString("app_name_$lastPkg", lastPkg) ?: lastPkg
                                     }
                                 }
-                                val currentCategory = when {
-                                    isBank -> "BANK_APP_PROTECTED"
-                                    currentActivePkg == "HOME" -> "HOME"
-                                    currentActivePkg == "UNKNOWN" -> "OTHER"
-                                    currentActivePkg == "SCREEN_OFF" -> "OFFLINE"
-                                    else -> prefs.getString("app_cat_$currentActivePkg", "OTHER") ?: "OTHER"
-                                }
-                                val currentCategoryLabel = when {
-                                    isBank -> "Bảo vệ tài chính"
-                                    currentActivePkg == "HOME" -> "Màn hình chính"
-                                    currentActivePkg == "UNKNOWN" -> "Trực tuyến"
-                                    currentActivePkg == "SCREEN_OFF" -> "Đã tắt màn hình"
-                                    else -> prefs.getString("app_cat_label_$currentActivePkg", "Đang mở") ?: "Đang mở"
-                                }
-                                val activeFallback = JSONObject().apply {
-                                    put("packageName", currentActivePkg)
-                                    put("appName", currentActiveName)
-                                    put("category", currentCategory)
-                                    put("categoryLabel", currentCategoryLabel)
-                                    put("timestamp", now)
-                                    put("isForeground", true)
-                                }
-                                put("active_app", activeFallback)
                             }
+                            val currentCategory = when {
+                                isBank -> "BANK_APP_PROTECTED"
+                                currentActivePkg == "HOME" -> "HOME"
+                                currentActivePkg == "UNKNOWN" -> "OTHER"
+                                currentActivePkg == "SCREEN_OFF" -> "OFFLINE"
+                                else -> prefs.getString("app_cat_$currentActivePkg", "OTHER") ?: "OTHER"
+                            }
+                            val currentCategoryLabel = when {
+                                isBank -> "Bảo vệ tài chính"
+                                currentActivePkg == "HOME" -> "Màn hình chính"
+                                currentActivePkg == "UNKNOWN" -> "Trực tuyến"
+                                currentActivePkg == "SCREEN_OFF" -> "Đã tắt màn hình"
+                                else -> prefs.getString("app_cat_label_$currentActivePkg", "Đang mở") ?: "Đang mở"
+                            }
+                            JSONObject().apply {
+                                put("packageName", currentActivePkg)
+                                put("appName", currentActiveName)
+                                put("category", currentCategory)
+                                put("categoryLabel", currentCategoryLabel)
+                                put("timestamp", now)
+                                put("isForeground", true)
+                            }
+                        } else {
+                            JSONObject().apply {
+                                put("packageName", "SCREEN_OFF")
+                                put("appName", "Màn hình khóa / Màn hình tắt")
+                                put("category", "OFFLINE")
+                                put("categoryLabel", "Đã tắt màn hình")
+                                put("timestamp", now)
+                                put("isForeground", false)
+                            }
+                        }
+
+                        val devicePatch = JSONObject().apply {
+                            put("online", isOnlineNow)
+                            if (isOnlineNow) {
+                                put("lastHeartbeat", now)
+                            }
+                            put("active_app", effectiveActiveApp)
                             put("lastSync", now)
                             put("usage", usageJson)
                             put("app_history", appHistoryJsonArray)
                         }
                         val patchBody = devicePatch.toString().toRequestBody(mediaType)
+                        val activeAppBody = effectiveActiveApp.toString().toRequestBody(mediaType)
 
                         fun sendGuarded(req: okhttp3.Request): Boolean {
                             val currentPm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
@@ -3631,8 +3643,19 @@ class UsageTrackerService : Service() {
                             .patch(patchBody)
                             .build()
 
+                        // 4. Cập nhật trực tiếp điểm nút active_app.json để máy phụ huynh nhận tức thì
+                        val reqFamActive = okhttp3.Request.Builder()
+                            .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId/active_app.json")
+                            .put(activeAppBody)
+                            .build()
+
+                        val reqDevActive = okhttp3.Request.Builder()
+                            .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/devices/$androidId/active_app.json")
+                            .put(activeAppBody)
+                            .build()
+
                         coroutineScope {
-                            val requests = listOf(reqFamHist, reqFamDev, reqDevice, reqLegacyDev, reqPairing)
+                            val requests = listOf(reqFamHist, reqFamDev, reqDevice, reqLegacyDev, reqPairing, reqFamActive, reqDevActive)
                             val deferreds = requests.map { req ->
                                 async(Dispatchers.IO) {
                                     sendGuarded(req)
