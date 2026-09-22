@@ -2774,11 +2774,16 @@ class MainActivity : AppCompatActivity() {
                 // Tải dữ liệu ngay lập tức khi mở dialog (Zero initial delay)
                 loadCompanionData()
                 while (isActive) {
-                    delay(60_000L)
+                    // BUG-FIX: Giảm chu kỳ polling từ 60s → 3s để nhận diện ứng dụng tiền cảnh theo thời gian thực.
+                    // Mỗi lần polling chỉ gọi 1 endpoint Firebase (~1KB) → chi phí mạng tối thiểu.
+                    // Khi học sinh chuyển từ TikTok → Facebook, phụ huynh thấy cập nhật trong vòng ≤3 giây,
+                    // thay vì phải đóng và mở lại dialog như trước.
+                    delay(3_000L)
                     if (!isActive) break
                     loadCompanionData()
                 }
             }
+
 
             updateTabs("SOCIAL")
         }

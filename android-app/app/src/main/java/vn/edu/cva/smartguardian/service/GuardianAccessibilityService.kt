@@ -705,10 +705,34 @@ class GuardianAccessibilityService : AccessibilityService() {
                 conflictingWindowPkg = rootPkg
             }
 
-            // Quét TOÀN BỘ danh sách windows tương tác (TYPE_APPLICATION và isActive || isFocused)
-            val appWindows = windows?.filter { win ->
-                win.type == AccessibilityWindowInfo.TYPE_APPLICATION && (win.isActive || win.isFocused)
+            // BUG-FIX: Floating Window / Bubble / PiP False Detection Guard
+            // Cửa sổ nổi (Facebook Messenger bubble, Zalo bubble, YouTube PiP, Assistive Touch...)
+            // được Android xếp loại TYPE_APPLICATION với isActive=true dù không chiếm màn hình chính.
+            // Đặc trưng phân biệt: kích thước cửa sổ overlay thường < 60% chiều cao màn hình.
+            // Giải pháp: Ưu tiên cửa sổ isFocused, loại trừ cửa sổ isActive-only có kích thước nhỏ.
+            val screenHeightPx = resources.displayMetrics.heightPixels
+            val floatingWindowHeightThreshold = (screenHeightPx * 0.60).toInt()
+
+            // Hàm kiểm tra cửa sổ có phải overlay/bubble không dựa trên kích thước thực
+            fun isFloatingOverlay(win: AccessibilityWindowInfo): Boolean {
+                return try {
+                    val bounds = android.graphics.Rect()
+                    win.getBoundsInScreen(bounds)
+                    // Cửa sổ có chiều cao < 60% màn hình VÀ không có focus → khả năng cao là bubble/overlay
+                    val isSmallWindow = bounds.height() in 1 until floatingWindowHeightThreshold
+                    isSmallWindow && !win.isFocused
+                } catch (e: Exception) { false }
             }
+
+            // Quét TOÀN BỘ danh sách windows tương tác (TYPE_APPLICATION và isActive || isFocused)
+            // Ưu tiên 1: Cửa sổ có isFocused = true (chắc chắn là foreground chính)
+            // Ưu tiên 2: Cửa sổ isActive=true nhưng KHÔNG phải floating overlay/bubble
+            val appWindows = windows?.filter { win ->
+                win.type == AccessibilityWindowInfo.TYPE_APPLICATION &&
+                    (win.isActive || win.isFocused) &&
+                    !isFloatingOverlay(win)
+            }
+
 
             val matchingWindow = appWindows?.firstOrNull { win ->
                 val winPkg = win.root?.packageName?.toString()?.trim()
