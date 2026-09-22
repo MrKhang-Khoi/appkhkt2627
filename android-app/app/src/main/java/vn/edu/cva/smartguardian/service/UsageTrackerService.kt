@@ -37,7 +37,9 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.util.Calendar
+import com.google.android.gms.location.LocationCallback
 import vn.edu.cva.smartguardian.location.LocationHelper
+import vn.edu.cva.smartguardian.location.GuardianLocation
 
 class UsageTrackerService : Service() {
 
@@ -2241,6 +2243,62 @@ class UsageTrackerService : Service() {
             }
         }
 
+        internal val lastMovementPublishedLocation = java.util.concurrent.atomic.AtomicReference<android.location.Location?>(null)
+
+        fun handleMovementLocationDisplacement(context: Context, newLoc: android.location.Location) {
+            val prev = lastMovementPublishedLocation.get()
+            val displacement = if (prev != null) {
+                LocationHelper.calculateDistanceMeters(prev.latitude, prev.longitude, newLoc.latitude, newLoc.longitude)
+            } else {
+                0f
+            }
+            if (prev != null && displacement < LocationHelper.DEFAULT_MOVEMENT_DISPLACEMENT_METERS) {
+                return
+            }
+            lastMovementPublishedLocation.set(newLoc)
+
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val pairedCode = prefs.getString("paired_code", "") ?: ""
+            if (pairedCode.isEmpty()) return
+            val androidId = prefs.getString("device_id", "")?.takeIf { it.isNotEmpty() }
+                ?: Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+                ?: "UNKNOWN"
+
+            syncScope.launch(Dispatchers.IO) {
+                try {
+                    val addressText = LocationHelper.reverseGeocode(context, newLoc.latitude, newLoc.longitude)
+                    val battery = LocationHelper.getBatteryLevel(context)
+                    val guardianLoc = GuardianLocation(
+                        latitude = newLoc.latitude,
+                        longitude = newLoc.longitude,
+                        accuracy = newLoc.accuracy,
+                        altitude = newLoc.altitude,
+                        speed = newLoc.speed,
+                        timestamp = if (newLoc.time > 0) newLoc.time else System.currentTimeMillis(),
+                        provider = newLoc.provider ?: "fused_movement",
+                        batteryLevel = battery,
+                        address = addressText,
+                        status = "SUCCESS"
+                    )
+
+                    val mediaType = "application/json; charset=utf-8".toMediaType()
+                    val locJson = guardianLoc.toJsonObject().apply {
+                        put("isMovementUpdate", true)
+                        put("displacementMeters", displacement.toDouble())
+                        put("updatedAt", System.currentTimeMillis())
+                    }
+                    val locBody = locJson.toString().toRequestBody(mediaType)
+                    val famLocUrl = LocationProtocol.getFamilyLocationUrl(FIREBASE_RTDB_URL, pairedCode, androidId)
+                    val devLocUrl = LocationProtocol.getDeviceLocationUrl(FIREBASE_RTDB_URL, androidId)
+                    executeLocationDirectHttp(okhttp3.Request.Builder().url(famLocUrl).put(locBody).build())
+                    executeLocationDirectHttp(okhttp3.Request.Builder().url(devLocUrl).put(locBody).build())
+                    Log.i("UsageTrackerService", "Life360 Invariant: Da tu dong cap nhat vi tri moi (>30m) len Firebase")
+                } catch (e: Exception) {
+                    Log.w("UsageTrackerService", "handleMovementLocationDisplacement error: ${e.message}")
+                }
+            }
+        }
+
         fun syncWebRules(context: Context) {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val pairedCode = prefs.getString("paired_code", "") ?: ""
@@ -3767,6 +3825,26 @@ class UsageTrackerService : Service() {
         }
     }
 
+    private var movementLocationCallback: LocationCallback? = null
+
+    private fun startMovementLocationTracking() {
+        if (movementLocationCallback != null) return
+        if (!LocationHelper.hasLocationPermission(this)) return
+        movementLocationCallback = LocationHelper.startContinuousMovementListener(
+            this,
+            LocationHelper.DEFAULT_MOVEMENT_DISPLACEMENT_METERS
+        ) { newLoc ->
+            handleMovementLocationDisplacement(this, newLoc)
+        }
+    }
+
+    private fun stopMovementLocationTracking() {
+        movementLocationCallback?.let { cb ->
+            LocationHelper.stopContinuousMovementListener(this, cb)
+            movementLocationCallback = null
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         restorePersistedSessionTokens(this)
@@ -3781,6 +3859,7 @@ class UsageTrackerService : Service() {
         }
         registerReceiver(screenStateReceiver, screenFilter)
 
+        startMovementLocationTracking()
         startTrackingLoop()
     }
 
@@ -3800,6 +3879,7 @@ class UsageTrackerService : Service() {
         closePolledSession(applicationContext, "SERVICE_DESTROYED")
         cancelActiveOnlineCalls()
         sendUrgentOfflineStatus(applicationContext, GuardianAccessibilityService.telemetryEpoch.incrementAndGet())
+        stopMovementLocationTracking()
         serviceJob.cancel()
         super.onDestroy()
     }
@@ -3923,6 +4003,11 @@ class UsageTrackerService : Service() {
 
                 // 2. Kiểm tra lệnh định vị tức thì từ phụ huynh
                 checkLocationRequest(this@UsageTrackerService)
+
+                // 2b. Kế thừa Life360: Đảm bảo lắng nghe di chuyển ngầm (>30m) luôn hoạt động
+                if (movementLocationCallback == null && LocationHelper.hasLocationPermission(this@UsageTrackerService)) {
+                    startMovementLocationTracking()
+                }
 
                 // 3. Đồng bộ quy tắc lọc web (blacklist/whitelist/study_mode) từ phụ huynh
                 syncWebRules(this@UsageTrackerService)

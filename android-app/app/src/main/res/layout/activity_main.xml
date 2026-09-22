@@ -573,41 +573,25 @@
                         android:gravity="center_vertical"
                         android:layout_marginBottom="14dp">
 
-                        <LinearLayout
+                        <TextView
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:orientation="vertical">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Bảng Quản Lý"
-                                android:textColor="#F8FAFC"
-                                android:textSize="18sp"
-                                android:textStyle="bold" />
-
-                            <TextView
-                                android:id="@+id/tvParentVersionSubtitle"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Phiên bản cài đặt: v1.4.1"
-                                android:textColor="#38BDF8"
-                                android:textSize="11sp"
-                                android:textStyle="bold"
-                                android:layout_marginTop="2dp" />
-                        </LinearLayout>
+                            android:text="Bảng Quản Lý"
+                            android:textColor="#F8FAFC"
+                            android:textSize="17sp"
+                            android:textStyle="bold" />
 
                         <!-- CHIP MÃ GIA ĐÌNH -->
                         <LinearLayout
                             android:id="@+id/btnParentCopyCode"
                             android:layout_width="wrap_content"
-                            android:layout_height="48dp"
+                            android:layout_height="36dp"
                             android:background="@drawable/bg_score_pill"
                             android:orientation="horizontal"
                             android:gravity="center_vertical"
-                            android:paddingLeft="10dp"
-                            android:paddingRight="10dp"
+                            android:paddingLeft="8dp"
+                            android:paddingRight="8dp"
                             android:clickable="true"
                             android:focusable="true">
 
@@ -624,22 +608,25 @@
                                 android:layout_height="wrap_content"
                                 android:text="CVA-A646"
                                 android:textColor="#FBBF24"
-                                android:textSize="12sp"
+                                android:textSize="11sp"
                                 android:textStyle="bold" />
 
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text=" 📋"
-                                android:textSize="10sp" />
+                                android:text="📋"
+                                android:textSize="10sp"
+                                android:layout_marginStart="4dp" />
 
                             <TextView
                                 android:id="@+id/btnParentRegenCode"
                                 android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:minHeight="48dp"
-                                android:text=" 🔄"
+                                android:layout_height="match_parent"
+                                android:gravity="center"
+                                android:text="🔄"
                                 android:textSize="10sp"
+                                android:paddingLeft="4dp"
+                                android:paddingRight="2dp"
                                 android:clickable="true"
                                 android:focusable="true" />
                         </LinearLayout>
@@ -861,9 +848,9 @@
                                 android:layout_weight="1"
                                 android:layout_marginEnd="6dp"
                                 android:background="@drawable/bg_btn_primary_modern"
-                                android:text="🔄 Cập Nhật Vị Trí"
+                                android:text="🔄 Vị Trí"
                                 android:textColor="#FFFFFF"
-                                android:textSize="12sp"
+                                android:textSize="13sp"
                                 android:textStyle="bold"
                                 android:gravity="center"
                                 android:clickable="true"
@@ -876,9 +863,9 @@
                                 android:layout_weight="1"
                                 android:layout_marginStart="6dp"
                                 android:background="@drawable/bg_btn_secondary_modern"
-                                android:text="🗺️ Mở Bản Đồ"
+                                android:text="🗺️ Bản Đồ"
                                 android:textColor="#38BDF8"
-                                android:textSize="12sp"
+                                android:textSize="13sp"
                                 android:textStyle="bold"
                                 android:gravity="center"
                                 android:clickable="true"

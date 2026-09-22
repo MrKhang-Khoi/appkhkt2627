@@ -1,22 +1,22 @@
 {
-  "versionCode": 41,
-  "versionName": "1.4.1",
-  "latestVersionCode": 41,
-  "latestVersionName": "1.4.1",
+  "versionCode": 42,
+  "versionName": "1.4.2",
+  "latestVersionCode": 42,
+  "latestVersionName": "1.4.2",
   "minSupportedVersion": 1,
   "isForceUpdate": false,
-  "fileSize": "5.89 MB",
-  "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.4.1.apk",
-  "apkFallbackUrl": "https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/CVA-SmartGuardian-v1.4.1.apk",
-  "sha256": "1C75A923ECC19B696EDC2CC24200DB8467F31883DC36E3421BB848426B85D6AC",
+  "fileSize": "5.90 MB",
+  "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.4.2.apk",
+  "apkFallbackUrl": "https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/CVA-SmartGuardian-v1.4.2.apk",
+  "sha256": "03B6AD6CF07DAD7F6285AEC82A33DD5F8957CD8886F8CFBFADBB2D60407E9401",
   "changelog": [
-    "Sửa triệt để lỗi hiển thị ứng dụng khi máy con đã tắt hoặc khóa màn hình — Tự động chuyển thẻ trạng thái sang 'Màn hình khóa / Màn hình tắt • ĐÃ KHÓA' và gán nhãn ĐÃ ĐÓNG cho toàn bộ ứng dụng.",
-    "Nâng cấp Định vị GPS thời gian thực: Thêm nút '🔄 Cập Nhật Vị Trí' chuyên dụng. Bố mẹ bấm nút là máy con lập tức chốt tọa độ vệ tinh và cập nhật ngay vị trí chính xác lên màn hình (kể cả khi máy con đang tắt màn hình trong cặp/túi quần).",
-    "Hiển thị Huy hiệu Phiên bản Trực quan: Tích hợp nhãn 'v1.4.1' trên thanh tiêu đề, màn hình nhập mã PIN và Bảng quản lý; bổ sung tính năng tự kiểm tra cập nhật hệ thống.",
-    "Bảo toàn 100% tính năng: Kế toán thời gian sử dụng chuẩn Google, lọc web độc hại, bảo vệ app ngân hàng, 142 bài kiểm thử phần cứng đạt chuẩn."
+    "Kế thừa chuẩn Google Maps & Zenly (Fresh GPS Invariant): Tọa độ vệ tinh chỉ dùng nếu trong vòng 30s; giữ active satellite lock tối đa 10s để chốt tọa độ thực tế của giây hiện tại, triệt tiêu hoàn toàn tọa độ cache cũ.",
+    "Kế thừa chuẩn Life360 (Movement-Triggered Updates): Thiết lập tiến trình lắng nghe di chuyển ngầm > 30m. Hễ con di chuyển ra khỏi vị trí cũ > 30m, máy con tự động chốt và đẩy GPS mới lên hệ thống, phụ huynh mở máy là thấy vị trí thời gian thực.",
+    "Tối ưu hóa Giao diện Bảng Quản Lý: Tinh gọn nút bấm thành '🔄 Vị Trí' và '🗺️ Bản Đồ' chống tràn chữ; loại bỏ dòng phiên bản trùng lặp; thu gọn chip mã gia đình trên một hàng không bị rớt icon.",
+    "Độ ổn định cao: Đạt 146/146 bài kiểm thử tự động phần cứng, bảo vệ 100% thời lượng pin và an toàn số."
   ],
-  "releaseNotes": "Bản cập nhật v1.4.1: Sửa lỗi hiển thị khi màn hình tắt/khóa máy, nâng cấp định vị GPS tức thời và hiển thị nhãn phiên bản v1.4.1 rõ ràng trên giao diện.",
-  "updatedAt": 1790063200000,
+  "releaseNotes": "Bản cập nhật v1.4.2: Tích hợp chuẩn định vị Zenly/Life360 theo dõi thời gian thực khi di chuyển >30m, chốt vệ tinh GPS tức thì trong 10s, và tinh gọn giao diện vị trí.",
+  "updatedAt": 1790067600000,
   "releaseDate": "2026-09-22",
-  "sizeBytes": 6179914
+  "sizeBytes": 6185396
 }

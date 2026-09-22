@@ -3,6 +3,9 @@ package vn.edu.cva.smartguardian.service
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.SharedPreferences
+import android.location.Location
+import vn.edu.cva.smartguardian.location.LocationHelper
+import vn.edu.cva.smartguardian.location.GuardianLocation
 import okhttp3.Call
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -6021,6 +6024,83 @@ class HardwareInvariantTest {
         )
         assertEquals("Ping when screen is off must be immediately rejected", 0L, UsageTrackerService.lastHeartbeatSentTimestamp.get())
         assertEquals("0 online calls must be enqueued when screen is off", 0, UsageTrackerService.activeOnlineCalls.size)
+    }
+
+    @Test
+    fun testFreshGpsInvariantAgeRule() {
+        val now = System.currentTimeMillis()
+
+        // Null location must never be fresh
+        assertFalse(LocationHelper.isLocationFresh(null, LocationHelper.MAX_FRESH_AGE_MS))
+
+        // Fresh fix from 5 seconds ago must be accepted
+        assertTrue(LocationHelper.isLocationTimeFresh(now - 5_000L, now, LocationHelper.MAX_FRESH_AGE_MS))
+
+        // Stale fix from 31 seconds ago must be strictly rejected
+        assertFalse(LocationHelper.isLocationTimeFresh(now - 31_000L, now, LocationHelper.MAX_FRESH_AGE_MS))
+
+        // Zero timestamp must be strictly rejected
+        assertFalse(LocationHelper.isLocationTimeFresh(0L, now, LocationHelper.MAX_FRESH_AGE_MS))
+
+        // Fix from future within 30s clock drift tolerance
+        assertTrue(LocationHelper.isLocationTimeFresh(now + 2_000L, now, LocationHelper.MAX_FRESH_AGE_MS))
+
+        // Fix from distant future > 30s must be rejected
+        assertFalse(LocationHelper.isLocationTimeFresh(now + 35_000L, now, LocationHelper.MAX_FRESH_AGE_MS))
+    }
+
+    @Test
+    fun testCalculateDistanceMetersAccuracy() {
+        // Distance between Hanoi Post Office (21.0285, 105.8542) and Hanoi Opera House (21.0245, 105.8575) is approx 560m
+        val dist = LocationHelper.calculateDistanceMeters(21.0285, 105.8542, 21.0245, 105.8575)
+        assertTrue("Distance should be approx 560m, got $dist", dist in 500f..650f)
+
+        // Same point must be 0 meters
+        val zeroDist = LocationHelper.calculateDistanceMeters(21.0285, 105.8542, 21.0285, 105.8542)
+        assertEquals(0f, zeroDist, 0.001f)
+    }
+
+    @Test
+    fun testMovementDisplacementThresholdConstants() {
+        assertEquals(30f, LocationHelper.DEFAULT_MOVEMENT_DISPLACEMENT_METERS, 0.001f)
+        assertEquals(30_000L, LocationHelper.MAX_FRESH_AGE_MS)
+        assertEquals(10_000L, LocationHelper.FRESH_FIX_TIMEOUT_MS)
+    }
+
+    @Test
+    fun testMovementLocationDisplacementTracking() {
+        UsageTrackerService.lastMovementPublishedLocation.set(null)
+        val initialLoc = Location("gps").apply {
+            latitude = 21.028511
+            longitude = 105.854211
+            time = System.currentTimeMillis()
+        }
+
+        val fakePrefs = FakeSharedPreferences(mutableMapOf("paired_code" to "TEST-CODE", "device_id" to "test_dev"))
+        val fakeCtx = FakeTestContext(fakePrefs)
+
+        // First displacement fix publishes
+        UsageTrackerService.handleMovementLocationDisplacement(fakeCtx, initialLoc)
+        assertNotNull(UsageTrackerService.lastMovementPublishedLocation.get())
+        assertEquals(initialLoc.latitude, UsageTrackerService.lastMovementPublishedLocation.get()?.latitude ?: 0.0, 0.0001)
+
+        // Micro-movement (< 30 meters) should NOT update lastMovementPublishedLocation
+        val tinyMoveLoc = Location("gps").apply {
+            latitude = 21.028540
+            longitude = 105.854211
+            time = System.currentTimeMillis()
+        }
+        UsageTrackerService.handleMovementLocationDisplacement(fakeCtx, tinyMoveLoc)
+        assertEquals(initialLoc.latitude, UsageTrackerService.lastMovementPublishedLocation.get()?.latitude ?: 0.0, 0.0001)
+
+        // Significant movement (> 30 meters) should update lastMovementPublishedLocation
+        val bigMoveLoc = Location("gps").apply {
+            latitude = 21.028960
+            longitude = 105.854211
+            time = System.currentTimeMillis()
+        }
+        UsageTrackerService.handleMovementLocationDisplacement(fakeCtx, bigMoveLoc)
+        assertEquals(bigMoveLoc.latitude, UsageTrackerService.lastMovementPublishedLocation.get()?.latitude ?: 0.0, 0.0001)
     }
 
     private class FakeTestContext(

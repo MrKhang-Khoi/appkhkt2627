@@ -553,7 +553,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var layoutParentAppsEmptyState: LinearLayout
     private var tvAppVersionBadge: TextView? = null
     private var tvPinGateVersion: TextView? = null
-    private var tvParentVersionSubtitle: TextView? = null
 
     // 4. Tab Học Sinh: Screen 3 (Student Card & Paired State)
     private lateinit var layoutStudentCard: LinearLayout
@@ -845,17 +844,12 @@ class MainActivity : AppCompatActivity() {
         // Version Badges & Dynamic Inspection
         tvAppVersionBadge = findViewById(R.id.tvAppVersionBadge)
         tvPinGateVersion = findViewById(R.id.tvPinGateVersion)
-        tvParentVersionSubtitle = findViewById(R.id.tvParentVersionSubtitle)
 
         val (currentVName, _) = AppUpdateManager.getCurrentVersion(this)
         tvAppVersionBadge?.text = "v$currentVName"
         tvPinGateVersion?.text = "Phiên Bản v$currentVName (Mới Nhất)"
-        tvParentVersionSubtitle?.text = "Phiên bản cài đặt: v$currentVName"
 
         tvAppVersionBadge?.setOnClickListener {
-            performUpdateCheck(userInitiated = true)
-        }
-        tvParentVersionSubtitle?.setOnClickListener {
             performUpdateCheck(userInitiated = true)
         }
     }
@@ -1590,7 +1584,7 @@ class MainActivity : AppCompatActivity() {
             val minDiff = if (timestamp > 0) maxOf(0L, (now - timestamp) / 60000L) else 999L
             val prefix = if (child.isOnline) "Cập nhật" else "[Snapshot Ngoại Tuyến]"
             tvParentLocationTime.text = if (minDiff < 2) (if (child.isOnline) "Vừa cập nhật 🔄" else "$prefix Vừa cập nhật 🔄") else "$prefix ${minDiff}m trước 🔄"
-            btnParentOpenMap.text = "🗺️ Xem Vị Trí Trên Bản Đồ"
+            btnParentOpenMap.text = "🗺️ Bản Đồ"
             btnParentOpenMap.setTextColor(Color.parseColor("#38BDF8"))
         } else {
             tvParentLocationAddress.text = "Chưa nhận được tọa độ GPS từ thiết bị của ${child.childName}"
@@ -1769,7 +1763,7 @@ class MainActivity : AppCompatActivity() {
                 if (existingEtag.isNullOrBlank()) {
                     withContext(Dispatchers.Main) {
                         Toast.makeText(this@MainActivity, "Máy chủ bận, vui lòng thử lại.", Toast.LENGTH_SHORT).show()
-                        btnParentRefreshLocation.text = "🔄 Cập Nhật Vị Trí"
+                        btnParentRefreshLocation.text = "🔄 Vị Trí"
                     }
                     return@launch
                 }
@@ -1799,7 +1793,7 @@ class MainActivity : AppCompatActivity() {
                         } else {
                             Toast.makeText(this@MainActivity, "Gửi yêu cầu thất bại! (Mã lỗi: $putCode)", Toast.LENGTH_SHORT).show()
                         }
-                        btnParentRefreshLocation.text = "🔄 Cập Nhật Vị Trí"
+                        btnParentRefreshLocation.text = "🔄 Vị Trí"
                     }
                     return@launch
                 }
@@ -1832,8 +1826,8 @@ class MainActivity : AppCompatActivity() {
                                 withContext(Dispatchers.Main) {
                                     tvParentLocationAddress.text = if (locAddr.isNotEmpty()) locAddr else "Tọa độ: ${"%.4f".format(locLat)}, ${"%.4f".format(locLng)}"
                                     tvParentLocationTime.text = "Vừa cập nhật 🔄"
-                                    btnParentRefreshLocation.text = "🔄 Cập Nhật Vị Trí"
-                                    btnParentOpenMap.text = "🗺️ Mở Bản Đồ"
+                                    btnParentRefreshLocation.text = "🔄 Vị Trí"
+                                    btnParentOpenMap.text = "🗺️ Bản Đồ"
                                     Toast.makeText(this@MainActivity, "✅ Đã định vị chính xác vị trí của con trong thời gian thực!", Toast.LENGTH_LONG).show()
                                 }
                                 break
@@ -1845,8 +1839,8 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 withContext(Dispatchers.Main) {
-                    btnParentRefreshLocation.text = "🔄 Cập Nhật Vị Trí"
-                    btnParentOpenMap.text = "🗺️ Mở Bản Đồ"
+                    btnParentRefreshLocation.text = "🔄 Vị Trí"
+                    btnParentOpenMap.text = "🗺️ Bản Đồ"
                     if (!isGotLocation) {
                         Toast.makeText(this@MainActivity, "Đang chờ máy con bắt sóng vệ tinh, dữ liệu sẽ tự cập nhật khi chốt xong.", Toast.LENGTH_SHORT).show()
                     }
@@ -1855,8 +1849,8 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
                     Toast.makeText(this@MainActivity, "Lỗi mạng khi định vị: ${e.message}", Toast.LENGTH_SHORT).show()
-                    btnParentRefreshLocation.text = "🔄 Cập Nhật Vị Trí"
-                    btnParentOpenMap.text = "🗺️ Mở Bản Đồ"
+                    btnParentRefreshLocation.text = "🔄 Vị Trí"
+                    btnParentOpenMap.text = "🗺️ Bản Đồ"
                 }
             }
         }
