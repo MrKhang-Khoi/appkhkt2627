@@ -8,12 +8,14 @@ import android.content.Intent
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import vn.edu.cva.smartguardian.ui.MainActivity
 
 class SafeVpnFilterService : VpnService() {
 
     private var vpnInterface: ParcelFileDescriptor? = null
+    private var drainThread: Thread? = null
 
     companion object {
         const val VPN_CHANNEL_ID = "cva_smart_guardian_vpn"
@@ -79,6 +81,7 @@ class SafeVpnFilterService : VpnService() {
 
     private fun startVpn() {
         try {
+            stopDrainThread()
             vpnInterface?.close()
 
             val builder = Builder()
@@ -89,23 +92,54 @@ class SafeVpnFilterService : VpnService() {
                 .setBlocking(false)
 
             vpnInterface = builder.establish()
+
+            // Drain TUN fd to prevent packet buffer overflow
+            vpnInterface?.let { pfd ->
+                drainThread = Thread {
+                    val buffer = ByteArray(32767)
+                    val inputStream = java.io.FileInputStream(pfd.fileDescriptor)
+                    try {
+                        while (!Thread.currentThread().isInterrupted) {
+                            val length = inputStream.read(buffer)
+                            if (length <= 0) break
+                            // DNS queries are handled at system level by Cloudflare Family;
+                            // packets arriving here are safely discarded.
+                        }
+                    } catch (_: java.io.IOException) {
+                        // VPN interface closed or thread interrupted — expected on shutdown
+                    } catch (e: Exception) {
+                        Log.w("SafeVpnFilter", "VPN drain thread error: ${e.message}")
+                    }
+                }.apply {
+                    isDaemon = true
+                    name = "CVA-VPN-Drain"
+                    start()
+                }
+            }
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.w("SafeVpnFilter", "Failed to start VPN: ${e.message}")
         }
+    }
+
+    private fun stopDrainThread() {
+        drainThread?.interrupt()
+        drainThread = null
     }
 
     private fun stopVpn() {
         try {
+            stopDrainThread()
             vpnInterface?.close()
             vpnInterface = null
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.w("SafeVpnFilter", "Failed to stop VPN: ${e.message}")
         }
     }
 
     override fun onDestroy() {
+        stopDrainThread()
         stopVpn()
         super.onDestroy()
     }

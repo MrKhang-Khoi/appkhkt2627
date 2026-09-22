@@ -2298,7 +2298,9 @@ class MainActivity : AppCompatActivity() {
             val bottomSheet = sheetDialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
             val density = resources.displayMetrics.density
             val screenWidth = resources.displayMetrics.widthPixels
+            val screenHeight = resources.displayMetrics.heightPixels
             val maxSheetWidth = computeAdaptiveSheetWidth(screenWidth, density, maxWidthDp = 640)
+            val maxSheetHeight = (screenHeight * 0.85).toInt()
 
             bottomSheet?.let { sheet ->
                 val behavior = BottomSheetBehavior.from(sheet)
@@ -2313,6 +2315,7 @@ class MainActivity : AppCompatActivity() {
                     sheet.layoutParams = lp
                 }
                 behavior.maxWidth = maxSheetWidth
+                behavior.maxHeight = maxSheetHeight
                 behavior.state = BottomSheetBehavior.STATE_EXPANDED
                 behavior.skipCollapsed = true
                 sheet.setBackgroundResource(android.R.color.transparent)

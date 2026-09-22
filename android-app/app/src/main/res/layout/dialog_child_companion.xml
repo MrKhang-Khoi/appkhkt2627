@@ -6,12 +6,15 @@
     android:layout_height="wrap_content"
     android:background="@android:color/transparent">
 
-    <!-- ADAPTIVE M3 RESPONSIVE CARD CONTAINER: CĂN GIỮA VÀ GIỚI HẠN MAXWIDTH <= 640DP TRÊN TABLET / FOLDABLE -->
+    <!-- ADAPTIVE M3 RESPONSIVE CARD CONTAINER: CĂN GIỮA VÀ GIỚI HẠN MAXWIDTH <= 640DP VÀ MAXHEIGHT <= 580DP CHỐNG OVERFLOW TRÊN TABLET / MÀN HÌNH NHỎ -->
     <LinearLayout
         android:id="@+id/layoutDialogMainCard"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         app:layout_constraintWidth_max="640dp"
+        app:layout_constraintHeight_max="580dp"
+        app:layout_constrainedHeight="true"
+        app:layout_constrainedWidth="true"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent"
@@ -114,10 +117,11 @@
     <androidx.core.widget.NestedScrollView
         android:id="@+id/layoutDialogScrollView"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="0dp"
+        android:layout_weight="1"
         android:layout_gravity="center_horizontal"
         android:fillViewport="true"
-        android:scrollbars="none"
+        android:scrollbars="vertical"
         android:layout_marginBottom="12dp">
 
         <LinearLayout
@@ -438,7 +442,7 @@
                 android:id="@+id/tabDialogSocial"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:minHeight="40dp"
+                android:minHeight="48dp"
                 android:layout_weight="1"
                 android:background="@drawable/bg_tab_active"
                 android:gravity="center"
@@ -462,7 +466,7 @@
                 android:id="@+id/tabDialogStudy"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:minHeight="40dp"
+                android:minHeight="48dp"
                 android:layout_weight="1"
                 android:background="@drawable/bg_tab_inactive"
                 android:gravity="center"
@@ -485,7 +489,7 @@
                 android:id="@+id/tabDialogGame"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:minHeight="40dp"
+                android:minHeight="48dp"
                 android:layout_weight="1"
                 android:background="@drawable/bg_tab_inactive"
                 android:gravity="center"
@@ -508,7 +512,7 @@
                 android:id="@+id/tabDialogAll"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:minHeight="40dp"
+                android:minHeight="48dp"
                 android:layout_weight="1"
                 android:background="@drawable/bg_tab_inactive"
                 android:gravity="center"
@@ -593,6 +597,7 @@
                         android:id="@+id/btnDialogViewAllApps"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
+                        android:minHeight="48dp"
                         android:background="@drawable/bg_tab_container"
                         android:paddingLeft="14dp"
                         android:paddingRight="14dp"

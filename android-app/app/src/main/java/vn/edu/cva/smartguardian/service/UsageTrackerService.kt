@@ -1,6 +1,5 @@
 package vn.edu.cva.smartguardian.service
 
-import android.app.ActivityManager
 import android.app.KeyguardManager
 import android.app.Notification
 import android.app.NotificationChannel
@@ -209,6 +208,11 @@ class UsageTrackerService : Service() {
 
     private val serviceJob = Job()
     private val serviceScope = CoroutineScope(Dispatchers.Default + serviceJob)
+
+    interface HardwareOnlineChecker {
+        fun isInteractive(context: Context): Boolean
+        fun isKeyguardLocked(context: Context): Boolean
+    }
 
     companion object {
         const val CHANNEL_ID = "cva_smart_guardian_tracker"
@@ -731,13 +735,19 @@ class UsageTrackerService : Service() {
                     put("categoryLabel", categoryLabel)
                     put("timestamp", timestamp)
                     put("isForeground", isForeground)
-                    if (telemetryEpoch != -1L) put("telemetryEpoch", telemetryEpoch)
+                    if (telemetryEpoch != -1L) {
+                        put("telemetryEpoch", telemetryEpoch)
+                        put("offlineEpoch", telemetryEpoch)
+                    }
                 }
                 return JSONObject().apply {
                     put("lastSync", lastSync)
                     put("online", online)
                     put("active_app", offActiveJson)
-                    if (telemetryEpoch != -1L) put("telemetryEpoch", telemetryEpoch)
+                    if (telemetryEpoch != -1L) {
+                        put("telemetryEpoch", telemetryEpoch)
+                        put("offlineEpoch", telemetryEpoch)
+                    }
                 }
             }
         }
@@ -811,10 +821,25 @@ class UsageTrackerService : Service() {
                 try {
                     call.cancel()
                 } catch (e: Exception) {
-                    Log.w("UsageTrackerService", "online call.cancel error: ${e.message}")
+                    Log.w("UsageTrackerService", "cancelActiveOnlineCalls item cancel error: ${e.message}")
                 }
             }
         }
+
+        internal object SystemHardwareOnlineChecker : HardwareOnlineChecker {
+            override fun isInteractive(context: Context): Boolean {
+                val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager ?: return false
+                return pm.isInteractive
+            }
+
+            override fun isKeyguardLocked(context: Context): Boolean {
+                val km = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager ?: return true
+                return km.isKeyguardLocked
+            }
+        }
+
+        @Volatile
+        internal var hardwareChecker: HardwareOnlineChecker = SystemHardwareOnlineChecker
 
         internal val currentOfflineGeneration = java.util.concurrent.atomic.AtomicLong(0)
         internal val lastDispatchedOfflineEpoch = java.util.concurrent.atomic.AtomicLong(-1L)
@@ -823,18 +848,8 @@ class UsageTrackerService : Service() {
             context: Context,
             expectedEpoch: Long = -1L
         ): Boolean {
-            val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
-            val km = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
-            val isInteractive = if (pm != null) {
-                pm.isInteractive
-            } else {
-                if (context.javaClass.simpleName.contains("Fake") || context.javaClass.simpleName.contains("Test")) {
-                    GuardianAccessibilityService.isScreenOnState
-                } else {
-                    false
-                }
-            }
-            val isLocked = km?.isKeyguardLocked ?: false
+            val isInteractive = hardwareChecker.isInteractive(context)
+            val isLocked = hardwareChecker.isKeyguardLocked(context)
             return GuardianAccessibilityService.isScreenOnState &&
                     isInteractive &&
                     !isLocked &&
@@ -846,16 +861,9 @@ class UsageTrackerService : Service() {
             expectedEpoch: Long = -1L,
             expectedGeneration: Long = -1L
         ): Boolean {
-            val isTest = context.javaClass.simpleName.contains("Fake") || context.javaClass.simpleName.contains("Test")
-            val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
-            val km = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
-            val isInteractive = if (pm != null) {
-                pm.isInteractive
-            } else {
-                if (isTest) !GuardianAccessibilityService.isScreenOnState else false
-            }
-            val isLocked = km?.isKeyguardLocked ?: false
-            val hardwareIsOffline = if (isTest) !GuardianAccessibilityService.isScreenOnState else (!GuardianAccessibilityService.isScreenOnState || !isInteractive || isLocked)
+            val isInteractive = hardwareChecker.isInteractive(context)
+            val isLocked = hardwareChecker.isKeyguardLocked(context)
+            val hardwareIsOffline = !GuardianAccessibilityService.isScreenOnState || !isInteractive || isLocked
             val epochMatches = (expectedEpoch == -1L || GuardianAccessibilityService.telemetryEpoch.get() == expectedEpoch)
             val genMatches = (expectedGeneration == -1L || currentOfflineGeneration.get() == expectedGeneration)
             return hardwareIsOffline && epochMatches && genMatches
@@ -1682,11 +1690,8 @@ class UsageTrackerService : Service() {
             expectedEpoch: Long = -1L,
             expectedGen: Long = -1L
         ) {
-            val isTest = context.javaClass.simpleName.contains("Fake") || context.javaClass.simpleName.contains("Test")
-            val powerManager = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
-            val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
-            val isScreenInteractive = powerManager?.isInteractive ?: (isTest && GuardianAccessibilityService.isScreenOnState)
-            val isLocked = keyguardManager?.isKeyguardLocked ?: false
+            val isScreenInteractive = hardwareChecker.isInteractive(context)
+            val isLocked = hardwareChecker.isKeyguardLocked(context)
 
             // Bất biến phần cứng: Màn hình tắt hoặc máy khóa -> TUYỆT ĐỐI không gửi heartbeat online
             if (!GuardianAccessibilityService.isScreenOnState || !isScreenInteractive || isLocked) {
@@ -1731,10 +1736,8 @@ class UsageTrackerService : Service() {
                 try {
                     val preparedData = telemetryMutex.withLock {
                         val lockNow = System.currentTimeMillis()
-                        val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
-                        val km = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
-                        val stillInteractive = pm?.isInteractive ?: (isTest && GuardianAccessibilityService.isScreenOnState)
-                        val stillLocked = km?.isKeyguardLocked ?: false
+                        val stillInteractive = hardwareChecker.isInteractive(context)
+                        val stillLocked = hardwareChecker.isKeyguardLocked(context)
                         val lockEpoch = GuardianAccessibilityService.telemetryEpoch.get()
                         val lockGen = foregroundGeneration.get()
 
@@ -1812,7 +1815,15 @@ class UsageTrackerService : Service() {
                                 put("categoryLabel", currentCategoryLabel)
                                 put("timestamp", lockNow)
                                 put("isForeground", true)
+                                put("telemetryEpoch", callEpoch)
+                                put("foregroundGeneration", callGen)
                             }
+
+                            val activeAppBody = activeFallback.toString().toRequestBody(mediaType)
+                            val reqCasActive = okhttp3.Request.Builder()
+                                .url("https://cva-smartguardian-default-rtdb.asia-southeast1.firebasedatabase.app/families/$pairedCode/devices/$androidId/active_app.json")
+                                .put(activeAppBody)
+                                .build()
 
                             val pingJson = JSONObject().apply {
                                 put("lastSync", lockNow)
@@ -1825,6 +1836,8 @@ class UsageTrackerService : Service() {
                                 put("appVersionCode", appVerCode)
                                 put("isPaired", true)
                                 put("status", "paired")
+                                put("telemetryEpoch", callEpoch)
+                                put("foregroundGeneration", callGen)
                                 put("active_app", activeFallback)
                             }
                             val body = pingJson.toString().toRequestBody(mediaType)
@@ -1849,17 +1862,27 @@ class UsageTrackerService : Service() {
                                 .patch(body)
                                 .build()
 
-                            Pair(lockNow, listOf(reqFamDev, reqDevice, reqLegacyDev, reqPairing))
+                            Triple(lockNow, reqCasActive, listOf(reqFamDev, reqDevice, reqLegacyDev, reqPairing))
                         } catch (e: Exception) {
                             Log.w("UsageTrackerService", "sendHeartbeatPing build payload failed: ${e.message}")
                             null
                         }
                     }
 
-                    // Thực thi network I/O BÊN NGOÀI telemetryMutex theo cơ chế song song async-awaitAll
+                    // Thực thi network I/O BÊN NGOÀI telemetryMutex
                     if (preparedData != null) {
-                        val (sentTimestamp, requests) = preparedData
-                        val deferreds = requests.map { req ->
+                        val (sentTimestamp, reqCasActive, patchRequests) = preparedData
+
+                        // Chốt chặn CAS Server-Side ETag: Gửi conditional PUT active_app trước
+                        // Nếu máy đã khóa/tắt màn hình, sendUrgentOfflineStatus đã ghi đè SCREEN_OFF
+                        // -> Server trả về 412 hoặc executeActiveAppGuardedLocked phát hiện trạng thái mới hơn và abort!
+                        val casActiveSuccess = executeOnlineGuarded(reqCasActive, context, callEpoch, callGen)
+                        if (!casActiveSuccess || !isHardwareOnlineValid(context, callEpoch)) {
+                            Log.w("UsageTrackerService", "Hủy bỏ sendHeartbeatPing root patches: CAS active_app write thất bại hoặc phần cứng không online")
+                            return@launch
+                        }
+
+                        val deferreds = patchRequests.map { req ->
                             async(Dispatchers.IO) {
                                 executeOnlineGuarded(req, context, callEpoch, callGen)
                             }
@@ -3200,39 +3223,30 @@ class UsageTrackerService : Service() {
             }
 
             // Fallback: Khi không có ACTIVITY_RESUMED trong 30s (người dùng giữ nguyên app),
-            // BẮT BUỘC kiểm tra RunningAppProcessInfo IMPORTANCE_FOREGROUND để tránh nhận nhầm stale package
+            // Sử dụng trực tiếp UsageStatsManager để truy vấn ứng dụng hoạt động gần nhất
             if (currentPkg.isNullOrEmpty()) {
-                val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-                val runningProcesses: List<ActivityManager.RunningAppProcessInfo>? = am?.runningAppProcesses
-                val targetProcess: ActivityManager.RunningAppProcessInfo? = runningProcesses?.firstOrNull { proc ->
-                    proc.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND &&
-                        proc.processName != "com.android.systemui" &&
-                        !proc.processName.contains("keyguard") &&
-                        !proc.processName.contains("inputmethod") &&
-                        !proc.processName.contains("keyboard")
-                }
-                val rawProcPkg = targetProcess?.pkgList?.firstOrNull() ?: targetProcess?.processName
-                val candProcessPkg: String? = if (rawProcPkg != null && rawProcPkg.contains(":")) {
-                    rawProcPkg.substringBefore(":")
-                } else {
-                    rawProcPkg
-                }
+                val stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, now - 60_000L, now)
+                val matchedStat = stats
+                    ?.filter {
+                        it.packageName != "com.android.systemui" &&
+                            !it.packageName.contains("keyguard") &&
+                            !it.packageName.contains("inputmethod") &&
+                            !it.packageName.contains("keyboard") &&
+                            (now - it.lastTimeUsed <= 60_000L)
+                    }
+                    ?.maxByOrNull { it.lastTimeUsed }
 
-                if (!candProcessPkg.isNullOrEmpty() && targetProcess != null) {
-                    val stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, now - 60_000L, now)
-                    val matchedStat = stats?.firstOrNull { it.packageName == candProcessPkg && (now - it.lastTimeUsed <= 60_000L) }
-                    if (matchedStat != null) {
-                        val isEvidenceValid = GuardianAccessibilityService.evaluateForegroundEvidence(
-                            activeRootPkg = null,
-                            usageStatsLastResumedPkg = matchedStat.packageName,
-                            targetPkg = matchedStat.packageName,
-                            now = now,
-                            lastEventTime = matchedStat.lastTimeUsed,
-                            maxEventAgeMs = 60_000L
-                        )
-                        if (isEvidenceValid) {
-                            currentPkg = matchedStat.packageName
-                        }
+                if (matchedStat != null) {
+                    val isEvidenceValid = GuardianAccessibilityService.evaluateForegroundEvidence(
+                        activeRootPkg = null,
+                        usageStatsLastResumedPkg = matchedStat.packageName,
+                        targetPkg = matchedStat.packageName,
+                        now = now,
+                        lastEventTime = matchedStat.lastTimeUsed,
+                        maxEventAgeMs = 60_000L
+                    )
+                    if (isEvidenceValid) {
+                        currentPkg = matchedStat.packageName
                     }
                 }
             }

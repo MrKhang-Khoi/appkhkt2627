@@ -1,7 +1,6 @@
 package vn.edu.cva.smartguardian.service
 
 import android.accessibilityservice.AccessibilityService
-import android.app.ActivityManager
 import android.app.KeyguardManager
 import android.content.Context
 import android.content.Intent
@@ -1208,17 +1207,20 @@ class GuardianAccessibilityService : AccessibilityService() {
     }
 
     private fun triggerBlockScreen(url: String, category: String, reason: String) {
-        // 1. Thoát khỏi trình duyệt bằng phím HOME để học sinh không xem được trang web
-        performGlobalAction(GLOBAL_ACTION_HOME)
-
-        // 2. Mở màn hình cảnh báo BlockedActivity đè lên
+        // 1. Mở màn hình cảnh báo BlockedActivity đè lên trước để tránh nhấp nháy home screen
         val intent = Intent(this, BlockedActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_CLEAR_TASK or
+                    Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
             putExtra(BlockedActivity.EXTRA_BLOCKED_URL, url)
             putExtra(BlockedActivity.EXTRA_CATEGORY, category)
             putExtra(BlockedActivity.EXTRA_REASON, reason)
         }
         startActivity(intent)
+
+        // 2. Thoát khỏi trình duyệt sau khi BlockedActivity đã hiển thị
+        performGlobalAction(GLOBAL_ACTION_HOME)
     }
 
     override fun onInterrupt() {

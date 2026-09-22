@@ -1,6 +1,5 @@
 package vn.edu.cva.smartguardian.service
 
-import android.app.ActivityManager
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.SharedPreferences
@@ -61,6 +60,10 @@ class HardwareInvariantTest {
         if (walFile.exists()) walFile.delete()
         val walTmp = java.io.File(tempDir, "${UsageTrackerService.PENDING_SESSIONS_WAL_FILE}.tmp")
         if (walTmp.exists()) walTmp.delete()
+        UsageTrackerService.hardwareChecker = object : UsageTrackerService.HardwareOnlineChecker {
+            override fun isInteractive(context: Context): Boolean = GuardianAccessibilityService.isScreenOnState
+            override fun isKeyguardLocked(context: Context): Boolean = !GuardianAccessibilityService.isScreenOnState
+        }
     }
 
     @Test

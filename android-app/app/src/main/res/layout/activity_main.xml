@@ -559,7 +559,7 @@
                         <LinearLayout
                             android:id="@+id/btnParentCopyCode"
                             android:layout_width="wrap_content"
-                            android:layout_height="32dp"
+                            android:layout_height="48dp"
                             android:background="@drawable/bg_score_pill"
                             android:orientation="horizontal"
                             android:gravity="center_vertical"
@@ -594,6 +594,7 @@
                                 android:id="@+id/btnParentRegenCode"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
+                                android:minHeight="48dp"
                                 android:text=" 🔄"
                                 android:textSize="10sp"
                                 android:clickable="true"
@@ -628,13 +629,14 @@
                                 android:id="@+id/btnParentAddChild"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
+                                android:minHeight="48dp"
                                 android:text="➕ Thêm Con"
                                 android:textColor="#38BDF8"
                                 android:textSize="12sp"
                                 android:textStyle="bold"
                                 android:clickable="true"
                                 android:focusable="true"
-                                android:padding="2dp" />
+                                android:padding="8dp" />
                         </LinearLayout>
 
                         <!-- HORIZONTAL SCROLL CHỨA CÁC THẺ CON -->
