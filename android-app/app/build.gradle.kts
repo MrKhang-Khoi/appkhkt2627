@@ -11,8 +11,8 @@ android {
         applicationId = "vn.edu.cva.smartguardian"
         minSdk = 26
         targetSdk = 35
-        versionCode = 43
-        versionName = "1.4.3"
+        versionCode = 44
+        versionName = "1.4.4"
 
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

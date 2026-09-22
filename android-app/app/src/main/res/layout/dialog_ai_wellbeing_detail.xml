@@ -1,0 +1,544 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/layoutAiDialogAdaptiveWrapper"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@android:color/transparent">
+
+    <!-- ADAPTIVE M3 RESPONSIVE CARD CONTAINER: CHỐNG OVERFLOW TRÊN ĐA ĐỘ PHÂN GIẢI -->
+    <LinearLayout
+        android:id="@+id/layoutAiDialogMainCard"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        app:layout_constraintWidth_max="640dp"
+        app:layout_constraintHeight_max="660dp"
+        app:layout_constrainedHeight="true"
+        app:layout_constrainedWidth="true"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        android:orientation="vertical"
+        android:background="@drawable/bg_dialog_modern"
+        android:padding="18dp">
+
+        <!-- 1. TIÊU ĐỀ DIALOG & NÚT ĐÓNG NHANH -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="12dp">
+
+            <FrameLayout
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="@drawable/bg_avatar_squircle"
+                android:layout_marginEnd="12dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:text="🤖"
+                    android:textSize="20sp" />
+            </FrameLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/tvAiDialogTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Hồ Sơ AI Sức Khỏe Số"
+                    android:textColor="#F8FAFC"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:singleLine="true"
+                    android:ellipsize="end" />
+
+                <TextView
+                    android:id="@+id/tvAiDialogSubtitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Edge AI On-Device • Chuẩn SAS-SV &amp; IAT"
+                    android:textColor="#94A3B8"
+                    android:textSize="11sp"
+                    android:singleLine="true"
+                    android:ellipsize="end"
+                    android:layout_marginTop="2dp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/btnAiDialogCloseTop"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:gravity="center"
+                android:text="✕"
+                android:textColor="#94A3B8"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true" />
+        </LinearLayout>
+
+        <!-- 2. NỘI DUNG CUỘN CHI TIẾT (NESTED SCROLL VIEW) -->
+        <androidx.core.widget.NestedScrollView
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:fillViewport="true"
+            android:scrollbars="vertical"
+            android:layout_marginBottom="12dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <!-- 2.1 HERO CARD: ĐIỂM SỐ DWI & HUY HIỆU NGUY CƠ -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_device_card"
+                    android:orientation="vertical"
+                    android:padding="14dp"
+                    android:layout_marginBottom="12dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginBottom="6dp">
+
+                        <TextView
+                            android:id="@+id/tvAiDialogHeroScore"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="11/100"
+                            android:textColor="#EF4444"
+                            android:textSize="30sp"
+                            android:textStyle="bold"
+                            android:singleLine="true" />
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginStart="12dp"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:id="@+id/tvAiDialogHeroBadge"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:background="@drawable/bg_score_pill"
+                                android:paddingLeft="10dp"
+                                android:paddingRight="10dp"
+                                android:paddingTop="3dp"
+                                android:paddingBottom="3dp"
+                                android:text="🚨 NGUY CƠ CAO"
+                                android:textColor="#EF4444"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:singleLine="true" />
+
+                            <TextView
+                                android:id="@+id/tvAiDialogHeroDominant"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Phiên sử dụng liên tục kéo dài (135 phút)"
+                                android:textColor="#CBD5E1"
+                                android:textSize="12sp"
+                                android:textStyle="bold"
+                                android:layout_marginTop="4dp"
+                                android:maxLines="2"
+                                android:ellipsize="end" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- THANG ĐO ĐỊNH LƯỢNG 3 CẤP ĐỘ -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginTop="6dp"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="0-49: Nguy cơ"
+                            android:textColor="#EF4444"
+                            android:textSize="10sp"
+                            android:gravity="center"
+                            android:background="#26EF4444"
+                            android:paddingTop="2dp"
+                            android:paddingBottom="2dp"
+                            android:layout_marginEnd="2dp" />
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="50-74: Cảnh báo"
+                            android:textColor="#FBBF24"
+                            android:textSize="10sp"
+                            android:gravity="center"
+                            android:background="#26FBBF24"
+                            android:paddingTop="2dp"
+                            android:paddingBottom="2dp"
+                            android:layout_marginEnd="2dp" />
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="75-100: Cân bằng"
+                            android:textColor="#10B981"
+                            android:textSize="10sp"
+                            android:gravity="center"
+                            android:background="#2610B981"
+                            android:paddingTop="2dp"
+                            android:paddingBottom="2dp" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- 2.2 BẢNG 6 CHỈ SỐ HÀNH VI ĐẦU VÀO (100% THỰC TẾ TRÍCH XUẤT TỪ MÁY CON) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_app_item_card"
+                    android:orientation="vertical"
+                    android:padding="12dp"
+                    android:layout_marginBottom="12dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="📊 6 CHỈ SỐ HÀNH VI THỰC TẾ (ĐẦU VÀO AI)"
+                        android:textColor="#38BDF8"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="8dp" />
+
+                    <!-- x1: Mở máy ban đêm -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:paddingTop="4dp"
+                        android:paddingBottom="4dp">
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="🌙 Mở máy ban đêm (23h - 05h):"
+                            android:textColor="#94A3B8"
+                            android:textSize="11sp" />
+                        <TextView
+                            android:id="@+id/tvAiDetailNightCount"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="0 lần (Chuẩn: 0)"
+                            android:textColor="#F8FAFC"
+                            android:textSize="11sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <!-- x2: Phiên liên tục dài nhất -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:paddingTop="4dp"
+                        android:paddingBottom="4dp">
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="⏱️ Phiên dài nhất liên tục:"
+                            android:textColor="#94A3B8"
+                            android:textSize="11sp" />
+                        <TextView
+                            android:id="@+id/tvAiDetailMaxContinuous"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="135 phút (Chuẩn: ≤45m)"
+                            android:textColor="#EF4444"
+                            android:textSize="11sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <!-- x3: Tỷ lệ giải trí & MXH -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:paddingTop="4dp"
+                        android:paddingBottom="4dp">
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="💬 Tỷ lệ Mạng XH &amp; Game:"
+                            android:textColor="#94A3B8"
+                            android:textSize="11sp" />
+                        <TextView
+                            android:id="@+id/tvAiDetailEntertainmentRatio"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="78.1% (Chuẩn: ≤30%)"
+                            android:textColor="#EF4444"
+                            android:textSize="11sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <!-- x4: Tần suất nhảy app -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:paddingTop="4dp"
+                        android:paddingBottom="4dp">
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="⚡ Tần suất chuyển đổi app:"
+                            android:textColor="#94A3B8"
+                            android:textSize="11sp" />
+                        <TextView
+                            android:id="@+id/tvAiDetailSwitchingVelocity"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="14 lần/giờ"
+                            android:textColor="#F8FAFC"
+                            android:textSize="11sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <!-- x5: Dùng trong giờ học -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:paddingTop="4dp"
+                        android:paddingBottom="4dp">
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="🏫 Dùng trong giờ học:"
+                            android:textColor="#94A3B8"
+                            android:textSize="11sp" />
+                        <TextView
+                            android:id="@+id/tvAiDetailSchoolHours"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="0 phút (Chuẩn: 0m)"
+                            android:textColor="#10B981"
+                            android:textSize="11sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <!-- x6: Tổng thời gian & Khuyến cáo WHO -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:paddingTop="4dp"
+                        android:paddingBottom="4dp">
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="📱 Tổng màn hình hôm nay:"
+                            android:textColor="#94A3B8"
+                            android:textSize="11sp" />
+                        <TextView
+                            android:id="@+id/tvAiDetailTotalScreen"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="8h 18m (WHO: ≤2h/ngày)"
+                            android:textColor="#EF4444"
+                            android:textSize="11sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- 2.3 CƠ CHẾ SUY LUẬN MẠNG NƠ-RON & NỀN TẢNG KHOA HỌC -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_device_card"
+                    android:orientation="vertical"
+                    android:padding="12dp"
+                    android:layout_marginBottom="12dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🧠 CƠ CHẾ SUY LUẬN AI &amp; NGUỒN CHÍNH THỨC"
+                        android:textColor="#A78BFA"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="6dp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="• Kiến trúc: Multi-Layer Perceptron (6 In ➔ 16 ReLU ➔ 8 ReLU ➔ 3 Softmax)\n• Tốc độ suy luận: &lt; 2ms thuần nơ-ron On-Device, bảo mật tuyệt đối 100%\n• Phân bố xác suất đầu ra Softmax:"
+                        android:textColor="#CBD5E1"
+                        android:textSize="11sp"
+                        android:lineSpacingExtra="3dp" />
+
+                    <!-- VECTOR XÁC SUẤT SOFTMAX -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginTop="6dp"
+                        android:layout_marginBottom="6dp"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:id="@+id/tvAiProbSafe"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Lành mạnh: 0.1%"
+                            android:textColor="#10B981"
+                            android:textSize="10sp"
+                            android:gravity="center"
+                            android:background="#1A10B981"
+                            android:paddingTop="3dp"
+                            android:paddingBottom="3dp"
+                            android:layout_marginEnd="3dp" />
+
+                        <TextView
+                            android:id="@+id/tvAiProbWarning"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Cảnh báo: 4.7%"
+                            android:textColor="#FBBF24"
+                            android:textSize="10sp"
+                            android:gravity="center"
+                            android:background="#1AFBBF24"
+                            android:paddingTop="3dp"
+                            android:paddingBottom="3dp"
+                            android:layout_marginEnd="3dp" />
+
+                        <TextView
+                            android:id="@+id/tvAiProbHighRisk"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Nguy cơ: 95.2%"
+                            android:textColor="#EF4444"
+                            android:textSize="10sp"
+                            android:gravity="center"
+                            android:background="#1AEF4444"
+                            android:paddingTop="3dp"
+                            android:paddingBottom="3dp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="• Công thức DWI = 100·P(Safe) + 50·P(Warn) + 10·P(Risk)\n• Chuẩn quốc tế: Thang đo SAS-SV (Smartphone Addiction Scale, Kwon et al., PLOS ONE 2013) &amp; Khuyến cáo WHO 2019 về sức khỏe thị giác thanh thiếu niên."
+                        android:textColor="#94A3B8"
+                        android:textSize="10sp"
+                        android:lineSpacingExtra="2dp" />
+                </LinearLayout>
+
+                <!-- 2.4 KHUYẾN NGHỊ SƯ PHẠM THỰC TẾ -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_app_item_card"
+                    android:orientation="vertical"
+                    android:padding="12dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="💡 KHUYẾN NGHỊ ĐỒNG HÀNH SƯ PHẠM"
+                        android:textColor="#10B981"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="4dp" />
+
+                    <TextView
+                        android:id="@+id/tvAiDialogPedagogicalAdvice"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Khuyến khích con nghỉ ngơi theo quy tắc 20-20-20. Cha mẹ nên thống nhất khung giờ cất điện thoại trước 22h30 để bảo vệ thị lực và chu kỳ giấc ngủ sinh học."
+                        android:textColor="#E2E8F0"
+                        android:textSize="11sp"
+                        android:lineSpacingExtra="3dp" />
+                </LinearLayout>
+
+            </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
+
+        <!-- 3. HÀNH ĐỘNG ĐÁY: GỬI NHẮC NHỞ & ĐÓNG -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <Button
+                android:id="@+id/btnAiDialogSendMessage"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_btn_primary_modern"
+                android:text="💌 Gửi Nhắc Nhở Cho Con"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:paddingTop="12dp"
+                android:paddingBottom="12dp"
+                android:paddingLeft="10dp"
+                android:paddingRight="10dp"
+                android:layout_marginEnd="8dp" />
+
+            <Button
+                android:id="@+id/btnAiDialogCloseBottom"
+                android:layout_width="wrap_content"
+                android:minWidth="80dp"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:background="@drawable/bg_btn_secondary_modern"
+                android:text="Đóng"
+                android:textColor="#CBD5E1"
+                android:singleLine="true"
+                android:paddingTop="12dp"
+                android:paddingBottom="12dp"
+                android:paddingLeft="14dp"
+                android:paddingRight="14dp"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+    </LinearLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

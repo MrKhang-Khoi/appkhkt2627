@@ -551,6 +551,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var viewParentProgressStudy: View
     private lateinit var viewParentProgressSocial: View
     private lateinit var viewParentProgressGame: View
+    private lateinit var viewParentProgressUtility: View
     private lateinit var viewParentProgressEmpty: View
     private lateinit var tvParentUsageStats: TextView
     private lateinit var layoutParentAppsContainer: LinearLayout
@@ -596,6 +597,7 @@ class MainActivity : AppCompatActivity() {
         val rawObj: JSONObject
     )
     private val familyChildrenList = mutableListOf<FamilyChildDevice>()
+    private var currentActiveChildDevice: FamilyChildDevice? = null
     private var activeSelectedChildId: String = ""
     private var currentFamilyCode: String = ""
 
@@ -819,6 +821,7 @@ class MainActivity : AppCompatActivity() {
         viewParentProgressStudy = findViewById(R.id.viewParentProgressStudy)
         viewParentProgressSocial = findViewById(R.id.viewParentProgressSocial)
         viewParentProgressGame = findViewById(R.id.viewParentProgressGame)
+        viewParentProgressUtility = findViewById(R.id.viewParentProgressUtility)
         viewParentProgressEmpty = findViewById(R.id.viewParentProgressEmpty)
         tvParentUsageStats = findViewById(R.id.tvParentUsageStats)
         layoutParentAppsContainer = findViewById(R.id.layoutParentAppsContainer)
@@ -830,6 +833,9 @@ class MainActivity : AppCompatActivity() {
         tvParentAiScore = findViewById(R.id.tvParentAiScore)
         tvParentAiDominantFactor = findViewById(R.id.tvParentAiDominantFactor)
         tvParentAiAdvice = findViewById(R.id.tvParentAiAdvice)
+        layoutParentAiCard?.setOnClickListener {
+            showParentAiWellbeingDetailDialog()
+        }
 
         // Tab Học Sinh: Screen 3
         layoutStudentCard = findViewById(R.id.layoutStudentCard)
@@ -851,6 +857,9 @@ class MainActivity : AppCompatActivity() {
         tvStudentAiScore = findViewById(R.id.tvStudentAiScore)
         tvStudentAiDominantFactor = findViewById(R.id.tvStudentAiDominantFactor)
         tvStudentAiAdvice = findViewById(R.id.tvStudentAiAdvice)
+        layoutStudentAiCard?.setOnClickListener {
+            showStudentAiWellbeingDetailDialog()
+        }
         btnStudentPomodoro = findViewById(R.id.btnStudentPomodoro)
         btnStudentPomodoro?.setOnClickListener {
             showPomodoroFocusDialog()
@@ -1534,7 +1543,7 @@ class MainActivity : AppCompatActivity() {
         tvParentLocationAddress.text = "Chưa có dữ liệu vị trí GPS"
         tvParentLocationTime.text = "--"
         tvParentScreenTimeTotal.text = "--"
-        tvParentUsageStats.text = "📚 Học tập: 0m • 💬 Mạng XH: 0m • 🎮 Game: 0m"
+        tvParentUsageStats.text = "📚 Học: 0m • 💬 MXH: 0m • 🎮 Game: 0m • 🛠️ Khác: 0m"
         tvParentAiScore?.text = "--"
         tvParentAiDominantFactor?.text = "Chờ thiết bị con kết nối..."
         tvParentAiAdvice?.text = "Dữ liệu AI sẽ tự động phân tích khi thiết bị của con đồng bộ."
@@ -1587,6 +1596,7 @@ class MainActivity : AppCompatActivity() {
     private fun updateActiveChildDashboard(familyCode: String, child: FamilyChildDevice) {
         currentFamilyCode = familyCode
         activeSelectedChildId = child.deviceId
+        currentActiveChildDevice = child
 
         val isGirl = child.childName.lowercase().let { it.contains("linh") || it.contains("chi") || it.contains("gái") || it.contains("mai") }
         tvParentChildAvatar.text = if (isGirl) "👧" else "👦"
@@ -1680,30 +1690,34 @@ class MainActivity : AppCompatActivity() {
         }
 
         val prefixUsage = if (child.isOnline) "" else "[Snapshot Ngoại Tuyến] "
+        val otherMinutes = maxOf(0L, totalMinutes - studyMinutes - socialMinutes - gameMinutes)
         if (totalMinutes > 0) {
             val hours = totalMinutes / 60
             val mins = totalMinutes % 60
             tvParentScreenTimeTotal.text = if (hours > 0) "${hours}h ${mins}m" else "${mins}m"
 
-            val studyW = maxOf(1f, (studyMinutes * 100f / totalMinutes))
-            val socialW = maxOf(1f, (socialMinutes * 100f / totalMinutes))
-            val gameW = maxOf(1f, (gameMinutes * 100f / totalMinutes))
+            val studyW = (studyMinutes * 100f / totalMinutes).coerceAtLeast(0f)
+            val socialW = (socialMinutes * 100f / totalMinutes).coerceAtLeast(0f)
+            val gameW = (gameMinutes * 100f / totalMinutes).coerceAtLeast(0f)
+            val otherW = (otherMinutes * 100f / totalMinutes).coerceAtLeast(0f)
             (viewParentProgressStudy.layoutParams as LinearLayout.LayoutParams).weight = studyW
             (viewParentProgressSocial.layoutParams as LinearLayout.LayoutParams).weight = socialW
             (viewParentProgressGame.layoutParams as LinearLayout.LayoutParams).weight = gameW
+            (viewParentProgressUtility.layoutParams as LinearLayout.LayoutParams).weight = otherW
             (viewParentProgressEmpty.layoutParams as LinearLayout.LayoutParams).weight = 0f
             viewParentProgressStudy.requestLayout()
 
-            tvParentUsageStats.text = "${prefixUsage}📚 Học tập: ${formatCompactDuration(studyMinutes)} • 💬 Mạng XH: ${formatCompactDuration(socialMinutes)} • 🎮 Game: ${formatCompactDuration(gameMinutes)}"
+            tvParentUsageStats.text = "${prefixUsage}📚 Học: ${formatCompactDuration(studyMinutes)} • 💬 MXH: ${formatCompactDuration(socialMinutes)} • 🎮 Game: ${formatCompactDuration(gameMinutes)} • 🛠️ Khác: ${formatCompactDuration(otherMinutes)}"
         } else {
             tvParentScreenTimeTotal.text = "0m"
             (viewParentProgressStudy.layoutParams as LinearLayout.LayoutParams).weight = 0f
             (viewParentProgressSocial.layoutParams as LinearLayout.LayoutParams).weight = 0f
             (viewParentProgressGame.layoutParams as LinearLayout.LayoutParams).weight = 0f
+            (viewParentProgressUtility.layoutParams as LinearLayout.LayoutParams).weight = 0f
             (viewParentProgressEmpty.layoutParams as LinearLayout.LayoutParams).weight = 100f
             viewParentProgressStudy.requestLayout()
 
-            tvParentUsageStats.text = "${prefixUsage}📚 Học tập: 0m • 💬 Mạng XH: 0m • 🎮 Game: 0m"
+            tvParentUsageStats.text = "${prefixUsage}📚 Học: 0m • 💬 MXH: 0m • 🎮 Game: 0m • 🛠️ Khác: 0m"
         }
 
         // Render Top Real Apps
@@ -3138,6 +3152,360 @@ class MainActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Lỗi gửi nhắc nhở", e)
+            }
+        }
+    }
+
+    private fun showParentAiWellbeingDetailDialog() {
+        val child = currentActiveChildDevice ?: familyChildrenList.find { it.deviceId == activeSelectedChildId } ?: familyChildrenList.firstOrNull()
+        if (child == null) {
+            Toast.makeText(this, "Chưa chọn thiết bị con để xem chi tiết AI!", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val aiWellbeingObj = child.rawObj.optJSONObject("ai_wellbeing")
+        val usageObj = child.rawObj.optJSONObject("usage")
+        val historyArr = child.rawObj.optJSONArray("app_history") ?: usageObj?.optJSONArray("appHistory")
+        val totalMinutes = usageObj?.optLong("totalScreenTimeMinutes", 0L) ?: 0L
+
+        val features = BehavioralFeatureExtractor.extractFromAppHistory(historyArr, totalMinutes)
+        val computedAssessment = DigitalAddictionEngine.assess(features)
+
+        val dwiScore = aiWellbeingObj?.optInt("dwiScore", computedAssessment.dwiScore) ?: computedAssessment.dwiScore
+        val riskLevel = aiWellbeingObj?.optString("riskLevel", computedAssessment.riskLevel.name) ?: computedAssessment.riskLevel.name
+        val dominantFactor = aiWellbeingObj?.optString("dominantFactor", computedAssessment.dominantFactor) ?: computedAssessment.dominantFactor
+        val pedagogicalAdvice = aiWellbeingObj?.optString("pedagogicalAdvice", computedAssessment.pedagogicalAdvice) ?: computedAssessment.pedagogicalAdvice
+
+        val nightCount = aiWellbeingObj?.optInt("nightUnlockCount", features.nightUnlockCount.toInt()) ?: features.nightUnlockCount.toInt()
+        val maxContinuous = aiWellbeingObj?.optInt("maxContinuousMinutes", features.maxContinuousMinutes.toInt()) ?: features.maxContinuousMinutes.toInt()
+        val entRatio = aiWellbeingObj?.optDouble("entertainmentRatio", features.entertainmentRatio.toDouble())?.toFloat() ?: features.entertainmentRatio
+        val switchVelocity = aiWellbeingObj?.optDouble("switchingVelocity", features.switchingVelocity.toDouble())?.toFloat() ?: features.switchingVelocity
+        val schoolMinutes = aiWellbeingObj?.optInt("schoolHoursMinutes", features.schoolHoursMinutes.toInt()) ?: features.schoolHoursMinutes.toInt()
+
+        val probSafe = aiWellbeingObj?.optDouble("probSafe", computedAssessment.probabilities[0].toDouble())?.toFloat() ?: computedAssessment.probabilities[0]
+        val probWarning = aiWellbeingObj?.optDouble("probWarning", computedAssessment.probabilities[1].toDouble())?.toFloat() ?: computedAssessment.probabilities[1]
+        val probHighRisk = aiWellbeingObj?.optDouble("probHighRisk", computedAssessment.probabilities[2].toDouble())?.toFloat() ?: computedAssessment.probabilities[2]
+
+        if (supportFragmentManager.findFragmentByTag(AiWellbeingDetailBottomSheetDialogFragment.TAG) != null) {
+            return
+        }
+        val sheet = AiWellbeingDetailBottomSheetDialogFragment.newInstance(
+            dwiScore = dwiScore,
+            riskLevel = riskLevel,
+            dominantFactor = dominantFactor,
+            pedagogicalAdvice = pedagogicalAdvice,
+            nightCount = nightCount,
+            maxContinuous = maxContinuous,
+            entRatio = entRatio,
+            switchVelocity = switchVelocity,
+            schoolMinutes = schoolMinutes,
+            totalMinutes = totalMinutes,
+            probSafe = probSafe,
+            probWarning = probWarning,
+            probHighRisk = probHighRisk,
+            childName = child.childName,
+            deviceId = child.deviceId,
+            familyCode = currentFamilyCode,
+            isStudentMode = false
+        )
+        sheet.show(supportFragmentManager, AiWellbeingDetailBottomSheetDialogFragment.TAG)
+    }
+
+    private fun showStudentAiWellbeingDetailDialog() {
+        val prefs = getSharedPreferences(UsageTrackerService.PREFS_NAME, Context.MODE_PRIVATE)
+        val dwiScore = prefs.getInt("ai_dwi_score", 85)
+        val riskLevel = prefs.getString("ai_risk_level", "BALANCED") ?: "BALANCED"
+        val dominantFactor = prefs.getString("ai_dominant_factor", "Thói quen sử dụng số điều độ, tích cực học tập.") ?: "Thói quen sử dụng số điều độ, tích cực học tập."
+        val pedagogicalAdvice = prefs.getString("ai_pedagogical_advice", "Hãy tiếp tục duy trì thói quen tốt và thư giãn mắt sau mỗi tiết học!") ?: "Hãy tiếp tục duy trì thói quen tốt và thư giãn mắt sau mỗi tiết học!"
+
+        val nightCount = prefs.getFloat("ai_feature_night", 0f).toInt()
+        val maxContinuous = prefs.getFloat("ai_feature_continuous", 0f).toInt()
+        val entRatio = prefs.getFloat("ai_feature_entertainment", 0f)
+        val switchVelocity = prefs.getFloat("ai_feature_velocity", 0f)
+        val schoolMinutes = prefs.getFloat("ai_feature_school", 0f).toInt()
+        val totalMs = prefs.getLong("today_total_screen_time_ms", 0L)
+        val totalMinutes = totalMs / 60000L
+
+        val probSafe = prefs.getFloat("ai_prob_safe", 0.8f)
+        val probWarning = prefs.getFloat("ai_prob_warning", 0.15f)
+        val probHighRisk = prefs.getFloat("ai_prob_high_risk", 0.05f)
+
+        val pairedCode = prefs.getString("paired_family_code", "") ?: ""
+        val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: "STUDENT_DEVICE"
+
+        if (supportFragmentManager.findFragmentByTag(AiWellbeingDetailBottomSheetDialogFragment.TAG) != null) {
+            return
+        }
+        val sheet = AiWellbeingDetailBottomSheetDialogFragment.newInstance(
+            dwiScore = dwiScore,
+            riskLevel = riskLevel,
+            dominantFactor = dominantFactor,
+            pedagogicalAdvice = pedagogicalAdvice,
+            nightCount = nightCount,
+            maxContinuous = maxContinuous,
+            entRatio = entRatio,
+            switchVelocity = switchVelocity,
+            schoolMinutes = schoolMinutes,
+            totalMinutes = totalMinutes,
+            probSafe = probSafe,
+            probWarning = probWarning,
+            probHighRisk = probHighRisk,
+            childName = "Bạn",
+            deviceId = androidId,
+            familyCode = pairedCode,
+            isStudentMode = true
+        )
+        sheet.show(supportFragmentManager, AiWellbeingDetailBottomSheetDialogFragment.TAG)
+    }
+
+    class AiWellbeingDetailBottomSheetDialogFragment : BottomSheetDialogFragment() {
+        companion object {
+            const val TAG = "AiWellbeingDetailSheet"
+            private const val ARG_DWI_SCORE = "arg_dwi_score"
+            private const val ARG_RISK_LEVEL = "arg_risk_level"
+            private const val ARG_DOMINANT_FACTOR = "arg_dominant_factor"
+            private const val ARG_PEDAGOGICAL_ADVICE = "arg_pedagogical_advice"
+            private const val ARG_NIGHT_COUNT = "arg_night_count"
+            private const val ARG_MAX_CONTINUOUS = "arg_max_continuous"
+            private const val ARG_ENT_RATIO = "arg_ent_ratio"
+            private const val ARG_SWITCH_VELOCITY = "arg_switch_velocity"
+            private const val ARG_SCHOOL_MINUTES = "arg_school_minutes"
+            private const val ARG_TOTAL_MINUTES = "arg_total_minutes"
+            private const val ARG_PROB_SAFE = "arg_prob_safe"
+            private const val ARG_PROB_WARNING = "arg_prob_warning"
+            private const val ARG_PROB_HIGH_RISK = "arg_prob_high_risk"
+            private const val ARG_CHILD_NAME = "arg_child_name"
+            private const val ARG_DEVICE_ID = "arg_device_id"
+            private const val ARG_FAMILY_CODE = "arg_family_code"
+            private const val ARG_IS_STUDENT_MODE = "arg_is_student_mode"
+
+            fun newInstance(
+                dwiScore: Int,
+                riskLevel: String,
+                dominantFactor: String,
+                pedagogicalAdvice: String,
+                nightCount: Int,
+                maxContinuous: Int,
+                entRatio: Float,
+                switchVelocity: Float,
+                schoolMinutes: Int,
+                totalMinutes: Long,
+                probSafe: Float,
+                probWarning: Float,
+                probHighRisk: Float,
+                childName: String,
+                deviceId: String,
+                familyCode: String,
+                isStudentMode: Boolean = false
+            ): AiWellbeingDetailBottomSheetDialogFragment {
+                val frag = AiWellbeingDetailBottomSheetDialogFragment()
+                frag.arguments = Bundle().apply {
+                    putInt(ARG_DWI_SCORE, dwiScore)
+                    putString(ARG_RISK_LEVEL, riskLevel)
+                    putString(ARG_DOMINANT_FACTOR, dominantFactor)
+                    putString(ARG_PEDAGOGICAL_ADVICE, pedagogicalAdvice)
+                    putInt(ARG_NIGHT_COUNT, nightCount)
+                    putInt(ARG_MAX_CONTINUOUS, maxContinuous)
+                    putFloat(ARG_ENT_RATIO, entRatio)
+                    putFloat(ARG_SWITCH_VELOCITY, switchVelocity)
+                    putInt(ARG_SCHOOL_MINUTES, schoolMinutes)
+                    putLong(ARG_TOTAL_MINUTES, totalMinutes)
+                    putFloat(ARG_PROB_SAFE, probSafe)
+                    putFloat(ARG_PROB_WARNING, probWarning)
+                    putFloat(ARG_PROB_HIGH_RISK, probHighRisk)
+                    putString(ARG_CHILD_NAME, childName)
+                    putString(ARG_DEVICE_ID, deviceId)
+                    putString(ARG_FAMILY_CODE, familyCode)
+                    putBoolean(ARG_IS_STUDENT_MODE, isStudentMode)
+                }
+                return frag
+            }
+        }
+
+        override fun onCreateView(
+            inflater: LayoutInflater,
+            container: ViewGroup?,
+            savedInstanceState: Bundle?
+        ): View? {
+            return inflater.inflate(R.layout.dialog_ai_wellbeing_detail, container, false)
+        }
+
+        override fun onStart() {
+            super.onStart()
+            val sheetDialog = dialog as? BottomSheetDialog ?: return
+            val bottomSheet = sheetDialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
+            val density = resources.displayMetrics.density
+            val screenWidth = resources.displayMetrics.widthPixels
+            val screenHeight = resources.displayMetrics.heightPixels
+            val maxSheetWidth = (640 * density).toInt()
+            val maxSheetHeight = (screenHeight * 0.90).toInt()
+
+            bottomSheet?.let { sheet ->
+                val behavior = BottomSheetBehavior.from(sheet)
+                if (screenWidth > maxSheetWidth) {
+                    val lp = sheet.layoutParams
+                    lp.width = maxSheetWidth
+                    sheet.layoutParams = lp
+                }
+                behavior.maxWidth = maxSheetWidth
+                behavior.maxHeight = maxSheetHeight
+                behavior.state = BottomSheetBehavior.STATE_EXPANDED
+                behavior.skipCollapsed = true
+                sheet.setBackgroundResource(android.R.color.transparent)
+            }
+            sheetDialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+            sheetDialog.window?.setDimAmount(0.65f)
+        }
+
+        override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+            super.onViewCreated(view, savedInstanceState)
+            val args = arguments ?: return
+
+            val dwiScore = args.getInt(ARG_DWI_SCORE, 85)
+            val dominantFactor = args.getString(ARG_DOMINANT_FACTOR, "Thói quen sử dụng số điều độ, tích cực học tập.") ?: "Thói quen sử dụng số điều độ, tích cực học tập."
+            val pedagogicalAdvice = args.getString(ARG_PEDAGOGICAL_ADVICE, "Duy trì sinh hoạt điều độ.") ?: "Duy trì sinh hoạt điều độ."
+            val nightCount = args.getInt(ARG_NIGHT_COUNT, 0)
+            val maxContinuous = args.getInt(ARG_MAX_CONTINUOUS, 0)
+            val entRatio = args.getFloat(ARG_ENT_RATIO, 0f)
+            val switchVelocity = args.getFloat(ARG_SWITCH_VELOCITY, 0f)
+            val schoolMinutes = args.getInt(ARG_SCHOOL_MINUTES, 0)
+            val totalMinutes = args.getLong(ARG_TOTAL_MINUTES, 0L)
+            val probSafe = args.getFloat(ARG_PROB_SAFE, 0.8f)
+            val probWarning = args.getFloat(ARG_PROB_WARNING, 0.15f)
+            val probHighRisk = args.getFloat(ARG_PROB_HIGH_RISK, 0.05f)
+            val childName = args.getString(ARG_CHILD_NAME, "Con") ?: "Con"
+            val deviceId = args.getString(ARG_DEVICE_ID, "") ?: ""
+            val familyCode = args.getString(ARG_FAMILY_CODE, "") ?: ""
+            val isStudentMode = args.getBoolean(ARG_IS_STUDENT_MODE, false)
+
+            // Title
+            val tvAiDialogTitle = view.findViewById<TextView>(R.id.tvAiDialogTitle)
+            tvAiDialogTitle?.text = if (isStudentMode) "Hồ Sơ Sức Khỏe Số Của Bạn" else "Hồ Sơ AI Sức Khỏe Số: $childName"
+
+            // Hero Score & Badge
+            val tvAiDialogHeroScore = view.findViewById<TextView>(R.id.tvAiDialogHeroScore)
+            val tvAiDialogHeroBadge = view.findViewById<TextView>(R.id.tvAiDialogHeroBadge)
+            val tvAiDialogHeroDominant = view.findViewById<TextView>(R.id.tvAiDialogHeroDominant)
+
+            tvAiDialogHeroScore?.text = "$dwiScore/100"
+            tvAiDialogHeroDominant?.text = dominantFactor
+
+            when {
+                dwiScore >= 75 -> {
+                    tvAiDialogHeroScore?.setTextColor(Color.parseColor("#10B981"))
+                    tvAiDialogHeroBadge?.text = "🌿 CÂN BẰNG"
+                    tvAiDialogHeroBadge?.setTextColor(Color.parseColor("#10B981"))
+                }
+                dwiScore >= 50 -> {
+                    tvAiDialogHeroScore?.setTextColor(Color.parseColor("#FBBF24"))
+                    tvAiDialogHeroBadge?.text = "⚠️ CẢNH BÁO"
+                    tvAiDialogHeroBadge?.setTextColor(Color.parseColor("#FBBF24"))
+                }
+                else -> {
+                    tvAiDialogHeroScore?.setTextColor(Color.parseColor("#EF4444"))
+                    tvAiDialogHeroBadge?.text = "🚨 NGUY CƠ CAO"
+                    tvAiDialogHeroBadge?.setTextColor(Color.parseColor("#EF4444"))
+                }
+            }
+
+            // 6 Behavioral Features
+            val tvAiDetailNightCount = view.findViewById<TextView>(R.id.tvAiDetailNightCount)
+            val tvAiDetailMaxContinuous = view.findViewById<TextView>(R.id.tvAiDetailMaxContinuous)
+            val tvAiDetailEntertainmentRatio = view.findViewById<TextView>(R.id.tvAiDetailEntertainmentRatio)
+            val tvAiDetailSwitchingVelocity = view.findViewById<TextView>(R.id.tvAiDetailSwitchingVelocity)
+            val tvAiDetailSchoolHours = view.findViewById<TextView>(R.id.tvAiDetailSchoolHours)
+            val tvAiDetailTotalScreen = view.findViewById<TextView>(R.id.tvAiDetailTotalScreen)
+
+            if (nightCount > 0) {
+                tvAiDetailNightCount?.text = "$nightCount lần (Chuẩn: 0) • Nguy cơ"
+                tvAiDetailNightCount?.setTextColor(Color.parseColor("#EF4444"))
+            } else {
+                tvAiDetailNightCount?.text = "0 lần (Chuẩn: 0) • Tốt"
+                tvAiDetailNightCount?.setTextColor(Color.parseColor("#10B981"))
+            }
+
+            if (maxContinuous >= 60) {
+                tvAiDetailMaxContinuous?.text = "$maxContinuous phút (Chuẩn: ≤45m) • Kéo dài"
+                tvAiDetailMaxContinuous?.setTextColor(Color.parseColor("#EF4444"))
+            } else if (maxContinuous >= 45) {
+                tvAiDetailMaxContinuous?.text = "$maxContinuous phút (Chuẩn: ≤45m) • Cảnh báo"
+                tvAiDetailMaxContinuous?.setTextColor(Color.parseColor("#FBBF24"))
+            } else {
+                tvAiDetailMaxContinuous?.text = "$maxContinuous phút (Chuẩn: ≤45m) • An toàn"
+                tvAiDetailMaxContinuous?.setTextColor(Color.parseColor("#10B981"))
+            }
+
+            val entPct = (entRatio * 100).toInt()
+            if (entRatio >= 0.6f) {
+                tvAiDetailEntertainmentRatio?.text = "$entPct% (Chuẩn: ≤30%) • Vượt ngưỡng"
+                tvAiDetailEntertainmentRatio?.setTextColor(Color.parseColor("#EF4444"))
+            } else if (entRatio >= 0.35f) {
+                tvAiDetailEntertainmentRatio?.text = "$entPct% (Chuẩn: ≤30%) • Lưu ý"
+                tvAiDetailEntertainmentRatio?.setTextColor(Color.parseColor("#FBBF24"))
+            } else {
+                tvAiDetailEntertainmentRatio?.text = "$entPct% (Chuẩn: ≤30%) • Điều độ"
+                tvAiDetailEntertainmentRatio?.setTextColor(Color.parseColor("#10B981"))
+            }
+
+            tvAiDetailSwitchingVelocity?.text = "${String.format(Locale.US, "%.1f", switchVelocity)} lần/giờ"
+
+            if (schoolMinutes > 0) {
+                tvAiDetailSchoolHours?.text = "$schoolMinutes phút (Chuẩn: 0m) • Cần chấn chỉnh"
+                tvAiDetailSchoolHours?.setTextColor(Color.parseColor("#EF4444"))
+            } else {
+                tvAiDetailSchoolHours?.text = "0 phút (Chuẩn: 0m) • Tốt"
+                tvAiDetailSchoolHours?.setTextColor(Color.parseColor("#10B981"))
+            }
+
+            val totalHours = totalMinutes / 60
+            val totalMins = totalMinutes % 60
+            val screenTimeStr = if (totalHours > 0) "${totalHours}h ${totalMins}m" else "${totalMins}m"
+            if (totalMinutes > 180) {
+                tvAiDetailTotalScreen?.text = "$screenTimeStr (WHO: ≤2h/ngày) • Vượt mức"
+                tvAiDetailTotalScreen?.setTextColor(Color.parseColor("#EF4444"))
+            } else if (totalMinutes > 120) {
+                tvAiDetailTotalScreen?.text = "$screenTimeStr (WHO: ≤2h/ngày) • Cảnh báo"
+                tvAiDetailTotalScreen?.setTextColor(Color.parseColor("#FBBF24"))
+            } else {
+                tvAiDetailTotalScreen?.text = "$screenTimeStr (WHO: ≤2h/ngày) • Lành mạnh"
+                tvAiDetailTotalScreen?.setTextColor(Color.parseColor("#10B981"))
+            }
+
+            // Softmax Probabilities
+            val tvAiProbSafe = view.findViewById<TextView>(R.id.tvAiProbSafe)
+            val tvAiProbWarning = view.findViewById<TextView>(R.id.tvAiProbWarning)
+            val tvAiProbHighRisk = view.findViewById<TextView>(R.id.tvAiProbHighRisk)
+
+            tvAiProbSafe?.text = "Lành mạnh: ${String.format(Locale.US, "%.1f", probSafe * 100)}%"
+            tvAiProbWarning?.text = "Cảnh báo: ${String.format(Locale.US, "%.1f", probWarning * 100)}%"
+            tvAiProbHighRisk?.text = "Nguy cơ: ${String.format(Locale.US, "%.1f", probHighRisk * 100)}%"
+
+            // Advice
+            val tvAiDialogPedagogicalAdvice = view.findViewById<TextView>(R.id.tvAiDialogPedagogicalAdvice)
+            tvAiDialogPedagogicalAdvice?.text = pedagogicalAdvice
+
+            // Buttons
+            val btnAiDialogCloseTop = view.findViewById<View>(R.id.btnAiDialogCloseTop)
+            val btnAiDialogCloseBottom = view.findViewById<View>(R.id.btnAiDialogCloseBottom)
+            val btnAiDialogSendMessage = view.findViewById<Button>(R.id.btnAiDialogSendMessage)
+
+            btnAiDialogCloseTop?.setOnClickListener { dismissAllowingStateLoss() }
+            btnAiDialogCloseBottom?.setOnClickListener { dismissAllowingStateLoss() }
+
+            if (isStudentMode) {
+                btnAiDialogSendMessage?.text = "⏱️ Bật Chế Độ Học Pomodoro"
+                btnAiDialogSendMessage?.setOnClickListener {
+                    dismissAllowingStateLoss()
+                    (activity as? MainActivity)?.showPomodoroFocusDialog()
+                }
+            } else {
+                btnAiDialogSendMessage?.text = "💌 Gửi Lời Nhắc Cho Con"
+                btnAiDialogSendMessage?.setOnClickListener {
+                    dismissAllowingStateLoss()
+                    if (familyCode.isNotEmpty() && deviceId.isNotEmpty()) {
+                        (activity as? MainActivity)?.showSendParentReminderDialog(familyCode, deviceId)
+                    }
+                }
             }
         }
     }

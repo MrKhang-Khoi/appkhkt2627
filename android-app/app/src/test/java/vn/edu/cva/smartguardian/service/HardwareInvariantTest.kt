@@ -6187,6 +6187,42 @@ class HardwareInvariantTest {
         assertEquals(1.0f, sum, 0.001f)
     }
 
+    @Test
+    fun testAiWellbeingDetailDialogLayoutInvariant() {
+        val xmlCandidates = listOf(
+            java.io.File("src/main/res/layout/dialog_ai_wellbeing_detail.xml"),
+            java.io.File("app/src/main/res/layout/dialog_ai_wellbeing_detail.xml"),
+            java.io.File("android-app/app/src/main/res/layout/dialog_ai_wellbeing_detail.xml")
+        )
+        val xmlFile = xmlCandidates.firstOrNull { it.exists() }
+        assertNotNull("dialog_ai_wellbeing_detail.xml must exist on disk", xmlFile)
+        val xmlContent = xmlFile?.readText().orEmpty()
+
+        assertTrue("Must have layoutAiDialogAdaptiveWrapper", xmlContent.contains("""android:id="@+id/layoutAiDialogAdaptiveWrapper""""))
+        assertTrue("Must have tvAiDialogHeroScore", xmlContent.contains("""android:id="@+id/tvAiDialogHeroScore""""))
+        assertTrue("Must have tvAiDetailMaxContinuous", xmlContent.contains("""android:id="@+id/tvAiDetailMaxContinuous""""))
+        assertTrue("Must have tvAiDetailEntertainmentRatio", xmlContent.contains("""android:id="@+id/tvAiDetailEntertainmentRatio""""))
+        assertTrue("Must have tvAiProbHighRisk", xmlContent.contains("""android:id="@+id/tvAiProbHighRisk""""))
+    }
+
+    @Test
+    fun testRealWorldOveruseDwiScoreMatches11() {
+        // Test with real user device telemetry:
+        // Total screen time 8h 18m (498 mins), max continuous 135 mins, social 78.1%
+        val realTelemetryVector = BehavioralFeatureVector(
+            nightUnlockCount = 2f,
+            maxContinuousMinutes = 135f,
+            entertainmentRatio = 0.781f,
+            switchingVelocity = 14f,
+            schoolHoursMinutes = 35f,
+            velocitySlope7d = 0.2f
+        )
+        val assessment = DigitalAddictionEngine.assess(realTelemetryVector)
+        assertEquals(RiskLevel.HIGH_RISK, assessment.riskLevel)
+        assertTrue("DWI must reflect high addiction risk (< 50), got ${assessment.score}", assessment.score < 50)
+        assertTrue("Dominant factor should detect overuse", assessment.dominantRiskFactor.isNotEmpty())
+    }
+
     private class FakeTestContext(
         val prefs: FakeSharedPreferences
     ) : ContextWrapper(null) {

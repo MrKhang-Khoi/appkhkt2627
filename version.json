@@ -1,22 +1,22 @@
 {
-  "versionCode": 43,
-  "versionName": "1.4.3",
-  "latestVersionCode": 43,
-  "latestVersionName": "1.4.3",
+  "versionCode": 44,
+  "versionName": "1.4.4",
+  "latestVersionCode": 44,
+  "latestVersionName": "1.4.4",
   "minSupportedVersion": 1,
   "isForceUpdate": false,
-  "fileSize": "5.91 MB",
-  "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.4.3.apk",
-  "apkFallbackUrl": "https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/CVA-SmartGuardian-v1.4.3.apk",
-  "sha256": "02CA490F6B02B9D367D16B6CCAFF508E0C89A75D8C633C5D8A95FD828D3CE173",
+  "fileSize": "5.92 MB",
+  "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.4.4.apk",
+  "apkFallbackUrl": "https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/CVA-SmartGuardian-v1.4.4.apk",
+  "sha256": "3ED36805C2A8D33E99D92266992F0473DC3A778F492554EF79ECE02906D1A159",
   "changelog": [
-    "Tích hợp Động Cơ AI Dự Báo Nguy Cơ Nghiện Số & Rối Loạn Chú Ý (Edge AI / TinyML): Mô hình mạng nơ-ron học sâu MLP (6 -> 16 -> 8 -> 3) kế thừa thang đo chuẩn quốc tế SAS-SV (Kwon et al., PLOS ONE) và IAT (Dr. Kimberly Young), suy luận on-device siêu tốc < 2ms, bảo mật quyền riêng tư 100% không gửi dữ liệu thô lên mạng.",
-    "Chỉ Số Cân Bằng Số (Digital Wellbeing Index - DWI 0-100): Phân loại chính xác 3 cấp độ nguy cơ (🌿 Cân Bằng, ⚠️ Cảnh Báo, 🚨 Nguy Cơ Cao) và tự động chỉ ra yếu tố rủi ro nổi trội (thức khuya dùng máy, nghiện mạng xã hội, chuyển ứng dụng liên tục).",
-    "Thẻ AI Sức Khỏe Số trên Giao Diện Học Sinh & Phụ Huynh: Hiển thị điểm số DWI, khuyến nghị sư phạm cá nhân hóa và nút kích hoạt '⏱️ Chế Độ Tập Trung Pomodoro (25 Phút)' giúp học sinh rèn luyện kỹ năng tự quản lý số.",
-    "Vượt qua toàn diện 151/151 bài kiểm thử tự động phần cứng, bảo vệ 100% thời lượng pin và an toàn số."
+    "Bổ sung Hộp thoại Báo Cáo Chi Tiết AI Sức Khỏe Số (AiWellbeingDetailSheet) chuẩn Material Design 3 Adaptive, hiển thị minh bạch 100% 6 chỉ số hành vi thực tế trích xuất từ máy con, cơ chế suy luận toán học Mạng Nơ-ron Đa Tầng (MLP) và vector xác suất Softmax.",
+    "Hoàn thiện Thanh tiến trình phân đoạn thời gian thực (Segmented Bar) và dòng thống kê 4 danh mục: Học tập, Mạng XH, Game và Tiện ích / Khác (khớp 100% từng phút với tổng thời gian sử dụng).",
+    "Tối ưu hóa tiêu đề và chỉ dẫn trực quan trên Thẻ AI cho cả giao diện Phụ Huynh và Học Sinh, cho phép phụ huynh gửi lời nhắc nhở yêu thương tức thời và học sinh kích hoạt phiên học tập trung Pomodoro.",
+    "Vượt qua toàn diện 153/153 bài kiểm thử tự động phần cứng, bảo vệ 100% độ chính xác dữ liệu thực tế."
   ],
-  "releaseNotes": "Bản cập nhật v1.4.3: Đột phá tính năng AI Dự Báo Nguy Cơ Nghiện Số (Edge AI / TinyML) chuẩn quốc tế SAS-SV/IAT, thẻ DWI sức khỏe số và chế độ học tập Pomodoro.",
-  "updatedAt": 1790070000000,
+  "releaseNotes": "Bản cập nhật v1.4.4: Hộp thoại báo cáo chi tiết AI Sức Khỏe Số minh bạch số liệu thực tế, chuẩn hóa thống kê 4 danh mục ứng dụng và tối ưu giao diện.",
+  "updatedAt": 1790072000000,
   "releaseDate": "2026-09-22",
-  "sizeBytes": 6195025
+  "sizeBytes": 6207033
 }

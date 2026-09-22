@@ -3580,6 +3580,15 @@ class UsageTrackerService : Service() {
                             put("dominantFactor", aiResult.dominantFactor)
                             put("pedagogicalAdvice", aiResult.pedagogicalAdvice)
                             put("assessedAt", now)
+                            put("nightUnlockCount", aiFeatures.nightUnlockCount.toDouble())
+                            put("maxContinuousMinutes", aiFeatures.maxContinuousMinutes.toDouble())
+                            put("entertainmentRatio", aiFeatures.entertainmentRatio.toDouble())
+                            put("switchingVelocity", aiFeatures.switchingVelocity.toDouble())
+                            put("schoolHoursMinutes", aiFeatures.schoolHoursMinutes.toDouble())
+                            put("velocitySlope7d", aiFeatures.velocitySlope7d.toDouble())
+                            put("probSafe", aiResult.probabilities.getOrElse(0) { 0f }.toDouble())
+                            put("probWarning", aiResult.probabilities.getOrElse(1) { 0f }.toDouble())
+                            put("probHighRisk", aiResult.probabilities.getOrElse(2) { 0f }.toDouble())
                         }
 
                         prefs.edit().apply {
@@ -3589,6 +3598,15 @@ class UsageTrackerService : Service() {
                             putString("ai_dominant_factor", aiResult.dominantFactor)
                             putString("ai_pedagogical_advice", aiResult.pedagogicalAdvice)
                             putLong("ai_assessed_at", now)
+                            putFloat("ai_feature_night", aiFeatures.nightUnlockCount)
+                            putFloat("ai_feature_continuous", aiFeatures.maxContinuousMinutes)
+                            putFloat("ai_feature_entertainment", aiFeatures.entertainmentRatio)
+                            putFloat("ai_feature_velocity", aiFeatures.switchingVelocity)
+                            putFloat("ai_feature_school", aiFeatures.schoolHoursMinutes)
+                            putFloat("ai_feature_slope", aiFeatures.velocitySlope7d)
+                            putFloat("ai_prob_safe", aiResult.probabilities.getOrElse(0) { 0f })
+                            putFloat("ai_prob_warning", aiResult.probabilities.getOrElse(1) { 0f })
+                            putFloat("ai_prob_high_risk", aiResult.probabilities.getOrElse(2) { 0f })
                             apply()
                         }
 

@@ -940,6 +940,14 @@
                                 android:layout_weight="0"
                                 android:background="#F59E0B" />
 
+                            <!-- TIỆN ÍCH / KHÁC -->
+                            <View
+                                android:id="@+id/viewParentProgressUtility"
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="0"
+                                android:background="#64748B" />
+
                             <!-- EMPTY/CHƯA GHI NHẬN -->
                             <View
                                 android:id="@+id/viewParentProgressEmpty"
@@ -954,7 +962,7 @@
                             android:id="@+id/tvParentUsageStats"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="📚 Học tập: 0m • 💬 Mạng XH: 0m • 🎮 Game: 0m"
+                            android:text="📚 Học: 0m • 💬 MXH: 0m • 🎮 Game: 0m • 🛠️ Khác: 0m"
                             android:textColor="#94A3B8"
                             android:textSize="11sp" />
                     </LinearLayout>
@@ -980,7 +988,7 @@
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_weight="1"
-                                android:text="🤖 AI Sức Khỏe Số (DWI)"
+                                android:text="🤖 AI Sức Khỏe Số"
                                 android:textColor="#F8FAFC"
                                 android:textSize="13sp"
                                 android:textStyle="bold"
@@ -1043,6 +1051,15 @@
                             android:textSize="11sp"
                             android:maxLines="2"
                             android:ellipsize="end" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Bấm để xem phân tích y khoa &amp; cơ sở AI ➔"
+                            android:textColor="#38BDF8"
+                            android:textSize="11sp"
+                            android:textStyle="bold"
+                            android:layout_marginTop="6dp" />
                     </LinearLayout>
 
                     <!-- 5. HOẠT ĐỘNG GẦN ĐÂY CỦA CON: NẠP ĐỘNG DỮ LIỆU THẬT -->
@@ -1484,7 +1501,7 @@
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_weight="1"
-                                android:text="🤖 AI Sức Khỏe Số (DWI)"
+                                android:text="🤖 AI Sức Khỏe Số"
                                 android:textColor="#F8FAFC"
                                 android:textSize="13sp"
                                 android:textStyle="bold"
@@ -1547,6 +1564,15 @@
                             android:textSize="11sp"
                             android:maxLines="2"
                             android:ellipsize="end"
+                            android:layout_marginBottom="6dp" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Bấm để xem phân tích y khoa &amp; cơ sở AI ➔"
+                            android:textColor="#38BDF8"
+                            android:textSize="11sp"
+                            android:textStyle="bold"
                             android:layout_marginBottom="10dp" />
 
                         <!-- NÚT BẬT CHẾ ĐỘ POMODORO TẬP TRUNG TỰ GIÁC -->
