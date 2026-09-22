@@ -8,14 +8,15 @@
   "fileSize": "5.89 MB",
   "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.4.1.apk",
   "apkFallbackUrl": "https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/CVA-SmartGuardian-v1.4.1.apk",
-  "sha256": "E1C0235DB8044BA4A7FF55038D97A360DD49AEC4259343D91A332BB2DAC54858",
+  "sha256": "1C75A923ECC19B696EDC2CC24200DB8467F31883DC36E3421BB848426B85D6AC",
   "changelog": [
     "Sửa triệt để lỗi hiển thị ứng dụng khi máy con đã tắt hoặc khóa màn hình — Tự động chuyển thẻ trạng thái sang 'Màn hình khóa / Màn hình tắt • ĐÃ KHÓA' và gán nhãn ĐÃ ĐÓNG cho toàn bộ ứng dụng.",
     "Nâng cấp Định vị GPS thời gian thực: Thêm nút '🔄 Cập Nhật Vị Trí' chuyên dụng. Bố mẹ bấm nút là máy con lập tức chốt tọa độ vệ tinh và cập nhật ngay vị trí chính xác lên màn hình (kể cả khi máy con đang tắt màn hình trong cặp/túi quần).",
+    "Hiển thị Huy hiệu Phiên bản Trực quan: Tích hợp nhãn 'v1.4.1' trên thanh tiêu đề, màn hình nhập mã PIN và Bảng quản lý; bổ sung tính năng tự kiểm tra cập nhật hệ thống.",
     "Bảo toàn 100% tính năng: Kế toán thời gian sử dụng chuẩn Google, lọc web độc hại, bảo vệ app ngân hàng, 142 bài kiểm thử phần cứng đạt chuẩn."
   ],
-  "releaseNotes": "Bản cập nhật v1.4.1: Sửa lỗi hiển thị khi màn hình tắt/khóa máy và nâng cấp định vị GPS tức thời theo yêu cầu của phụ huynh.",
-  "updatedAt": 1790057790000,
+  "releaseNotes": "Bản cập nhật v1.4.1: Sửa lỗi hiển thị khi màn hình tắt/khóa máy, nâng cấp định vị GPS tức thời và hiển thị nhãn phiên bản v1.4.1 rõ ràng trên giao diện.",
+  "updatedAt": 1790063200000,
   "releaseDate": "2026-09-22",
-  "sizeBytes": 6178390
+  "sizeBytes": 6179914
 }

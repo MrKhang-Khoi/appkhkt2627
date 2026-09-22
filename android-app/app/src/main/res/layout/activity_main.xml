@@ -45,6 +45,23 @@
                     android:textSize="18sp"
                     android:textStyle="bold"
                     android:layout_marginStart="10dp" />
+
+                <TextView
+                    android:id="@+id/tvAppVersionBadge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_score_pill"
+                    android:text="v1.4.1"
+                    android:textColor="#38BDF8"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:paddingLeft="8dp"
+                    android:paddingRight="8dp"
+                    android:paddingTop="3dp"
+                    android:paddingBottom="3dp"
+                    android:layout_marginStart="8dp"
+                    android:clickable="true"
+                    android:focusable="true" />
             </LinearLayout>
 
             <!-- ========================================================== -->
@@ -256,7 +273,17 @@
                         android:textColor="#F8FAFC"
                         android:textSize="19sp"
                         android:textStyle="bold"
-                        android:layout_marginBottom="6dp" />
+                        android:layout_marginBottom="2dp" />
+
+                    <TextView
+                        android:id="@+id/tvPinGateVersion"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Phiên Bản v1.4.1 (Mới Nhất)"
+                        android:textColor="#38BDF8"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="4dp" />
 
                     <TextView
                         android:layout_width="wrap_content"
@@ -546,14 +573,30 @@
                         android:gravity="center_vertical"
                         android:layout_marginBottom="14dp">
 
-                        <TextView
+                        <LinearLayout
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Bảng Quản Lý"
-                            android:textColor="#F8FAFC"
-                            android:textSize="18sp"
-                            android:textStyle="bold" />
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Bảng Quản Lý"
+                                android:textColor="#F8FAFC"
+                                android:textSize="18sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/tvParentVersionSubtitle"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Phiên bản cài đặt: v1.4.1"
+                                android:textColor="#38BDF8"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:layout_marginTop="2dp" />
+                        </LinearLayout>
 
                         <!-- CHIP MÃ GIA ĐÌNH -->
                         <LinearLayout

@@ -91,6 +91,34 @@ object AppUpdateManager {
     }
 
     /**
+     * Lấy phiên bản cài đặt thực tế của ứng dụng hiện tại
+     */
+    fun getCurrentVersion(context: Context): Pair<String, Int> {
+        return try {
+            val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.packageManager.getPackageInfo(
+                    context.packageName,
+                    android.content.pm.PackageManager.PackageInfoFlags.of(0)
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageInfo(context.packageName, 0)
+            }
+            val vName = packageInfo.versionName ?: "1.4.1"
+            val vCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                packageInfo.longVersionCode.toInt()
+            } else {
+                @Suppress("DEPRECATION")
+                packageInfo.versionCode
+            }
+            Pair(vName, vCode)
+        } catch (e: Exception) {
+            Log.w(TAG, "Không đọc được package info: ${e.message}")
+            Pair("1.4.1", 41)
+        }
+    }
+
+    /**
      * Phân tích và xác thực payload thông tin cập nhật từ JSON đối chiếu với phiên bản hiện tại
      */
     fun parseUpdateInfo(json: JSONObject?, currentVersionCode: Int): UpdateInfo? {

@@ -551,6 +551,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvParentUsageStats: TextView
     private lateinit var layoutParentAppsContainer: LinearLayout
     private lateinit var layoutParentAppsEmptyState: LinearLayout
+    private var tvAppVersionBadge: TextView? = null
+    private var tvPinGateVersion: TextView? = null
+    private var tvParentVersionSubtitle: TextView? = null
 
     // 4. Tab Học Sinh: Screen 3 (Student Card & Paired State)
     private lateinit var layoutStudentCard: LinearLayout
@@ -838,6 +841,23 @@ class MainActivity : AppCompatActivity() {
         etCustomReply = findViewById(R.id.etCustomReply)
         btnSendCustomReply = findViewById(R.id.btnSendCustomReply)
         tvStudentReplyStatus = findViewById(R.id.tvStudentReplyStatus)
+
+        // Version Badges & Dynamic Inspection
+        tvAppVersionBadge = findViewById(R.id.tvAppVersionBadge)
+        tvPinGateVersion = findViewById(R.id.tvPinGateVersion)
+        tvParentVersionSubtitle = findViewById(R.id.tvParentVersionSubtitle)
+
+        val (currentVName, _) = AppUpdateManager.getCurrentVersion(this)
+        tvAppVersionBadge?.text = "v$currentVName"
+        tvPinGateVersion?.text = "Phiên Bản v$currentVName (Mới Nhất)"
+        tvParentVersionSubtitle?.text = "Phiên bản cài đặt: v$currentVName"
+
+        tvAppVersionBadge?.setOnClickListener {
+            performUpdateCheck(userInitiated = true)
+        }
+        tvParentVersionSubtitle?.setOnClickListener {
+            performUpdateCheck(userInitiated = true)
+        }
     }
 
     private fun setupListeners() {
@@ -3384,6 +3404,13 @@ class MainActivity : AppCompatActivity() {
             val updateInfo = AppUpdateManager.checkForUpdate(this@MainActivity)
             if (updateInfo != null) {
                 showUpdateAvailableDialog(updateInfo)
+            } else if (userInitiated) {
+                val (vName, _) = AppUpdateManager.getCurrentVersion(this@MainActivity)
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle("✅ Đã Ở Bản Mới Nhất")
+                    .setMessage("Ứng dụng CVA-SmartGuardian đang chạy phiên bản mới nhất: v$vName.\n\nToàn bộ tính năng bảo vệ, tối ưu màn hình khóa và định vị GPS thời gian thực đã sẵn sàng hoạt động tối ưu!")
+                    .setPositiveButton("Đã Hiểu", null)
+                    .show()
             }
         }
     }
