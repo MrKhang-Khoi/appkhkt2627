@@ -1,0 +1,24 @@
+{
+  "versionCode": 39,
+  "versionName": "1.3.9",
+  "latestVersionCode": 39,
+  "latestVersionName": "1.3.9",
+  "minSupportedVersion": 1,
+  "isForceUpdate": false,
+  "fileSize": "5.89 MB",
+  "apkUrl": "https://mrkhang-khoi.github.io/appkhkt2627/apk/CVA-SmartGuardian-v1.3.9.apk",
+  "apkFallbackUrl": "https://raw.githubusercontent.com/MrKhang-Khoi/appkhkt2627/main/apk/CVA-SmartGuardian-v1.3.9.apk",
+  "sha256": "976D0D6421072D4B81F7CDCCC7BF87BD1826390BEE670B21441550D1941F3E20",
+  "changelog": [
+    "Sửa triệt để BUG-01 (CRITICAL): Thêm thread xả gói tin ngầm cho SafeVpnFilterService, chống tràn bộ đệm TUN và không gây mất mạng internet của học sinh.",
+    "Sửa triệt để BUG-02 (HIGH): Đảo thứ tự hiển thị BlockedActivity trước khi thoát trình duyệt, thêm cờ CLEAR_TASK và EXCLUDE_FROM_RECENTS chống nhấp nháy màn hình chính.",
+    "Sửa triệt để BUG-08 (LOW): Tối ưu toàn bộ kích thước điểm chạm tương tác nút bấm >= 48dp theo chuẩn Material Design 3 trên activity_main và dialog_child_companion.",
+    "Tái cấu trúc HardwareOnlineChecker ra khỏi companion object để tương thích hoàn hảo với bộ kiểm thử tự động 100 Unit Tests.",
+    "Tối ưu hiệu năng đồng bộ thời gian thực và tự động dọn dẹp bộ nhớ đệm."
+  ],
+  "releaseNotes": "Bản phát hành chính thức v1.3.9: Sửa hoàn toàn lỗi VPN TUN xả ngầm, tối ưu hiển thị màn hình chặn web, nâng chuẩn điểm chạm 48dp MD3 và vượt qua 100% kiểm thử.",
+  "updatedAt": 1790050140000,
+  "size": 6176240,
+  "releaseDate": "2026-09-22",
+  "sizeBytes": 6176240
+}
